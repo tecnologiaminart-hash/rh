@@ -502,7 +502,7 @@ const NAV = [
     id: 'contratacao', label: 'Contratação', icon: '◎',
     subs: [
       { id: 'cont-candidatos', label: 'Candidatos' },
-      { id: 'cont-vagas', label: 'Vagas em Aberto' },
+      { id: 'cont-vagas', label: 'Vagas' },
       { id: 'cont-entrevista', label: 'Formulário de Entrevista' },
       { id: 'cont-relatorio', label: 'Relatório e Impressão' },
     ]
@@ -630,7 +630,6 @@ function renderPage(id) {
   const el = document.getElementById('content-area');
   const pages = {
     'dashboard':       pageDashboard,
-    'col-admissao':    pageAdmissao,
     'col-documentos':  pageDocumentos,
     'col-ferias':      pageFerias,
     'col-atestados':   pageAtestados,
@@ -723,7 +722,7 @@ function pageDashboard() {
       <div class="kpi-delta delta-down">↑ 1 vs mês anterior</div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-label">Vagas em Aberto</div>
+      <div class="kpi-label">Vagas</div>
       <div class="kpi-value">11</div>
       <div class="kpi-delta" style="color:var(--text3)">3 em processo final</div>
     </div>
@@ -1050,7 +1049,7 @@ function pageAtestados() {
 // ------------------------------------------------------------
 function pageStatus() {
   document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" onclick="openStatusModal()">+ Novo Colaborador</button>`;
-const employees = [
+if (!window._statusEmployees) window._statusEmployees = [
     ['AMANDA SOUSA LIMA','Encarregado de Setor - Nível 1','Ativo','01/01/2024'],
     ['LUCIANA DA SILVA','Auxiliar Administrativo - Nível 1','Ativo','01/01/2024'],
     ['JUCICLÉIA DE CARVALHO','Gerente Geral - Nível 2','Ativo','01/01/2024'],
@@ -1086,7 +1085,7 @@ const employees = [
     ['MARINETE DOS SANTOS','Serviços Gerais','Ativo','01/01/2024'],
     ['CRISTIANO DOS SANTOS','Auxiliar Administrativo - Nível 1','Ativo','01/01/2024'],
   ];
-window._statusEmployees = employees;
+const employees = window._statusEmployees;
 
   setTimeout(()=>{
     const search = document.getElementById('status-search');
@@ -1109,11 +1108,7 @@ window._statusEmployees = employees;
     <option value="">— Selecione o Cargo —</option>
     ${(window._cargos||[]).map(([c])=>`<option value="${c}">${c}</option>`).join('')}
   </select>
-</div>
-    <option value="">— Selecione o Cargo —</option>
-    ${(window._cargos||[]).map(([c])=>`<option value="${c}">${c}</option>`).join('')}
-  </select>
-</div>
+
         <div class="form-group"><label class="form-label">Status</label>
           <select class="form-select" id="sm-status"><option>Ativo</option><option>Afastado</option><option>Desligado</option></select>
         </div>
@@ -1191,7 +1186,7 @@ window.saveStatusEmployee = function(){
   const idx=window._editingStatusIdx;
   if(idx!==null) emp[idx]=[n,c,st,desde]; else emp.push([n,c,st,desde]);
   document.getElementById('status-modal').style.display='none';
-  navigate('col-status','Status');
+  navigate('col-status','Informações Contratuais', 'Colaboradores');
 };
 window.viewStatusEmployee = function(i){
   const [n,c,st,desde]=window._statusEmployees[i];
@@ -1381,7 +1376,7 @@ function pageVagas() {
       <td><span class="badge badge-info">${v.candidatos||0}</span></td>
       <td><span class="badge badge-active">Aberta</span></td>
       <td>
-        <button class="action-btn" onclick="showToast('Vaga encerrada');window._vagas.splice(${i},1);navigate('cont-vagas','Vagas em Aberto','Contratação')">🔒</button>
+        <button class="action-btn" onclick="showToast('Vaga encerrada');window._vagas.splice(${i},1);navigate('cont-vagas','Vagas','Contratação')">🔒</button>
         <button class="action-btn" onclick="showToast('Visualizando')">👁</button>
       </td>
     </tr>`).join('');
@@ -1412,7 +1407,7 @@ function pageVagas() {
     </div>
   </div>
   <div class="table-card">
-    <div class="table-header"><span class="table-title">Vagas em Aberto</span></div>
+    <div class="table-header"><span class="table-title">Vagas</span></div>
     <table>
       <thead><tr><th>Vaga</th><th>Departamento</th><th>Abertura</th><th>Prazo</th><th>Candidatos</th><th>Status</th><th>Ações</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma vaga aberta</td></tr>'}</tbody>
@@ -1442,7 +1437,7 @@ window.salvarVaga = function() {
   });
   document.getElementById('vaga-modal').style.display = 'none';
   showToast('Vaga aberta com sucesso!');
-  navigate('cont-vagas', 'Vagas em Aberto', 'Contratação');
+  navigate('cont-vagas', 'Vagas', 'Contratação');
 };
 
 // ------------------------------------------------------------
