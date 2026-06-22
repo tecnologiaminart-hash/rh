@@ -1368,26 +1368,82 @@ function pageCandidatos() {
 // VAGAS
 // ------------------------------------------------------------
 function pageVagas() {
-  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" data-toast="Abrindo nova vaga">+ Abrir Vaga</button>`;
+  if (!window._vagas) window._vagas = [];
+
+  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" onclick="openVagaModal()">+ Abrir Vaga</button>`;
+
+  const rows = window._vagas.map((v,i) => `
+    <tr>
+      <td><strong>${v.cargo}</strong></td>
+      <td>${v.depto||'—'}</td>
+      <td>${v.abertura}</td>
+      <td>${v.prazo||'—'}</td>
+      <td><span class="badge badge-info">${v.candidatos||0}</span></td>
+      <td><span class="badge badge-active">Aberta</span></td>
+      <td>
+        <button class="action-btn" onclick="showToast('Vaga encerrada');window._vagas.splice(${i},1);navigate('cont-vagas','Vagas em Aberto','Contratação')">🔒</button>
+        <button class="action-btn" onclick="showToast('Visualizando')">👁</button>
+      </td>
+    </tr>`).join('');
+
   return `
+  <div id="vaga-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;padding:32px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:20px">Abrir Nova Vaga</div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">Cargo</label>
+        <select class="form-select" id="vaga-cargo">
+          <option value="">— Selecione o Cargo —</option>
+          ${(window._cargos||[]).map(([c])=>`<option value="${c}">${c}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">Departamento</label>
+        <input class="form-input" id="vaga-depto" placeholder="Ex: Produção, Administrativo...">
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">Prazo</label>
+        <input class="form-input" type="date" id="vaga-prazo">
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">
+        <button class="btn" onclick="document.getElementById('vaga-modal').style.display='none'">Cancelar</button>
+        <button class="btn btn-primary" onclick="salvarVaga()">Salvar</button>
+      </div>
+    </div>
+  </div>
   <div class="table-card">
     <div class="table-header"><span class="table-title">Vagas em Aberto</span></div>
     <table>
       <thead><tr><th>Vaga</th><th>Departamento</th><th>Abertura</th><th>Prazo</th><th>Candidatos</th><th>Status</th><th>Ações</th></tr></thead>
-      <tbody>
-        ${[
-        ].map(([v,d,ab,pr,c,st])=>`
-          <tr><td><strong>${v}</strong></td><td>${d}</td><td>${ab}</td><td>${pr}</td>
-          <td><span class="badge badge-info">${c}</span></td>
-          <td><span class="badge ${st==='Aberta'?'badge-active':'badge-inactive'}">${st}</span></td>
-          <td>
-            <button class="action-btn" data-toast="Vaga encerrada">${st==='Aberta'?'🔒 Fechar':''}</button>
-            <button class="action-btn" data-toast="Visualizando">👁</button>
-          </td></tr>`).join('')}
-      </tbody>
+      <tbody>${rows || '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma vaga aberta</td></tr>'}</tbody>
     </table>
   </div>`;
 }
+
+window.openVagaModal = function() {
+  document.getElementById('vaga-cargo').value = '';
+  document.getElementById('vaga-depto').value = '';
+  document.getElementById('vaga-prazo').value = '';
+  document.getElementById('vaga-modal').style.display = 'flex';
+};
+
+window.salvarVaga = function() {
+  const cargo = document.getElementById('vaga-cargo').value;
+  const depto = document.getElementById('vaga-depto').value;
+  const prazo = document.getElementById('vaga-prazo').value;
+  if (!cargo) return showToast('Selecione um cargo.');
+  if (!window._vagas) window._vagas = [];
+  window._vagas.push({
+    cargo,
+    depto,
+    prazo: prazo ? prazo.split('-').reverse().join('/') : '—',
+    abertura: new Date().toLocaleDateString('pt-BR'),
+    candidatos: 0
+  });
+  document.getElementById('vaga-modal').style.display = 'none';
+  showToast('Vaga aberta com sucesso!');
+  navigate('cont-vagas', 'Vagas em Aberto', 'Contratação');
+};
 
 // ------------------------------------------------------------
 // FORMULÁRIO DE ENTREVISTA
@@ -1538,47 +1594,6 @@ function pageCargosTabela() {
             <button class="action-btn" title="Editar" onclick="editCargo(${i})">✎</button>
             <button class="action-btn btn-danger" title="Excluir" onclick="deleteCargo(${i})">✕</button>
           </td></tr>`).join('')}
-      <thead><tr><th>Cargo</th><th>Salário Base</th><th>Última Revisão</th></tr></thead>
-      <tbody>
-        ${[
-          ['Serviços Gerais','R$ 1.628,00'],
-          ['Recepcionista','R$ 1.628,00'],
-          ['Auxiliar de Cozinha','R$ 1.628,00'],
-          ['Auxiliar de Produção','R$ 1.765,00'],
-          ['Auxiliar de Montador','R$ 1.765,00'],
-          ['Auxiliar de Vidraceiro','R$ 1.765,00'],
-          ['Desenhista','R$ 1.765,00'],
-          ['Vendedor','R$ 1.765,00'],
-          ['Orçamentista','R$ 1.765,00'],
-          ['Cozinheira(o)','R$ 1.765,00'],
-          ['Entregador e Montador - Nível 1','R$ 1.956,00'],
-          ['Entregador e Montador - Nível 2','R$ 2.138,00'],
-          ['Entregador e Montador - Nível 3','R$ 2.304,00'],
-          ['Operador de Máquinas - Nível 1','R$ 1.956,00'],
-          ['Operador de Máquinas - Nível 2','R$ 2.138,00'],
-          ['Operador de Máquinas - Nível 3','R$ 2.300,00'],
-          ['Auxiliar Administrativo - Nível 1','R$ 1.960,00'],
-          ['Auxiliar Administrativo - Nível 2','R$ 2.142,00'],
-          ['Auxiliar Administrativo - Nível 3','R$ 2.308,00'],
-          ['Desenhista, Orçamentista e Vendedor','R$ 2.351,00'],
-          ['Marceneiro - Nível 1','R$ 2.352,00'],
-          ['Marceneiro - Nível 2','R$ 2.569,00'],
-          ['Marceneiro - Nível 3','R$ 2.765,00'],
-          ['Pintor','R$ 2.352,00'],
-          ['Soldador - Nível 1','R$ 2.352,00'],
-          ['Soldador - Nível 2','R$ 2.569,00'],
-          ['Soldador - Nível 3','R$ 2.765,00'],
-          ['Tapeceiro','R$ 2.352,00'],
-          ['Vidraceiro','R$ 2.352,00'],
-          ['Encarregado de Setor - Nível 1','R$ 2.355,00'],
-          ['Encarregado de Setor - Nível 2','R$ 2.482,00'],
-          ['Encarregado de Setor - Nível 3','R$ 2.610,00'],
-          ['Encarregado Geral','R$ 2.611,00'],
-          ['Designer de Interiores','R$ 2.611,00'],
-          ['Gerente Geral - Nível 1','R$ 2.852,00'],
-          ['Gerente Geral - Nível 2','R$ 3.070,00'],
-        ].map(([c,sb])=>`
-          <tr><td><strong>${c}</strong></td><td style="font-weight:600">${sb}</td><td>${revisao}</td></tr>`).join('')}
       </tbody>
     </table>
     <div class="table-pagination"><span>${window._cargos.length} cargos cadastrados</span></div>
@@ -1626,47 +1641,197 @@ window.printCargosTabela=function(){
 // HISTÓRICO DEPARTAMENTO
 // ------------------------------------------------------------
 function pageDepHistorico() {
+  if (!window._cargosHistorico) {
+    // Inicializa histórico espelhando os cargos atuais
+    window._cargosHistorico = (window._cargos||[]).map(([c,s]) => ({
+      cargo: c, salario: s, revisao: '01/01/2026', motivo: 'Tabela inicial'
+    }));
+  }
+
+  document.getElementById('topbar-actions').innerHTML =
+    `<button class="btn btn-primary" onclick="openHistoricoCargoModal()">+ Adicionar Registro</button>`;
+
+  const rows = window._cargosHistorico.map((h,i) => `
+    <tr>
+      <td><strong>${h.cargo}</strong></td>
+      <td style="font-weight:600">${h.salario}</td>
+      <td>${h.revisao}</td>
+      <td>${h.motivo}</td>
+      <td>
+        <button class="action-btn" onclick="editHistoricoCargo(${i})">✎</button>
+        <button class="action-btn btn-danger" onclick="deleteHistoricoCargo(${i})">✕</button>
+      </td>
+    </tr>`).join('');
+
   return `
+  <div id="historico-cargo-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;padding:32px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="hcargo-modal-title">Adicionar Registro</div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">Cargo</label>
+        <select class="form-select" id="hcargo-cargo">
+          <option value="">— Selecione —</option>
+          ${(window._cargos||[]).map(([c])=>`<option value="${c}">${c}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">Salário Base</label>
+        <input class="form-input" id="hcargo-salario" placeholder="Ex: R$ 2.500,00">
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">Última Revisão</label>
+        <input class="form-input" type="date" id="hcargo-revisao">
+      </div>
+      <div class="form-group" style="margin-bottom:20px">
+        <label class="form-label">Motivo</label>
+        <input class="form-input" id="hcargo-motivo" placeholder="Ex: Dissídio, Promoção...">
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn" onclick="document.getElementById('historico-cargo-modal').style.display='none'">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveHistoricoCargo()">Salvar</button>
+      </div>
+    </div>
+  </div>
   <div class="table-card">
-    <div class="table-header"><span class="table-title">Histórico de Alterações Salariais</span></div>
+    <div class="table-header">
+      <span class="table-title">Histórico de Cargos e Salários</span>
+      <div class="table-actions">
+        <button class="btn btn-sm btn-print">🖨 Imprimir</button>
+      </div>
+    </div>
     <table>
-      <thead><tr><th>Data</th><th>Cargo</th><th>Salário Anterior</th><th>Novo Salário</th><th>Variação</th><th>Motivo</th><th>Resp.</th></tr></thead>
-      <tbody>
-        ${[
-        ].map(([dt,c,sa,sn,v,m,r])=>`
-          <tr><td>${dt}</td><td>${c}</td><td>${sa}</td><td style="font-weight:600">${sn}</td>
-          <td style="color:var(--success);font-weight:600">${v}</td><td>${m}</td><td>${r}</td></tr>`).join('')}
-      </tbody>
+      <thead><tr><th>Cargo</th><th>Salário Base</th><th>Última Revisão</th><th>Motivo</th><th>Ações</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro</td></tr>'}</tbody>
     </table>
+    <div class="table-pagination"><span>${window._cargosHistorico.length} registros</span></div>
   </div>`;
 }
+
+window.openHistoricoCargoModal = function(idx=null) {
+  window._editingHCargoIdx = idx;
+  if (idx !== null) {
+    const h = window._cargosHistorico[idx];
+    document.getElementById('hcargo-cargo').value   = h.cargo;
+    document.getElementById('hcargo-salario').value = h.salario;
+    document.getElementById('hcargo-revisao').value = h.revisao.split('/').reverse().join('-');
+    document.getElementById('hcargo-motivo').value  = h.motivo;
+    document.getElementById('hcargo-modal-title').textContent = 'Editar Registro';
+  } else {
+    ['hcargo-cargo','hcargo-salario','hcargo-revisao','hcargo-motivo'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('hcargo-modal-title').textContent = 'Adicionar Registro';
+  }
+  document.getElementById('historico-cargo-modal').style.display = 'flex';
+};
+
+window.editHistoricoCargo = function(i) { openHistoricoCargoModal(i); };
+
+window.deleteHistoricoCargo = function(i) {
+  if (!confirm('Excluir este registro?')) return;
+  window._cargosHistorico.splice(i, 1);
+  navigate('dep-historico', 'Cargos e Salários Histórico', 'Departamentos');
+};
+
+window.saveHistoricoCargo = function() {
+  const cargo   = document.getElementById('hcargo-cargo').value;
+  const salario = document.getElementById('hcargo-salario').value.trim();
+  const revisao = document.getElementById('hcargo-revisao').value;
+  const motivo  = document.getElementById('hcargo-motivo').value.trim();
+  if (!cargo)   return showToast('Selecione um cargo.');
+  if (!salario) return showToast('Informe o salário.');
+  const registro = {
+    cargo,
+    salario,
+    revisao: revisao ? revisao.split('-').reverse().join('/') : '—',
+    motivo: motivo || '—'
+  };
+  const idx = window._editingHCargoIdx;
+  if (idx !== null) window._cargosHistorico[idx] = registro;
+  else window._cargosHistorico.push(registro);
+  document.getElementById('historico-cargo-modal').style.display = 'none';
+  showToast('Registro salvo!');
+  navigate('dep-historico', 'Cargos e Salários Histórico', 'Departamentos');
+};
 
 // ------------------------------------------------------------
 // ALTERAÇÃO DE CARGO/SALÁRIO
 // ------------------------------------------------------------
 function pageAlteracao() {
+  const emp = window._statusEmployees || [];
+
+  const colabOptions = emp.map((e,i) =>
+    `<option value="${i}">${e[0]}</option>`).join('');
+
+  const cargoOptions = (window._cargos||[]).map(([c]) =>
+    `<option value="${c}">${c}</option>`).join('');
+
   return `
   <div class="form-card">
     <div class="form-section-title">Alteração de Cargo e/ou Salário</div>
-    <form>
+    <form onsubmit="event.preventDefault();showToast('Alteração salva com sucesso!')">
       <div class="form-grid">
-        <div class="form-group"><label class="form-label">Colaborador</label>
-          <select class="form-select"></select></div>
-        <div class="form-group"><label class="form-label">Data da Alteração</label><input class="form-input" type="date"></div>
-        <div class="form-group"><label class="form-label">Cargo Atual</label><input class="form-input" value="Analista de Sistemas" readonly></div>
-        <div class="form-group"><label class="form-label">Novo Cargo</label>
-          <select class="form-select"><option>— Mesmo Cargo —</option><option>Analista SR</option><option>Coordenador de Sistemas</option></select></div>
-        <div class="form-group"><label class="form-label">Salário Atual (R$)</label><input class="form-input" type="number" value="4800"></div>
-        <div class="form-group"><label class="form-label">Novo Salário (R$)</label><input class="form-input" type="number" placeholder="0.00"></div>
-        <div class="form-group form-full"><label class="form-label">Motivo</label>
-          <select class="form-select"><option>Promoção</option><option>Mérito</option><option>Dissídio</option><option>Equiparação Salarial</option><option>Acordo Sindical</option></select></div>
-        <div class="form-group form-full"><label class="form-label">Observações</label><textarea class="form-textarea" placeholder="Detalhes adicionais..."></textarea></div>
+        <div class="form-group">
+          <label class="form-label">Colaborador</label>
+          <select class="form-select" id="alt-colab" onchange="preencherCargoAtual(this.value)">
+            <option value="">— Selecione —</option>
+            ${colabOptions}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Data da Alteração</label>
+          <input class="form-input" type="date" id="alt-data">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cargo Atual</label>
+          <input class="form-input" id="alt-cargo-atual" readonly placeholder="Selecione um colaborador">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Novo Cargo</label>
+          <select class="form-select" id="alt-novo-cargo">
+            <option value="">— Mesmo Cargo —</option>
+            ${cargoOptions}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Salário Atual (R$)</label>
+          <input class="form-input" id="alt-salario-atual" readonly placeholder="—">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Novo Salário (R$)</label>
+          <input class="form-input" type="text" id="alt-novo-salario" placeholder="Ex: R$ 2.500,00">
+        </div>
+        <div class="form-group form-full">
+          <label class="form-label">Motivo</label>
+          <select class="form-select">
+            <option>Promoção</option>
+            <option>Mérito</option>
+            <option>Dissídio</option>
+            <option>Equiparação Salarial</option>
+            <option>Acordo Sindical</option>
+          </select>
+        </div>
+        <div class="form-group form-full">
+          <label class="form-label">Observações</label>
+          <textarea class="form-textarea" placeholder="Detalhes adicionais..."></textarea>
+        </div>
       </div>
-      <div class="form-footer"><button type="submit" class="btn btn-primary">Salvar Alteração</button></div>
+      <div class="form-footer">
+        <button type="submit" class="btn btn-primary">Salvar Alteração</button>
+      </div>
     </form>
   </div>`;
 }
 
+window.preencherCargoAtual = function(idx) {
+  if (idx === '') {
+    document.getElementById('alt-cargo-atual').value = '';
+    document.getElementById('alt-salario-atual').value = '';
+    return;
+  }
+  const emp = window._statusEmployees[parseInt(idx)];
+  // emp = [nome, cargo, status, desde, salario(opcional)]
+  document.getElementById('alt-cargo-atual').value   = emp[1] || '—';
+  document.getElementById('alt-salario-atual').value = emp[4] || '—';
+};
 // ------------------------------------------------------------
 // PERFIL / MINART
 // ------------------------------------------------------------
