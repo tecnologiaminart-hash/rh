@@ -801,12 +801,7 @@ function pageDocumentos() {
       <thead><tr><th>Documento</th><th>Colaborador</th><th>Tipo</th><th>Data Envio</th><th>Validade</th><th>Status</th><th>Ações</th></tr></thead>
       <tbody>
         ${[
-          ['RG','Carlos Souza','Identificação','10/01/2023','—','OK'],
-          ['CPF','Carlos Souza','Identificação','10/01/2023','—','OK'],
-          ['CTPS','Carlos Souza','Trabalhista','10/01/2023','—','OK'],
-          ['Exame Admissional','Ana Lima','Saúde','15/05/2022','15/05/2024','Vencido'],
-          ['ASO','Pedro Silva','Saúde','10/01/2024','10/01/2026','OK'],
-          ['Diploma','Maria Costa','Educação','20/02/2023','—','OK'],
+      
         ].map(([doc,col,tipo,env,val,st]) => `
           <tr>
             <td>${doc}</td><td>${col}</td><td><span class="badge badge-gray">${tipo}</span></td>
@@ -837,10 +832,6 @@ function pageFerias() {
       <thead><tr><th>Colaborador</th><th>Admissão</th><th>Período Aquisitivo</th><th>Início Gozo</th><th>Fim Gozo</th><th>Dias</th><th>Status</th></tr></thead>
       <tbody>
         ${[
-          ['Carlos Souza','01/03/2023','01/03/2023–28/02/2024','01/08/2024','15/08/2024',15,'Agendado'],
-          ['Ana Lima','15/05/2022','15/05/2023–14/05/2024','10/08/2024','25/08/2024',15,'Agendado'],
-          ['João Pereira','05/11/2021','05/11/2022–04/11/2023','15/06/2024','14/07/2024',30,'Em Gozo'],
-          ['Maria Costa','20/02/2023','20/02/2023–19/02/2024','—','—',30,'Pendente'],
         ].map(([n,a,pa,ig,fg,d,st]) => `
           <tr>
             <td>${n}</td><td>${a}</td><td>${pa}</td><td>${ig}</td><td>${fg}</td>
@@ -864,9 +855,6 @@ function pageAtestados() {
       <thead><tr><th>Colaborador</th><th>CID</th><th>Motivo</th><th>Data</th><th>Dias</th><th>Médico</th><th>Status</th></tr></thead>
       <tbody>
         ${[
-          ['João Pereira','J06','Gripe','18/06/2024',3,'Dr. Silva','Aprovado'],
-          ['Lucia Ramos','M54','Lombalgia','15/06/2024',1,'Dr. Costa','Aprovado'],
-          ['Felipe Neto','K29','Gastrite','12/06/2024',5,'Dr. Melo','Pendente'],
         ].map(([n,cid,mot,dt,d,med,st])=>`
           <tr><td>${n}</td><td><span class="badge badge-gray">${cid}</span></td><td>${mot}</td><td>${dt}</td>
           <td>${d}</td><td>${med}</td>
@@ -1057,10 +1045,6 @@ function pageExames() {
       <thead><tr><th>Colaborador</th><th>Tipo</th><th>Data Realização</th><th>Validade</th><th>Resultado</th><th>Status</th></tr></thead>
       <tbody>
         ${[
-          ['Carlos Souza','ASO Periódico','10/01/2024','10/01/2025','Apto','Vigente'],
-          ['Ana Lima','ASO Admissional','15/05/2022','15/05/2024','Apto','Vencido'],
-          ['Pedro Silva','ASO Admissional','10/01/2024','10/01/2026','Apto','Vigente'],
-          ['João Pereira','ASO Periódico','05/11/2023','05/11/2024','Apto com Restrição','Vigente'],
         ].map(([n,tipo,dt,val,res,st])=>`
           <tr><td>${n}</td><td>${tipo}</td><td>${dt}</td><td>${val}</td>
           <td>${res}</td>
@@ -1077,17 +1061,12 @@ function pageHistoricoCol() {
   return `
   <div class="form-card" style="margin-bottom:16px">
     <div class="form-group"><label class="form-label">Selecionar Colaborador</label>
-      <select class="form-select"><option>Carlos Eduardo Souza</option><option>Ana Paula Lima</option><option>Pedro Silva</option></select>
+      <select class="form-select">
     </div>
   </div>
   <div class="chart-card">
-    <div class="chart-title">Histórico — Carlos Eduardo Souza</div>
     <div class="timeline">
       ${[
-        ['01/03/2023','Admissão','Analista de Sistemas — R$ 3.800'],
-        ['01/09/2023','Promoção','Analista SR — R$ 4.500 (+18.4%)'],
-        ['10/01/2024','Treinamento','AWS Solutions Architect (concluído)'],
-        ['01/06/2024','Avaliação','Nota 4.5/5.0 — Avaliação Semestral'],
       ].map(([d,t,desc])=>`
         <div class="timeline-item">
           <div class="timeline-dot"></div>
@@ -1156,10 +1135,6 @@ function pageCandidatos() {
       <thead><tr><th>Nome</th><th>E-mail</th><th>Celular</th><th>Vaga</th><th>Currículo</th><th>Fase</th><th>Ações</th></tr></thead>
       <tbody>
         ${[
-          ['Fernanda Oliveira','fernanda@email.com','(11) 91234-5678','Analista de RH','Sim','Triagem'],
-          ['Rafael Mendes','rafael@email.com','(21) 98765-4321','Dev Backend','Sim','Entrevista'],
-          ['Beatriz Santos','bea@email.com','(31) 91111-2222','Designer','Sim','Aprovado'],
-          ['Thiago Alves','thiago@email.com','(11) 93333-4444','Vendedor','Não','Aguardando CV'],
         ].map(([n,e,c,v,cv,f])=>`
           <tr>
             <td><strong>${n}</strong></td><td>${e}</td><td>${c}</td><td>${v}</td>
@@ -1184,10 +1159,6 @@ function pageVagas() {
       <thead><tr><th>Vaga</th><th>Departamento</th><th>Abertura</th><th>Prazo</th><th>Candidatos</th><th>Status</th><th>Ações</th></tr></thead>
       <tbody>
         ${[
-          ['Analista de RH','RH','01/06/2024','30/06/2024',8,'Aberta'],
-          ['Dev Backend','TI','10/06/2024','10/07/2024',5,'Aberta'],
-          ['Designer UX','Marketing','15/06/2024','15/07/2024',3,'Aberta'],
-          ['Vendedor','Comercial','01/05/2024','31/05/2024',12,'Encerrada'],
         ].map(([v,d,ab,pr,c,st])=>`
           <tr><td><strong>${v}</strong></td><td>${d}</td><td>${ab}</td><td>${pr}</td>
           <td><span class="badge badge-info">${c}</span></td>
@@ -1445,9 +1416,6 @@ function pageDepHistorico() {
       <thead><tr><th>Data</th><th>Cargo</th><th>Salário Anterior</th><th>Novo Salário</th><th>Variação</th><th>Motivo</th><th>Resp.</th></tr></thead>
       <tbody>
         ${[
-          ['01/01/2024','Analista de Sistemas','R$ 4.200','R$ 4.800','+14.3%','Dissídio','Ana Lima'],
-          ['01/06/2023','Coordenador de RH','R$ 6.800','R$ 7.500','+10.3%','Mérito','Dir. RH'],
-          ['01/01/2023','Operador de Produção','R$ 2.400','R$ 2.600','+8.3%','Dissídio','Ana Lima'],
         ].map(([dt,c,sa,sn,v,m,r])=>`
           <tr><td>${dt}</td><td>${c}</td><td>${sa}</td><td style="font-weight:600">${sn}</td>
           <td style="color:var(--success);font-weight:600">${v}</td><td>${m}</td><td>${r}</td></tr>`).join('')}
@@ -1466,7 +1434,7 @@ function pageAlteracao() {
     <form>
       <div class="form-grid">
         <div class="form-group"><label class="form-label">Colaborador</label>
-          <select class="form-select"><option>Carlos Souza</option><option>Ana Lima</option><option>Pedro Silva</option></select></div>
+          <select class="form-select"></select></div>
         <div class="form-group"><label class="form-label">Data da Alteração</label><input class="form-input" type="date"></div>
         <div class="form-group"><label class="form-label">Cargo Atual</label><input class="form-input" value="Analista de Sistemas" readonly></div>
         <div class="form-group"><label class="form-label">Novo Cargo</label>
@@ -1489,17 +1457,17 @@ function pagePerfil() {
   return `
   <div class="form-card" style="margin-bottom:16px">
     <div class="form-group"><label class="form-label">Selecionar Colaborador</label>
-      <select class="form-select"><option>Carlos Eduardo Souza</option></select>
+      <select class="form-select">
     </div>
   </div>
   <div class="profile-header">
     <div class="profile-avatar">CS</div>
     <div>
-      <div class="profile-name">Carlos Eduardo Souza</div>
-      <div class="profile-role">Analista de Sistemas — TI · Admissão: 01/03/2023</div>
+      <div class="profile-name"></div>
+      <div class="profile-role"> Admissão:</div>
       <div class="profile-meta">
-        <div class="profile-meta-item"><strong>Nível:</strong> Pleno</div>
-        <div class="profile-meta-item"><strong>Salário:</strong> R$ 4.800</div>
+        <div class="profile-meta-item"><strong>Nível:</strong> </div>
+        <div class="profile-meta-item"><strong>Salário:</strong> </div>
         <div class="profile-meta-item"><strong>Status:</strong> <span class="badge badge-active">Ativo</span></div>
       </div>
     </div>
