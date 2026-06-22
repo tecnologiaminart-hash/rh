@@ -2,7 +2,22 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" contPreciso de mais uma aba no Departamentos
+
+Departamentos > Cargos e Descrição
+
+Dentro da aba liste os Cargos preenchidos, 
+
+Tenha um botão adicionar descrição do cargo
+
+Nome do Cargo:
+[Listar e poder selecionar da aba, cargos e salários atual]
+
+Descrição do Cargo:
+
+[Digitar Texto]
+
+Ter a opção de editar e deletar também essas linhasent="width=device-width, initial-scale=1.0">
 <title>Minart Móveis - RH</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
@@ -548,7 +563,7 @@ const NAV = [
     subs: [
       { id: 'dep-tabela', label: 'Cargos e Salários Atual' },
       { id: 'dep-historico', label: 'Cargos e Salários Histórico' },
-      { id: 'dep-relatorio', label: 'Relatório e Impressão' },
+      { id: 'dep-descricao', label: 'Cargos e Descrição' },
     ]
   },
   {
@@ -676,6 +691,7 @@ function renderPage(id) {
     'cont-relatorio':  pageRelatorio,
     'dep-tabela':      pageCargosTabela,
     'dep-historico':   pageDepHistorico,
+    'dep-descricao':   pageDepDescricao,
     'dep-alteracao':   pageAlteracao,
     'dep-relatorio':   pageRelatorio,
     'ficha-perfil':    pagePerfil,
@@ -734,6 +750,127 @@ function postRender(id) {
     setTimeout(() => { if (window.renderOcorrenciasTabela) renderOcorrenciasTabela(); }, 0);
   }
 }
+
+
+  function pageDepDescricao() {
+  if (!window._cargosDescricao) window._cargosDescricao = [];
+
+  document.getElementById('topbar-actions').innerHTML =
+    `<button class="btn btn-primary" onclick="openDescricaoModal()">+ Adicionar Descrição</button>`;
+
+  return `
+  <div id="descricao-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;padding:32px;width:520px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="descricao-modal-title">Adicionar Descrição de Cargo</div>
+      <div class="form-group" style="margin-bottom:16px">
+        <label class="form-label">Nome do Cargo</label>
+        <select class="form-select" id="desc-cargo">
+          <option value="">— Selecione o Cargo —</option>
+          ${(window._cargos||[]).map(([c]) => `<option value="${c}">${c}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:20px">
+        <label class="form-label">Descrição do Cargo</label>
+        <textarea class="form-textarea" id="desc-texto" style="min-height:160px" placeholder="Descreva as responsabilidades, requisitos e atribuições do cargo..."></textarea>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn" onclick="document.getElementById('descricao-modal').style.display='none'">Cancelar</button>
+        <button class="btn btn-primary" onclick="salvarDescricao()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">Cargos e Descrições</span>
+      <input class="search-input" placeholder="Buscar cargo..." oninput="filtrarDescricoes(this.value)" style="margin-left:12px">
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Cargo</th>
+          <th>Descrição</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="descricao-tbody">
+        ${window._cargosDescricao.length === 0
+          ? '<tr><td colspan="3" style="text-align:center;padding:32px;color:var(--text3)">Nenhuma descrição cadastrada. Clique em "+ Adicionar Descrição" para começar.</td></tr>'
+          : window._cargosDescricao.map((d, i) => `
+              <tr>
+                <td><strong>${d.cargo}</strong></td>
+                <td style="max-width:480px;color:var(--text2);font-size:13px;white-space:pre-wrap">${d.texto}</td>
+                <td style="white-space:nowrap">
+                  <button class="action-btn" title="Editar" onclick="editarDescricao(${i})">✎</button>
+                  <button class="action-btn" title="Excluir" style="color:var(--danger)" onclick="deletarDescricao(${i})">✕</button>
+                </td>
+              </tr>`).join('')}
+      </tbody>
+    </table>
+    <div class="table-pagination" id="descricao-pagination">
+      <span>${window._cargosDescricao.length} descrição${window._cargosDescricao.length !== 1 ? 'ões' : ''} cadastrada${window._cargosDescricao.length !== 1 ? 's' : ''}</span>
+    </div>
+  </div>`;
+}
+
+window.openDescricaoModal = function(idx = null) {
+  window._editingDescricaoIdx = idx;
+  const modal = document.getElementById('descricao-modal');
+  if (!modal) return;
+  if (idx !== null) {
+    const d = window._cargosDescricao[idx];
+    document.getElementById('desc-cargo').value = d.cargo;
+    document.getElementById('desc-texto').value = d.texto;
+    document.getElementById('descricao-modal-title').textContent = 'Editar Descrição de Cargo';
+  } else {
+    document.getElementById('desc-cargo').value = '';
+    document.getElementById('desc-texto').value = '';
+    document.getElementById('descricao-modal-title').textContent = 'Adicionar Descrição de Cargo';
+  }
+  modal.style.display = 'flex';
+};
+
+window.editarDescricao = function(i) {
+  openDescricaoModal(i);
+};
+
+window.salvarDescricao = function() {
+  const cargo = document.getElementById('desc-cargo').value;
+  const texto = document.getElementById('desc-texto').value.trim();
+  if (!cargo) return showToast('Selecione um cargo.');
+  if (!texto) return showToast('Digite a descrição do cargo.');
+  const registro = { cargo, texto };
+  const idx = window._editingDescricaoIdx;
+  if (idx !== null) {
+    window._cargosDescricao[idx] = registro;
+  } else {
+    // Verifica se já existe descrição para esse cargo
+    const existente = window._cargosDescricao.findIndex(d => d.cargo === cargo);
+    if (existente !== -1) {
+      if (!confirm(`Já existe uma descrição para "${cargo}". Deseja substituir?`)) return;
+      window._cargosDescricao[existente] = registro;
+    } else {
+      window._cargosDescricao.push(registro);
+    }
+  }
+  document.getElementById('descricao-modal').style.display = 'none';
+  showToast('Descrição salva com sucesso!');
+  navigate('dep-descricao', 'Cargos e Descrição', 'Departamentos');
+};
+
+window.deletarDescricao = function(i) {
+  if (!confirm('Excluir esta descrição?')) return;
+  window._cargosDescricao.splice(i, 1);
+  showToast('Descrição removida.');
+  navigate('dep-descricao', 'Cargos e Descrição', 'Departamentos');
+};
+
+window.filtrarDescricoes = function(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('#descricao-tbody tr').forEach(tr => {
+    tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+};
 // ------------------------------------------------------------
 // DASHBOARD
 // ------------------------------------------------------------
