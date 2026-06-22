@@ -2101,14 +2101,11 @@ function pageCarreira() {
   document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" data-toast="Adicionando registro de carreira">+ Adicionar Registro</button>`;
   return `
   <div class="table-card" style="margin-bottom:16px">
-    <div class="table-header"><span class="table-title">Histórico Profissional — Carlos Eduardo Souza</span></div>
+    <div class="table-header"><span class="table-title"></span></div>
     <table>
       <thead><tr><th>Data</th><th>Cargo</th><th>Departamento</th><th>Salário</th><th>Motivo</th><th>Ações</th></tr></thead>
       <tbody>
         ${[
-          ['01/03/2023','Analista de Sistemas Jr','TI','R$ 3.800','Admissão'],
-          ['01/09/2023','Analista de Sistemas Pleno','TI','R$ 4.500','Promoção por mérito'],
-          ['01/01/2024','Analista de Sistemas Pleno','TI','R$ 4.800','Dissídio coletivo'],
         ].map(([d,c,dep,s,m])=>`
           <tr><td>${d}</td><td>${c}</td><td>${dep}</td><td style="font-weight:600">${s}</td><td>${m}</td>
           <td><button class="action-btn" data-toast="Editando registro">✎</button>
