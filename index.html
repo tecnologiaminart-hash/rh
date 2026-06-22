@@ -383,6 +383,42 @@ if (!window._cargos) window._cargos = [
   ['Gerente Geral - Nível 1','R$ 2.852,00'],
   ['Gerente Geral - Nível 2','R$ 3.070,00'],
 ];
+  if (!window._statusEmployees) window._statusEmployees = [
+  ['AMANDA SOUSA LIMA','Encarregado de Setor - Nível 1','Ativo','01/01/2024'],
+  ['LUCIANA DA SILVA','Auxiliar Administrativo - Nível 1','Ativo','01/01/2024'],
+  ['JUCICLÉIA DE CARVALHO','Gerente Geral - Nível 2','Ativo','01/01/2024'],
+  ['KAROL SILVA JARDIM','Auxiliar Administrativo - Nível 1','Ativo','01/01/2024'],
+  ['LEANDRO ALMEIDA','Encarregado de Setor - Nível 1','Ativo','01/01/2024'],
+  ['MAXSUEL DA SILVA SANTOS','Soldador - Nível 1','Ativo','01/01/2024'],
+  ['LEANDRO FELIX DA SILVA','Soldador - Nível 1','Ativo','01/01/2024'],
+  ['JOÃO ALVES MORAIS','Soldador - Nível 1','Ativo','01/01/2024'],
+  ['JACSON MARTINS','Soldador - Nível 1','Ativo','01/01/2024'],
+  ['MARCOS VINICIUS LIMA DA SILVA','Operador de Máquinas - Nível 1','Ativo','01/01/2024'],
+  ['JOSIELTON DIAS REIS','Operador de Máquinas - Nível 1','Ativo','01/01/2024'],
+  ['EDNELTON BORGES ANDRADE','Auxiliar de Produção','Ativo','01/01/2024'],
+  ['CLAUDIA CRISTINA DE HOLANDA DA SILVA','Auxiliar de Produção','Ativo','01/01/2024'],
+  ['JEIEL SILVA NUNES','Auxiliar de Produção','Ativo','01/01/2024'],
+  ['MARCOS ANTONIO DOS SANTOS','Auxiliar de Produção','Ativo','01/01/2024'],
+  ['JOAO PAULO FERNANDES','Auxiliar de Produção','Ativo','01/01/2024'],
+  ['LEU FRANCISCO DE SOUSA','Auxiliar de Produção','Ativo','01/01/2024'],
+  ['HELMETH FERREIRA','Auxiliar de Produção','Ativo','01/01/2024'],
+  ['CICERO RYAN TIMOTEO','Auxiliar de Produção','Ativo','01/01/2024'],
+  ['MARCOS DIONES CARVALHO','Auxiliar de Produção','Ativo','01/01/2024'],
+  ['PEDRO EYDSON','Auxiliar de Produção','Ativo','01/01/2024'],
+  ['MICAEL DA SILVA','Auxiliar de Produção','Ativo','01/01/2024'],
+  ['ANDREY THALYS RODRIGUES','Auxiliar de Produção','Ativo','01/01/2024'],
+  ['RAFAEL CAILO','Auxiliar de Produção','Ativo','01/01/2024'],
+  ['LUCAS MARTINS','Auxiliar de Produção','Ativo','01/01/2024'],
+  ['DANILLO MENDES','Auxiliar de Produção','Ativo','01/01/2024'],
+  ['RAILON DE SOUSA OLIVEIRA','Encarregado Geral','Ativo','01/01/2024'],
+  ['JOSIAS CARDOSO BONINA','Encarregado Geral','Ativo','01/01/2024'],
+  ['DARTO TIAGO DE ARAUJO','Entregador e Montador - Nível 3','Ativo','01/01/2024'],
+  ['JACIRA DE ARAÚJO GONÇALVES','Cozinheira','Ativo','01/01/2024'],
+  ['IVONETE DE ARAUJO','Serviços Gerais','Ativo','01/01/2024'],
+  ['MEIRILENE COSTA','Serviços Gerais','Ativo','01/01/2024'],
+  ['MARINETE DOS SANTOS','Serviços Gerais','Ativo','01/01/2024'],
+  ['CRISTIANO DOS SANTOS','Auxiliar Administrativo - Nível 1','Ativo','01/01/2024'],
+];
   
 // ============================================================
 // CONFIG & SUPABASE
@@ -1049,43 +1085,7 @@ function pageAtestados() {
 // ------------------------------------------------------------
 function pageStatus() {
   document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" onclick="openStatusModal()">+ Novo Colaborador</button>`;
-if (!window._statusEmployees) window._statusEmployees = [
-    ['AMANDA SOUSA LIMA','Encarregado de Setor - Nível 1','Ativo','01/01/2024'],
-    ['LUCIANA DA SILVA','Auxiliar Administrativo - Nível 1','Ativo','01/01/2024'],
-    ['JUCICLÉIA DE CARVALHO','Gerente Geral - Nível 2','Ativo','01/01/2024'],
-    ['KAROL SILVA JARDIM','Auxiliar Administrativo - Nível 1','Ativo','01/01/2024'],
-    ['LEANDRO ALMEIDA','Encarregado de Setor - Nível 1','Ativo','01/01/2024'],
-    ['MAXSUEL DA SILVA SANTOS','Soldador - Nível 1','Ativo','01/01/2024'],
-    ['LEANDRO FELIX DA SILVA','Soldador - Nível 1','Ativo','01/01/2024'],
-    ['JOÃO ALVES MORAIS','Soldador - Nível 1','Ativo','01/01/2024'],
-    ['JACSON MARTINS','Soldador - Nível 1','Ativo','01/01/2024'],
-    ['MARCOS VINICIUS LIMA DA SILVA','Operador de Máquinas - Nível 1','Ativo','01/01/2024'],
-    ['JOSIELTON DIAS REIS','Operador de Máquinas - Nível 1','Ativo','01/01/2024'],
-    ['EDNELTON BORGES ANDRADE','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['CLAUDIA CRISTINA DE HOLANDA DA SILVA','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['JEIEL SILVA NUNES','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['MARCOS ANTONIO DOS SANTOS','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['JOAO PAULO FERNANDES','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['LEU FRANCISCO DE SOUSA','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['HELMETH FERREIRA','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['CICERO RYAN TIMOTEO','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['MARCOS DIONES CARVALHO','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['PEDRO EYDSON','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['MICAEL DA SILVA','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['ANDREY THALYS RODRIGUES','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['RAFAEL CAILO','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['LUCAS MARTINS','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['DANILLO MENDES','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['RAILON DE SOUSA OLIVEIRA','Encarregado Geral','Ativo','01/01/2024'],
-    ['JOSIAS CARDOSO BONINA','Encarregado Geral','Ativo','01/01/2024'],
-    ['DARTO TIAGO DE ARAUJO','Entregador e Montador - Nível 3','Ativo','01/01/2024'],
-    ['JACIRA DE ARAÚJO GONÇALVES','Cozinheira','Ativo','01/01/2024'],
-    ['IVONETE DE ARAUJO','Serviços Gerais','Ativo','01/01/2024'],
-    ['MEIRILENE COSTA','Serviços Gerais','Ativo','01/01/2024'],
-    ['MARINETE DOS SANTOS','Serviços Gerais','Ativo','01/01/2024'],
-    ['CRISTIANO DOS SANTOS','Auxiliar Administrativo - Nível 1','Ativo','01/01/2024'],
-  ];
-const employees = window._statusEmployees;
+  const employees = window._statusEmployees;
 
   setTimeout(()=>{
     const search = document.getElementById('status-search');
@@ -1365,21 +1365,35 @@ function pageCandidatos() {
 function pageVagas() {
   if (!window._vagas) window._vagas = [];
 
-  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" onclick="openVagaModal()">+ Abrir Vaga</button>`;
+  document.getElementById('topbar-actions').innerHTML =
+    `<button class="btn btn-primary" onclick="openVagaModal()">+ Abrir Vaga</button>`;
 
-  const rows = window._vagas.map((v,i) => `
-    <tr>
-      <td><strong>${v.cargo}</strong></td>
-      <td>${v.depto||'—'}</td>
-      <td>${v.abertura}</td>
-      <td>${v.prazo||'—'}</td>
-      <td><span class="badge badge-info">${v.candidatos||0}</span></td>
-      <td><span class="badge badge-active">Aberta</span></td>
-      <td>
-        <button class="action-btn" onclick="showToast('Vaga encerrada');window._vagas.splice(${i},1);navigate('cont-vagas','Vagas','Contratação')">🔒</button>
-        <button class="action-btn" onclick="showToast('Visualizando')">👁</button>
-      </td>
-    </tr>`).join('');
+  const renderVagasTabela = () => {
+    const tbody = document.getElementById('vagas-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = window._vagas.length === 0
+      ? '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma vaga cadastrada</td></tr>'
+      : window._vagas.map((v, i) => `
+          <tr>
+            <td><strong>${v.cargo}</strong></td>
+            <td>${v.depto || '—'}</td>
+            <td>${v.abertura}</td>
+            <td>${v.prazo || '—'}</td>
+            <td><span class="badge badge-info">${v.candidatos || 0}</span></td>
+            <td><span class="badge ${v.status === 'Aberta' ? 'badge-active' : 'badge-inactive'}">${v.status}</span></td>
+            <td>
+              ${v.status === 'Aberta'
+                ? `<button class="action-btn" title="Encerrar" onclick="encerrarVaga(${i})">🔒</button>`
+                : `<button class="action-btn" title="Reabrir" onclick="reabrirVaga(${i})">🔓</button>`}
+              <button class="action-btn" onclick="showToast('Visualizando')">👁</button>
+            </td>
+          </tr>`).join('');
+  };
+
+  // Expõe para uso nos botões
+  window._renderVagasTabela = renderVagasTabela;
+
+  setTimeout(renderVagasTabela, 0);
 
   return `
   <div id="vaga-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
@@ -1389,7 +1403,7 @@ function pageVagas() {
         <label class="form-label">Cargo</label>
         <select class="form-select" id="vaga-cargo">
           <option value="">— Selecione o Cargo —</option>
-          ${(window._cargos||[]).map(([c])=>`<option value="${c}">${c}</option>`).join('')}
+          ${(window._cargos||[]).map(([c]) => `<option value="${c}">${c}</option>`).join('')}
         </select>
       </div>
       <div class="form-group" style="margin-bottom:14px">
@@ -1407,13 +1421,28 @@ function pageVagas() {
     </div>
   </div>
   <div class="table-card">
-    <div class="table-header"><span class="table-title">Vagas</span></div>
+    <div class="table-header"><span class="table-title">Vagas em Aberto</span></div>
     <table>
       <thead><tr><th>Vaga</th><th>Departamento</th><th>Abertura</th><th>Prazo</th><th>Candidatos</th><th>Status</th><th>Ações</th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma vaga aberta</td></tr>'}</tbody>
+      <tbody id="vagas-tbody"><tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
     </table>
+    <div class="table-pagination" id="vagas-pagination"><span>${window._vagas.length} vagas</span></div>
   </div>`;
 }
+
+window.encerrarVaga = function(i) {
+  window._vagas[i].status = 'Encerrada';
+  window._renderVagasTabela();
+  document.getElementById('vagas-pagination').innerHTML =
+    `<span>${window._vagas.length} vagas</span>`;
+  showToast('Vaga encerrada.');
+};
+
+window.reabrirVaga = function(i) {
+  window._vagas[i].status = 'Aberta';
+  window._renderVagasTabela();
+  showToast('Vaga reaberta.');
+};
 
 window.openVagaModal = function() {
   document.getElementById('vaga-cargo').value = '';
@@ -1427,17 +1456,19 @@ window.salvarVaga = function() {
   const depto = document.getElementById('vaga-depto').value;
   const prazo = document.getElementById('vaga-prazo').value;
   if (!cargo) return showToast('Selecione um cargo.');
-  if (!window._vagas) window._vagas = [];
   window._vagas.push({
     cargo,
     depto,
     prazo: prazo ? prazo.split('-').reverse().join('/') : '—',
     abertura: new Date().toLocaleDateString('pt-BR'),
-    candidatos: 0
+    candidatos: 0,
+    status: 'Aberta'
   });
   document.getElementById('vaga-modal').style.display = 'none';
   showToast('Vaga aberta com sucesso!');
-  navigate('cont-vagas', 'Vagas', 'Contratação');
+  window._renderVagasTabela();
+  document.getElementById('vagas-pagination').innerHTML =
+    `<span>${window._vagas.length} vagas</span>`;
 };
 
 // ------------------------------------------------------------
@@ -1751,9 +1782,8 @@ window.saveHistoricoCargo = function() {
 // ALTERAÇÃO DE CARGO/SALÁRIO
 // ------------------------------------------------------------
 function pageAlteracao() {
-  const emp = window._statusEmployees || [];
-
-  const colabOptions = emp.map((e,i) =>
+  const emp = window._statusEmployees;
+  
     `<option value="${i}">${e[0]}</option>`).join('');
 
   const cargoOptions = (window._cargos||[]).map(([c]) =>
