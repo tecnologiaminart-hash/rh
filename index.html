@@ -1666,7 +1666,20 @@ function pageVagas() {
 
 window.openVagaModal = function() {
   const modal = document.getElementById('vaga-modal');
-  if (!modal) return;
+  if (!modal) {
+    // Modal não está no DOM, navega para vagas e tenta novamente
+    navigate('cont-vagas', 'Vagas', 'Contratação');
+    setTimeout(() => {
+      const m = document.getElementById('vaga-modal');
+      if (m) {
+        document.getElementById('vaga-cargo').value = '';
+        document.getElementById('vaga-depto').value = '';
+        document.getElementById('vaga-prazo').value = '';
+        m.style.display = 'flex';
+      }
+    }, 80);
+    return;
+  }
   document.getElementById('vaga-cargo').value = '';
   document.getElementById('vaga-depto').value = '';
   document.getElementById('vaga-prazo').value = '';
