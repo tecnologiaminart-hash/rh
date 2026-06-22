@@ -824,12 +824,12 @@ function postRender(id) {
   </div>`;
 }
 
-window.openDescricaoModal = function(idx = null) {
-  window._editingDescricaoIdx = idx;
+window.openDescricaoModal = function(idx) {
+  window._editingDescricaoIdx = (idx !== undefined) ? idx : null;
   const modal = document.getElementById('descricao-modal');
   if (!modal) return;
-  if (idx !== null) {
-    const d = window._cargosDescricao[idx];
+  if (window._editingDescricaoIdx !== null) {
+    const d = window._cargosDescricao[window._editingDescricaoIdx];
     document.getElementById('desc-cargo').value = d.cargo;
     document.getElementById('desc-texto').value = d.texto;
     document.getElementById('descricao-modal-title').textContent = 'Editar Descrição de Cargo';
@@ -850,9 +850,10 @@ window.salvarDescricao = function() {
   const texto = document.getElementById('desc-texto').value.trim();
   if (!cargo) return showToast('Selecione um cargo.');
   if (!texto) return showToast('Digite a descrição do cargo.');
+  if (!window._cargosDescricao) window._cargosDescricao = [];
   const registro = { cargo, texto };
   const idx = window._editingDescricaoIdx;
-  if (idx !== null) {
+  if (idx !== null && idx !== undefined) {
     window._cargosDescricao[idx] = registro;
   } else {
     const existente = window._cargosDescricao.findIndex(d => d.cargo === cargo);
@@ -881,7 +882,7 @@ window.renderDescricaoTabela = function() {
   if (!tbody) return;
   const lista = window._cargosDescricao || [];
   tbody.innerHTML = lista.length === 0
-    ? '<tr><td colspan="3" style="text-align:center;padding:32px;color:var(--text3)">Nenhuma descrição cadastrada. Clique em "+ Adicionar Descrição" para começar.</td></tr>'
+    ? '<tr><td colspan="3" style="text-align:center;padding:32px;color:var(--text3)">Nenhuma descrição cadastrada.</td></tr>'
     : lista.map((d, i) => `
         <tr>
           <td><strong>${d.cargo}</strong></td>
