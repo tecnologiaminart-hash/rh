@@ -1544,12 +1544,173 @@ function pageVagas() {
   <div class="table-card">
     <div class="table-header"><span class="table-title">Vagas</span></div>
     <table>
+      <thead><tr><th>Vaga</th><th>Departamento</th><th>Abertura</th><th>Prazo</th><th>Candidatos</th><searching_in_web>
+</searching_in_web>
+
+Aqui está a versão completa e consolidada com tudo junto, incluindo `openVagaModal`, `salvarVaga`, `encerrarVaga`, `reabrirVaga` e `deletarVaga`:
+
+```js
+function pageVagas() {
+  if (!window._vagas) window._vagas = [];
+  if (!window._candidatosPorVaga) window._candidatosPorVaga = {};
+
+  document.getElementById('topbar-actions').innerHTML =
+    `<button class="btn btn-primary" onclick="openVagaModal()">+ Abrir Vaga</button>`;
+
+  const renderVagasTabela = () => {
+    const tbody = document.getElementById('vagas-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = window._vagas.length === 0
+      ? '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma vaga cadastrada</td></tr>'
+      : window._vagas.map((v, i) => `
+          <tr>
+            <td><strong>${v.cargo}</strong></td>
+            <td>${v.depto || '—'}</td>
+            <td>${v.abertura}</td>
+            <td>${v.prazo || '—'}</td>
+            <td><span class="badge badge-info">${v.candidatos || 0}</span></td>
+            <td><span class="badge ${v.status === 'Aberta' ? 'badge-active' : 'badge-inactive'}">${v.status}</span></td>
+            <td>
+              <button class="btn btn-sm" onclick="copiarLinkVaga('${v.id}')" title="Copiar link público">🔗 Link</button>
+            </td>
+            <td>
+              ${v.status === 'Aberta'
+                ? `<button class="action-btn" title="Encerrar" onclick="encerrarVaga(${i})">🔒</button>`
+                : `<button class="action-btn" title="Reabrir" onclick="reabrirVaga(${i})">🔓</button>`}
+              <button class="action-btn" onclick="visualizarVaga('${v.id}')">👁</button>
+              <button class="action-btn" style="color:var(--danger)" title="Excluir" onclick="deletarVaga(${i})">✕</button>
+            </td>
+          </tr>`).join('');
+    const pag = document.getElementById('vagas-pagination');
+    if (pag) pag.innerHTML = `<span>${window._vagas.length} vagas</span>`;
+  };
+
+  window._renderVagasTabela = renderVagasTabela;
+  setTimeout(renderVagasTabela, 0);
+
+  return `
+  <div id="vaga-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;padding:32px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:20px">Abrir Nova Vaga</div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">Cargo</label>
+        <select class="form-select" id="vaga-cargo">
+          <option value="">— Selecione o Cargo —</option>
+          ${(window._cargos||[]).map(([c]) => `<option value="${c}">${c}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">Departamento</label>
+        <input class="form-input" id="vaga-depto" placeholder="Ex: Produção, Administrativo...">
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">Prazo</label>
+        <input class="form-input" type="date" id="vaga-prazo">
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">
+        <button class="btn" onclick="document.getElementById('vaga-modal').style.display='none'">Cancelar</button>
+        <button class="btn btn-primary" onclick="salvarVaga()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="link-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;padding:32px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:8px">Link Público da Vaga</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:20px">Compartilhe este link. Não é necessário login para acessar.</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:20px">
+        <input class="form-input" id="link-vaga-url" readonly style="flex:1;font-size:12px;color:var(--text2)">
+        <button class="btn btn-primary" onclick="copiarTextoLink()">Copiar</button>
+      </div>
+      <div style="display:flex;justify-content:flex-end">
+        <button class="btn" onclick="document.getElementById('link-modal').style.display='none'">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="vaga-publica-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;width:560px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="padding:32px">
+        <div style="font-size:18px;font-weight:700;margin-bottom:4px" id="vp-titulo"></div>
+        <div style="font-size:13px;color:var(--text3);margin-bottom:24px" id="vp-depto"></div>
+        <div style="font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:16px">Candidatura</div>
+        <div class="form-group" style="margin-bottom:14px">
+          <label class="form-label">Nome Completo</label>
+          <input class="form-input" id="vp-nome" placeholder="Seu nome completo">
+        </div>
+        <div class="form-group" style="margin-bottom:14px">
+          <label class="form-label">E-mail</label>
+          <input class="form-input" type="email" id="vp-email" placeholder="seu@email.com">
+        </div>
+        <div class="form-group" style="margin-bottom:24px">
+          <label class="form-label">Currículo (PDF, DOC)</label>
+          <input class="form-input" type="file" id="vp-curriculo" accept=".pdf,.doc,.docx">
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn" onclick="document.getElementById('vaga-publica-modal').style.display='none'">Fechar</button>
+          <button class="btn btn-primary" onclick="enviarCandidatura()">Enviar Candidatura</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <div class="table-header"><span class="table-title">Vagas</span></div>
+    <table>
       <thead><tr><th>Vaga</th><th>Departamento</th><th>Abertura</th><th>Prazo</th><th>Candidatos</th><th>Status</th><th>Link</th><th>Ações</th></tr></thead>
       <tbody id="vagas-tbody"><tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
     </table>
     <div class="table-pagination" id="vagas-pagination"><span>${window._vagas.length} vagas</span></div>
   </div>`;
 }
+
+window.openVagaModal = function() {
+  const modal = document.getElementById('vaga-modal');
+  if (!modal) return;
+  document.getElementById('vaga-cargo').value = '';
+  document.getElementById('vaga-depto').value = '';
+  document.getElementById('vaga-prazo').value = '';
+  modal.style.display = 'flex';
+};
+
+window.salvarVaga = function() {
+  const cargo = document.getElementById('vaga-cargo').value;
+  const depto = document.getElementById('vaga-depto').value;
+  const prazo = document.getElementById('vaga-prazo').value;
+  if (!cargo) return showToast('Selecione um cargo.');
+  const id = 'vaga_' + Date.now() + '_' + Math.random().toString(36).substr(2,6);
+  if (!window._vagas) window._vagas = [];
+  window._vagas.push({
+    id, cargo, depto,
+    prazo: prazo ? prazo.split('-').reverse().join('/') : '—',
+    abertura: new Date().toLocaleDateString('pt-BR'),
+    candidatos: 0,
+    status: 'Aberta'
+  });
+  const modal = document.getElementById('vaga-modal');
+  if (modal) modal.style.display = 'none';
+  showToast('Vaga aberta com sucesso!');
+  if (window._renderVagasTabela) window._renderVagasTabela();
+};
+
+window.encerrarVaga = function(i) {
+  window._vagas[i].status = 'Encerrada';
+  if (window._renderVagasTabela) window._renderVagasTabela();
+  showToast('Vaga encerrada.');
+};
+
+window.reabrirVaga = function(i) {
+  window._vagas[i].status = 'Aberta';
+  if (window._renderVagasTabela) window._renderVagasTabela();
+  showToast('Vaga reaberta.');
+};
+
+window.deletarVaga = function(i) {
+  if (!confirm('Excluir esta vaga?')) return;
+  window._vagas.splice(i, 1);
+  if (window._renderVagasTabela) window._renderVagasTabela();
+  showToast('Vaga excluída.');
+};
 
 window.copiarLinkVaga = function(vagaId) {
   const url = `${location.href.split('?')[0]}?vaga=${vagaId}`;
@@ -1575,8 +1736,8 @@ window.visualizarVaga = function(vagaId) {
   window._vagaPublicaAtual = vagaId;
   document.getElementById('vp-titulo').textContent = vaga.cargo;
   document.getElementById('vp-depto').textContent  = vaga.depto ? `Departamento: ${vaga.depto}` : '';
-  document.getElementById('vp-nome').value     = '';
-  document.getElementById('vp-email').value    = '';
+  document.getElementById('vp-nome').value      = '';
+  document.getElementById('vp-email').value     = '';
   document.getElementById('vp-curriculo').value = '';
   document.getElementById('vaga-publica-modal').style.display = 'flex';
 };
@@ -1589,25 +1750,24 @@ window.enviarCandidatura = function() {
   if (!nome)  return showToast('Informe seu nome.');
   if (!email) return showToast('Informe seu e-mail.');
   if (!arq)   return showToast('Anexe seu currículo.');
-
   if (!window._candidatosPorVaga) window._candidatosPorVaga = {};
   if (!window._candidatosPorVaga[vagaId]) window._candidatosPorVaga[vagaId] = [];
-
   window._candidatosPorVaga[vagaId].push({
-    nome,
-    email,
+    nome, email,
     curriculo: arq.name,
     data: new Date().toLocaleDateString('pt-BR')
   });
-
-  // Incrementa contador na vaga
   const vaga = window._vagas.find(v => v.id === vagaId);
   if (vaga) vaga.candidatos = (vaga.candidatos || 0) + 1;
-
   document.getElementById('vaga-publica-modal').style.display = 'none';
   showToast('Candidatura enviada com sucesso!');
-  window._renderVagasTabela();
+  if (window._renderVagasTabela) window._renderVagasTabela();
 };
+```
+
+Substitua toda a função `pageVagas()` antiga e todos os `window.*` relacionados a vagas pelo bloco acima. Tudo está consolidado em um único lugar agora, sem dependências externas quebradas.
+
+
 // ------------------------------------------------------------
 // FORMULÁRIO DE ENTREVISTA
 // ------------------------------------------------------------
