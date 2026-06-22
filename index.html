@@ -449,11 +449,10 @@ const NAV = [
   {
     id: 'colaboradores', label: 'Colaboradores', icon: '◉',
     subs: [
-      { id: 'col-admissao', label: 'Admissão' },
       { id: 'col-documentos', label: 'Documentos' },
       { id: 'col-ferias', label: 'Férias' },
       { id: 'col-atestados', label: 'Atestados' },
-      { id: 'col-status', label: 'Status' },
+      { id: 'col-status', label: 'Informações Contratuais' },
       { id: 'col-exames', label: 'Exames' },
       { id: 'col-historico', label: 'Histórico' },
       { id: 'col-enviar', label: 'Enviar Comunicado' },
@@ -482,9 +481,7 @@ const NAV = [
     subs: [
       { id: 'ficha-perfil', label: 'Perfil e Hobbies (Minart)' },
       { id: 'ficha-dados', label: 'Dados Pessoais' },
-      { id: 'ficha-docs', label: 'Documentos' },
       { id: 'ficha-carreira', label: 'Histórico de Carreira' },
-      { id: 'ficha-treinamentos', label: 'Treinamentos' },
       { id: 'ficha-contratos', label: 'Contratos e Alinhamento' },
       { id: 'ficha-ocorrencias', label: 'Ocorrências e Obs' },
       { id: 'ficha-relatorio', label: 'Relatório e Impressão' },
@@ -585,13 +582,196 @@ function showToast(msg, dur=2500) {
 }
 
 // ============================================================
+// DADOS COMPARTILHADOS — Colaboradores & Cargos
+// (fonte única usada por várias abas do sistema)
+// ============================================================
+function getCargos() {
+  if (!window._cargos) {
+    window._cargos = [
+      ['Serviços Gerais','R$ 1.628,00'],
+      ['Recepcionista','R$ 1.628,00'],
+      ['Auxiliar de Cozinha','R$ 1.628,00'],
+      ['Auxiliar de Produção','R$ 1.765,00'],
+      ['Auxiliar de Montador','R$ 1.765,00'],
+      ['Auxiliar de Vidraceiro','R$ 1.765,00'],
+      ['Desenhista','R$ 1.765,00'],
+      ['Vendedor','R$ 1.765,00'],
+      ['Orçamentista','R$ 1.765,00'],
+      ['Cozinheira(o)','R$ 1.765,00'],
+      ['Entregador e Montador - Nível 1','R$ 1.956,00'],
+      ['Entregador e Montador - Nível 2','R$ 2.138,00'],
+      ['Entregador e Montador - Nível 3','R$ 2.304,00'],
+      ['Operador de Máquinas - Nível 1','R$ 1.956,00'],
+      ['Operador de Máquinas - Nível 2','R$ 2.138,00'],
+      ['Operador de Máquinas - Nível 3','R$ 2.300,00'],
+      ['Auxiliar Administrativo - Nível 1','R$ 1.960,00'],
+      ['Auxiliar Administrativo - Nível 2','R$ 2.142,00'],
+      ['Auxiliar Administrativo - Nível 3','R$ 2.308,00'],
+      ['Desenhista, Orçamentista e Vendedor','R$ 2.351,00'],
+      ['Marceneiro - Nível 1','R$ 2.352,00'],
+      ['Marceneiro - Nível 2','R$ 2.569,00'],
+      ['Marceneiro - Nível 3','R$ 2.765,00'],
+      ['Pintor','R$ 2.352,00'],
+      ['Soldador - Nível 1','R$ 2.352,00'],
+      ['Soldador - Nível 2','R$ 2.569,00'],
+      ['Soldador - Nível 3','R$ 2.765,00'],
+      ['Tapeceiro','R$ 2.352,00'],
+      ['Vidraceiro','R$ 2.352,00'],
+      ['Encarregado de Setor - Nível 1','R$ 2.355,00'],
+      ['Encarregado de Setor - Nível 2','R$ 2.482,00'],
+      ['Encarregado de Setor - Nível 3','R$ 2.610,00'],
+      ['Encarregado Geral','R$ 2.611,00'],
+      ['Designer de Interiores','R$ 2.611,00'],
+      ['Gerente Geral - Nível 1','R$ 2.852,00'],
+      ['Gerente Geral - Nível 2','R$ 3.070,00'],
+    ];
+  }
+  return window._cargos;
+}
+
+function getColaboradores() {
+  if (!window._colaboradores) {
+    window._colaboradores = [
+      ['AMANDA SOUSA LIMA','Encarregado de Setor - Nível 1','Ativo','01/01/2024'],
+      ['LUCIANA DA SILVA','Auxiliar Administrativo - Nível 1','Ativo','01/01/2024'],
+      ['JUCICLÉIA DE CARVALHO','Gerente Geral - Nível 2','Ativo','01/01/2024'],
+      ['KAROL SILVA JARDIM','Auxiliar Administrativo - Nível 1','Ativo','01/01/2024'],
+      ['LEANDRO ALMEIDA','Encarregado de Setor - Nível 1','Ativo','01/01/2024'],
+      ['MAXSUEL DA SILVA SANTOS','Soldador - Nível 1','Ativo','01/01/2024'],
+      ['LEANDRO FELIX DA SILVA','Soldador - Nível 1','Ativo','01/01/2024'],
+      ['JOÃO ALVES MORAIS','Soldador - Nível 1','Ativo','01/01/2024'],
+      ['JACSON MARTINS','Soldador - Nível 1','Ativo','01/01/2024'],
+      ['MARCOS VINICIUS LIMA DA SILVA','Operador de Máquinas - Nível 1','Ativo','01/01/2024'],
+      ['JOSIELTON DIAS REIS','Operador de Máquinas - Nível 1','Ativo','01/01/2024'],
+      ['EDNELTON BORGES ANDRADE','Auxiliar de Produção','Ativo','01/01/2024'],
+      ['CLAUDIA CRISTINA DE HOLANDA DA SILVA','Auxiliar de Produção','Ativo','01/01/2024'],
+      ['JEIEL SILVA NUNES','Auxiliar de Produção','Ativo','01/01/2024'],
+      ['MARCOS ANTONIO DOS SANTOS','Auxiliar de Produção','Ativo','01/01/2024'],
+      ['JOAO PAULO FERNANDES','Auxiliar de Produção','Ativo','01/01/2024'],
+      ['LEU FRANCISCO DE SOUSA','Auxiliar de Produção','Ativo','01/01/2024'],
+      ['HELMETH FERREIRA','Auxiliar de Produção','Ativo','01/01/2024'],
+      ['CICERO RYAN TIMOTEO','Auxiliar de Produção','Ativo','01/01/2024'],
+      ['MARCOS DIONES CARVALHO','Auxiliar de Produção','Ativo','01/01/2024'],
+      ['PEDRO EYDSON','Auxiliar de Produção','Ativo','01/01/2024'],
+      ['MICAEL DA SILVA','Auxiliar de Produção','Ativo','01/01/2024'],
+      ['ANDREY THALYS RODRIGUES','Auxiliar de Produção','Ativo','01/01/2024'],
+      ['RAFAEL CAILO','Auxiliar de Produção','Ativo','01/01/2024'],
+      ['LUCAS MARTINS','Auxiliar de Produção','Ativo','01/01/2024'],
+      ['DANILLO MENDES','Auxiliar de Produção','Ativo','01/01/2024'],
+      ['RAILON DE SOUSA OLIVEIRA','Encarregado Geral','Ativo','01/01/2024'],
+      ['JOSIAS CARDOSO BONINA','Encarregado Geral','Ativo','01/01/2024'],
+      ['DARTO TIAGO DE ARAUJO','Entregador e Montador - Nível 3','Ativo','01/01/2024'],
+      ['JACIRA DE ARAÚJO GONÇALVES','Cozinheira','Ativo','01/01/2024'],
+      ['IVONETE DE ARAUJO','Serviços Gerais','Ativo','01/01/2024'],
+      ['MEIRILENE COSTA','Serviços Gerais','Ativo','01/01/2024'],
+      ['MARINETE DOS SANTOS','Serviços Gerais','Ativo','01/01/2024'],
+      ['CRISTIANO DOS SANTOS','Auxiliar Administrativo - Nível 1','Ativo','01/01/2024'],
+    ];
+  }
+  return window._colaboradores;
+}
+
+// Modal genérico de Colaborador (Cargo selecionado a partir de Cargos e Salários Atual)
+// Reutilizado em mais de uma aba (Informações Contratuais, Perfil e Hobbies, etc.)
+function colaboradorModalHTML() {
+  const cargos = getCargos();
+  return `
+  <div id="status-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;padding:32px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="status-modal-title">Editar Colaborador</div>
+      <div class="form-grid" style="margin-bottom:16px">
+        <div class="form-group form-full"><label class="form-label">Nome</label><input class="form-input" id="sm-nome"></div>
+        <div class="form-group"><label class="form-label">Cargo</label>
+          <select class="form-select" id="sm-cargo">
+            ${cargos.map(([c]) => `<option value="${c}">${c}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group"><label class="form-label">Status</label>
+          <select class="form-select" id="sm-status"><option>Ativo</option><option>Afastado</option><option>Desligado</option></select>
+        </div>
+        <div class="form-group"><label class="form-label">Desde</label><input class="form-input" id="sm-desde" type="date"></div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn" onclick="document.getElementById('status-modal').style.display='none'">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveStatusEmployee()">Salvar</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+window.openStatusModal = function(idx=null, returnId='col-status', returnTitle='Informações Contratuais') {
+  window._colabModalReturn = { id: returnId, title: returnTitle };
+  const m = document.getElementById('status-modal');
+  const emp = getColaboradores();
+  window._editingStatusIdx = idx;
+  if (idx !== null) {
+    const [n,c,st,desde] = emp[idx];
+    document.getElementById('sm-nome').value = n;
+    document.getElementById('sm-cargo').value = c;
+    document.getElementById('sm-status').value = st;
+    const parts = desde.split('/');
+    document.getElementById('sm-desde').value = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : '';
+    document.getElementById('status-modal-title').textContent = 'Editar Colaborador';
+  } else {
+    document.getElementById('sm-nome').value = '';
+    document.getElementById('sm-desde').value = '';
+    document.getElementById('sm-status').value = 'Ativo';
+    document.getElementById('status-modal-title').textContent = 'Novo Colaborador';
+  }
+  m.style.display = 'flex';
+};
+window.editStatusEmployee = function(i, returnId, returnTitle) { openStatusModal(i, returnId, returnTitle); };
+window.saveStatusEmployee = function() {
+  const emp = getColaboradores();
+  const n = document.getElementById('sm-nome').value.trim();
+  const c = document.getElementById('sm-cargo').value;
+  const st = document.getElementById('sm-status').value;
+  const rawDate = document.getElementById('sm-desde').value;
+  const desde = rawDate ? rawDate.split('-').reverse().join('/') : '';
+  if (!n) return alert('Preencha o nome do colaborador.');
+  const idx = window._editingStatusIdx;
+  if (idx !== null) emp[idx] = [n,c,st,desde]; else emp.push([n,c,st,desde]);
+  document.getElementById('status-modal').style.display = 'none';
+  const ret = window._colabModalReturn || { id: 'col-status', title: 'Informações Contratuais' };
+  navigate(ret.id, ret.title);
+};
+window.viewStatusEmployee = function(i) {
+  const [n,c,st,desde] = getColaboradores()[i];
+  document.getElementById('status-view-body').innerHTML = `
+    <div><strong>Nome:</strong> ${n}</div>
+    <div><strong>Cargo:</strong> ${c}</div>
+    <div><strong>Status:</strong> ${st}</div>
+    <div><strong>Desde:</strong> ${desde}</div>`;
+  document.getElementById('status-view-modal').style.display = 'flex';
+};
+window.printStatusRow = function(i) {
+  const [n,c,st,desde] = getColaboradores()[i];
+  const w = window.open('','_blank');
+  w.document.write(`<html><head><title>Colaborador</title><style>body{font-family:sans-serif;padding:40px}h2{margin-bottom:20px}p{margin:6px 0;font-size:14px}</style></head><body>
+    <h2>Minart Móveis — Ficha de Status</h2>
+    <p><strong>Nome:</strong> ${n}</p>
+    <p><strong>Cargo:</strong> ${c}</p>
+    <p><strong>Status:</strong> ${st}</p>
+    <p><strong>Desde:</strong> ${desde}</p>
+    <p style="margin-top:30px;color:#888;font-size:12px">Impresso em: ${new Date().toLocaleDateString('pt-BR')}</p>
+  </body></html>`);w.print();
+};
+window.printStatusCard = function() {
+  const body = document.getElementById('status-view-body').innerHTML;
+  const w = window.open('','_blank');
+  w.document.write(`<html><head><title>Colaborador</title><style>body{font-family:sans-serif;padding:40px}h2{margin-bottom:20px}div{margin:6px 0;font-size:14px}</style></head><body>
+    <h2>Minart Móveis — Ficha de Status</h2>${body}
+    <p style="margin-top:30px;color:#888;font-size:12px">Impresso em: ${new Date().toLocaleDateString('pt-BR')}</p>
+  </body></html>`);w.print();
+};
+
+// ============================================================
 // PAGES
 // ============================================================
 function renderPage(id) {
   const el = document.getElementById('content-area');
   const pages = {
     'dashboard':       pageDashboard,
-    'col-admissao':    pageAdmissao,
     'col-documentos':  pageDocumentos,
     'col-ferias':      pageFerias,
     'col-atestados':   pageAtestados,
@@ -609,9 +789,7 @@ function renderPage(id) {
     'dep-relatorio':   pageRelatorio,
     'ficha-perfil':    pagePerfil,
     'ficha-dados':     pageDadosPessoais,
-    'ficha-docs':      pageDocumentos,
     'ficha-carreira':  pageCarreira,
-    'ficha-treinamentos': pageTreinamentosCol,
     'ficha-contratos': pageContratos,
     'ficha-ocorrencias': pageOcorrencias,
     'ficha-relatorio': pageRelatorio,
@@ -736,59 +914,7 @@ function pageDashboard() {
   </div>`;
 }
 
-// ------------------------------------------------------------
-// COLABORADORES — ADMISSÃO
-// ------------------------------------------------------------
-function pageAdmissao() {
-  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" onclick="showToast('Abrindo formulário...')">+ Nova Admissão</button>`;
-  return `
-  <div class="table-card">
-    <div class="table-header">
-      <span class="table-title">Colaboradores — Admissões</span>
-      <input class="search-input" placeholder="Buscar colaborador...">
-      <div class="table-actions">
-        <button class="btn btn-sm btn-print">🖨 Imprimir</button>
-        <button class="btn btn-sm" data-toast="Exportado!">📥 Excel</button>
-      </div>
-    </div>
-    <table>
-      <thead><tr><th>Nome</th><th>Cargo</th><th>Departamento</th><th>Admissão</th><th>Salário</th><th>Status</th><th>Ações</th></tr></thead>
-      <tbody>
-        ${[
-          ['AMANDA SOUSA LIMA','Encarregado de Setor - Nível 1','—','01/01/2024','R$ 2.355,00','Ativo'],
-          ['LUCIANA DA SILVA','Auxiliar Administrativo - Nível 1','—','01/01/2024','R$ 1.960,00','Ativo'],
-          ['JUCICLÉIA DE CARVALHO','Gerente Geral - Nível 2','—','01/01/2024','R$ 3.070,00','Ativo'],
-          ['KAROL SILVA JARDIM','Auxiliar Administrativo - Nível 1','—','01/01/2024','R$ 1.960,00','Ativo'],
-          ['LEANDRO ALMEIDA','Encarregado de Setor - Nível 1','—','01/01/2024','R$ 2.355,00','Ativo'],
-          ['MAXSUEL DA SILVA SANTOS','Soldador - Nível 1','—','01/01/2024','R$ 2.352,00','Ativo'],
-          ['LEANDRO FELIX DA SILVA','Soldador - Nível 1','—','01/01/2024','R$ 2.352,00','Ativo'],
-          ['JOÃO ALVES MORAIS','Soldador - Nível 1','—','01/01/2024','R$ 2.352,00','Ativo'],
-          ['JACSON MARTINS','Soldador - Nível 1','—','01/01/2024','R$ 2.352,00','Ativo'],
-          ['MARCOS VINICIUS LIMA DA SILVA','Operador de Máquinas - Nível 1','—','01/01/2024','R$ 1.956,00','Ativo'],
-          ['JOSIELTON DIAS REIS','Operador de Máquinas - Nível 1','—','01/01/2024','R$ 1.956,00','Ativo'],
-          ['RAILON DE SOUSA OLIVEIRA','Encarregado Geral','—','01/01/2024','R$ 2.611,00','Ativo'],
-          ['JOSIAS CARDOSO BONINA','Encarregado Geral','—','01/01/2024','R$ 2.611,00','Ativo'],
-          ['DARTO TIAGO DE ARAUJO','Entregador e Montador - Nível 3','—','01/01/2024','R$ 2.304,00','Ativo'],
-          ['CRISTIANO DOS SANTOS','Auxiliar Administrativo - Nível 1','—','01/01/2024','R$ 1.960,00','Ativo'],
-        ].map(([n,c,d,a,s,st]) => `
-          <tr>
-            <td><strong>${n}</strong></td>
-            <td>${c}</td>
-            <td>${d}</td>
-            <td>${a}</td>
-            <td>${s}</td>
-            <td><span class="badge ${st==='Ativo'?'badge-active':st==='Férias'?'badge-info':'badge-inactive'}">${st}</span></td>
-            <td><button class="action-btn" data-toast="Abrindo ficha de ${n}">✎</button><button class="action-btn" data-toast="Visualizando ${n}">👁</button></td>
-          </tr>`).join('')}
-      </tbody>
-    </table>
-    <div class="table-pagination"><span>Mostrando 15 de 34 colaboradores</span><div style="display:flex;gap:6px"><button class="btn btn-sm">‹</button><button class="btn btn-sm" style="background:#111;color:#fff">1</button><button class="btn btn-sm">2</button><button class="btn btn-sm">›</button></div></div>
-  </div>`;
-}
 
-// ------------------------------------------------------------
-// DOCUMENTOS
-// ------------------------------------------------------------
 function pageDocumentos() {
   document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" data-toast="Upload iniciado">+ Enviar Documento</button>`;
   return `
