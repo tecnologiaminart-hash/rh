@@ -1050,7 +1050,7 @@ function pageAtestados() {
 // ------------------------------------------------------------
 function pageStatus() {
   document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" onclick="openStatusModal()">+ Novo Colaborador</button>`;
-  if (!window._statusEmployees) window._statusEmployees = [
+const employees = [
     ['AMANDA SOUSA LIMA','Encarregado de Setor - Nível 1','Ativo','01/01/2024'],
     ['LUCIANA DA SILVA','Auxiliar Administrativo - Nível 1','Ativo','01/01/2024'],
     ['JUCICLÉIA DE CARVALHO','Gerente Geral - Nível 2','Ativo','01/01/2024'],
@@ -1086,7 +1086,7 @@ function pageStatus() {
     ['MARINETE DOS SANTOS','Serviços Gerais','Ativo','01/01/2024'],
     ['CRISTIANO DOS SANTOS','Auxiliar Administrativo - Nível 1','Ativo','01/01/2024'],
   ];
-const employees = window._statusEmployees;
+window._statusEmployees = employees;
 
   setTimeout(()=>{
     const search = document.getElementById('status-search');
