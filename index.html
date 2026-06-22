@@ -429,7 +429,31 @@ let SUPA_URL = localStorage.getItem('supa_url') || '';
 let SUPA_KEY = localStorage.getItem('supa_key') || '';
 let supaClient = null;
 let currentUser = null;
+  
+function salvarVagasLocal() {
+  localStorage.setItem('rh_vagas', JSON.stringify(window._vagas || []));
+}
 
+function carregarVagasLocal() {
+  try {
+    const salvo = localStorage.getItem('rh_vagas');
+    window._vagas = salvo ? JSON.parse(salvo) : [];
+  } catch(e) {
+    window._vagas = [];
+  }
+}
+  function salvarCandidaturasLocal() {
+  localStorage.setItem('rh_candidaturas', JSON.stringify(window._candidaturas || []));
+}
+
+function carregarCandidaturasLocal() {
+  try {
+    const salvo = localStorage.getItem('rh_candidaturas');
+    window._candidaturas = salvo ? JSON.parse(salvo) : [];
+  } catch(e) {
+    window._candidaturas = [];
+  }
+}
 function saveConfig() {
   SUPA_URL = document.getElementById('sb-url').value.trim();
   SUPA_KEY = document.getElementById('sb-key').value.trim();
@@ -1635,6 +1659,7 @@ function pageVagas() {
   window.deletarVaga = function(i) {
     if (!confirm('Excluir esta vaga?')) return;
     window._vagas.splice(i, 1);
+    salvarVagasLocal(); // ← adicionar
     window._renderVagasTabela();
     document.getElementById('vagas-pagination').innerHTML = `<span>${window._vagas.length} vagas</span>`;
     showToast('Vaga excluída.');
@@ -1711,6 +1736,7 @@ window.copiarLinkVaga = function(i) {
 
 window.encerrarVaga = function(i) {
   window._vagas[i].status = 'Encerrada';
+  salvarVagasLocal(); // ← adicionar
   window._renderVagasTabela();
   document.getElementById('vagas-pagination').innerHTML =
     `<span>${window._vagas.length} vagas</span>`;
@@ -1719,6 +1745,7 @@ window.encerrarVaga = function(i) {
 
 window.reabrirVaga = function(i) {
   window._vagas[i].status = 'Aberta';
+  salvarVagasLocal(); // ← adicionar
   window._renderVagasTabela();
   showToast('Vaga reaberta.');
 };
@@ -1748,6 +1775,7 @@ window.salvarVaga = function() {
     status: 'Aberta',
     token
   });
+  salvarVagasLocal(); // ← adicionar
   document.getElementById('vaga-modal').style.display = 'none';
   showToast('Vaga aberta com sucesso!');
   window._renderVagasTabela();
@@ -3146,7 +3174,9 @@ window.enviarCandidatura = function(token) {
 
   // Incrementa contador da vaga
   if (vaga) vaga.candidatos = (vaga.candidatos || 0) + 1;
-
+salvarCandidaturasLocal(); // ← adicionar
+salvarVagasLocal();        // ← adicionar (atualiza contador)
+  
   // Feedback visual
   document.getElementById('pub-box').innerHTML = `
     <div style="text-align:center;padding:32px 0">
@@ -3162,7 +3192,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const key = localStorage.getItem('supa_key');
   if (url) document.getElementById('sb-url')?.value && (document.getElementById('sb-url').value = url);
   if (key) document.getElementById('sb-key')?.value && (document.getElementById('sb-key').value = key);
-
+  carregarVagasLocal(); // carrega vagas salvas antes de qualquer coisa
+    carregarCandidaturasLocal();
   checkCandidaturaLink(); // ← verifica se é link de candidatura
 });
 </script>
