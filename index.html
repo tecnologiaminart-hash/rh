@@ -471,7 +471,6 @@ const NAV = [
   {
     id: 'departamentos', label: 'Departamentos', icon: '◫',
     subs: [
-      { id: 'dep-cargos', label: 'Cadastrar Cargos' },
       { id: 'dep-tabela', label: 'Cargos e Salários Atual' },
       { id: 'dep-historico', label: 'Cargos e Salários Histórico' },
       { id: 'dep-alteracao', label: 'Alteração de Cargos/Salários' },
@@ -604,7 +603,6 @@ function renderPage(id) {
     'cont-vagas':      pageVagas,
     'cont-entrevista': pageEntrevista,
     'cont-relatorio':  pageRelatorio,
-    'dep-cargos':      pageCadCargos,
     'dep-tabela':      pageCargosTabela,
     'dep-historico':   pageDepHistorico,
     'dep-alteracao':   pageAlteracao,
@@ -672,8 +670,8 @@ function pageDashboard() {
   <div class="kpi-grid">
     <div class="kpi-card">
       <div class="kpi-label">Total de Colaboradores</div>
-      <div class="kpi-value">142</div>
-      <div class="kpi-delta delta-up">↑ 3 este mês</div>
+      <div class="kpi-value">34</div>
+      <div class="kpi-delta delta-up">Base atualizada</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">Admissões no Mês</div>
@@ -757,12 +755,21 @@ function pageAdmissao() {
       <thead><tr><th>Nome</th><th>Cargo</th><th>Departamento</th><th>Admissão</th><th>Salário</th><th>Status</th><th>Ações</th></tr></thead>
       <tbody>
         ${[
-          ['Carlos Eduardo Souza','Analista','TI','01/03/2023','R$ 4.500','Ativo'],
-          ['Ana Paula Lima','Coordenadora','RH','15/05/2022','R$ 6.800','Ativo'],
-          ['Pedro Augusto Silva','Operador','Operações','10/01/2024','R$ 2.800','Ativo'],
-          ['Maria Fernanda Costa','Assistente','Comercial','20/02/2023','R$ 3.200','Ativo'],
-          ['João Ricardo Pereira','Supervisor','Logística','05/11/2021','R$ 5.500','Férias'],
-          ['Luciana Ramos','Analista SR','Financeiro','12/07/2020','R$ 7.200','Ativo'],
+          ['AMANDA SOUSA LIMA','Encarregado de Setor - Nível 1','—','01/01/2024','R$ 2.355,00','Ativo'],
+          ['LUCIANA DA SILVA','Auxiliar Administrativo - Nível 1','—','01/01/2024','R$ 1.960,00','Ativo'],
+          ['JUCICLÉIA DE CARVALHO','Gerente Geral - Nível 2','—','01/01/2024','R$ 3.070,00','Ativo'],
+          ['KAROL SILVA JARDIM','Auxiliar Administrativo - Nível 1','—','01/01/2024','R$ 1.960,00','Ativo'],
+          ['LEANDRO ALMEIDA','Encarregado de Setor - Nível 1','—','01/01/2024','R$ 2.355,00','Ativo'],
+          ['MAXSUEL DA SILVA SANTOS','Soldador - Nível 1','—','01/01/2024','R$ 2.352,00','Ativo'],
+          ['LEANDRO FELIX DA SILVA','Soldador - Nível 1','—','01/01/2024','R$ 2.352,00','Ativo'],
+          ['JOÃO ALVES MORAIS','Soldador - Nível 1','—','01/01/2024','R$ 2.352,00','Ativo'],
+          ['JACSON MARTINS','Soldador - Nível 1','—','01/01/2024','R$ 2.352,00','Ativo'],
+          ['MARCOS VINICIUS LIMA DA SILVA','Operador de Máquinas - Nível 1','—','01/01/2024','R$ 1.956,00','Ativo'],
+          ['JOSIELTON DIAS REIS','Operador de Máquinas - Nível 1','—','01/01/2024','R$ 1.956,00','Ativo'],
+          ['RAILON DE SOUSA OLIVEIRA','Encarregado Geral','—','01/01/2024','R$ 2.611,00','Ativo'],
+          ['JOSIAS CARDOSO BONINA','Encarregado Geral','—','01/01/2024','R$ 2.611,00','Ativo'],
+          ['DARTO TIAGO DE ARAUJO','Entregador e Montador - Nível 3','—','01/01/2024','R$ 2.304,00','Ativo'],
+          ['CRISTIANO DOS SANTOS','Auxiliar Administrativo - Nível 1','—','01/01/2024','R$ 1.960,00','Ativo'],
         ].map(([n,c,d,a,s,st]) => `
           <tr>
             <td><strong>${n}</strong></td>
@@ -775,7 +782,7 @@ function pageAdmissao() {
           </tr>`).join('')}
       </tbody>
     </table>
-    <div class="table-pagination"><span>Mostrando 6 de 142 colaboradores</span><div style="display:flex;gap:6px"><button class="btn btn-sm">‹</button><button class="btn btn-sm" style="background:#111;color:#fff">1</button><button class="btn btn-sm">2</button><button class="btn btn-sm">›</button></div></div>
+    <div class="table-pagination"><span>Mostrando 15 de 34 colaboradores</span><div style="display:flex;gap:6px"><button class="btn btn-sm">‹</button><button class="btn btn-sm" style="background:#111;color:#fff">1</button><button class="btn btn-sm">2</button><button class="btn btn-sm">›</button></div></div>
   </div>`;
 }
 
@@ -873,26 +880,170 @@ function pageAtestados() {
 // STATUS
 // ------------------------------------------------------------
 function pageStatus() {
+  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" onclick="openStatusModal()">+ Novo Colaborador</button>`;
+  const employees = [
+    ['AMANDA SOUSA LIMA','Encarregado de Setor - Nível 1','Ativo','01/01/2024'],
+    ['LUCIANA DA SILVA','Auxiliar Administrativo - Nível 1','Ativo','01/01/2024'],
+    ['JUCICLÉIA DE CARVALHO','Gerente Geral - Nível 2','Ativo','01/01/2024'],
+    ['KAROL SILVA JARDIM','Auxiliar Administrativo - Nível 1','Ativo','01/01/2024'],
+    ['LEANDRO ALMEIDA','Encarregado de Setor - Nível 1','Ativo','01/01/2024'],
+    ['MAXSUEL DA SILVA SANTOS','Soldador - Nível 1','Ativo','01/01/2024'],
+    ['LEANDRO FELIX DA SILVA','Soldador - Nível 1','Ativo','01/01/2024'],
+    ['JOÃO ALVES MORAIS','Soldador - Nível 1','Ativo','01/01/2024'],
+    ['JACSON MARTINS','Soldador - Nível 1','Ativo','01/01/2024'],
+    ['MARCOS VINICIUS LIMA DA SILVA','Operador de Máquinas - Nível 1','Ativo','01/01/2024'],
+    ['JOSIELTON DIAS REIS','Operador de Máquinas - Nível 1','Ativo','01/01/2024'],
+    ['EDNELTON BORGES ANDRADE','Auxiliar de Produção','Ativo','01/01/2024'],
+    ['CLAUDIA CRISTINA DE HOLANDA DA SILVA','Auxiliar de Produção','Ativo','01/01/2024'],
+    ['JEIEL SILVA NUNES','Auxiliar de Produção','Ativo','01/01/2024'],
+    ['MARCOS ANTONIO DOS SANTOS','Auxiliar de Produção','Ativo','01/01/2024'],
+    ['JOAO PAULO FERNANDES','Auxiliar de Produção','Ativo','01/01/2024'],
+    ['LEU FRANCISCO DE SOUSA','Auxiliar de Produção','Ativo','01/01/2024'],
+    ['HELMETH FERREIRA','Auxiliar de Produção','Ativo','01/01/2024'],
+    ['CICERO RYAN TIMOTEO','Auxiliar de Produção','Ativo','01/01/2024'],
+    ['MARCOS DIONES CARVALHO','Auxiliar de Produção','Ativo','01/01/2024'],
+    ['PEDRO EYDSON','Auxiliar de Produção','Ativo','01/01/2024'],
+    ['MICAEL DA SILVA','Auxiliar de Produção','Ativo','01/01/2024'],
+    ['ANDREY THALYS RODRIGUES','Auxiliar de Produção','Ativo','01/01/2024'],
+    ['RAFAEL CAILO','Auxiliar de Produção','Ativo','01/01/2024'],
+    ['LUCAS MARTINS','Auxiliar de Produção','Ativo','01/01/2024'],
+    ['DANILLO MENDES','Auxiliar de Produção','Ativo','01/01/2024'],
+    ['RAILON DE SOUSA OLIVEIRA','Encarregado Geral','Ativo','01/01/2024'],
+    ['JOSIAS CARDOSO BONINA','Encarregado Geral','Ativo','01/01/2024'],
+    ['DARTO TIAGO DE ARAUJO','Entregador e Montador - Nível 3','Ativo','01/01/2024'],
+    ['JACIRA DE ARAÚJO GONÇALVES','Cozinheira','Ativo','01/01/2024'],
+    ['IVONETE DE ARAUJO','Serviços Gerais','Ativo','01/01/2024'],
+    ['MEIRILENE COSTA','Serviços Gerais','Ativo','01/01/2024'],
+    ['MARINETE DOS SANTOS','Serviços Gerais','Ativo','01/01/2024'],
+    ['CRISTIANO DOS SANTOS','Auxiliar Administrativo - Nível 1','Ativo','01/01/2024'],
+  ];
+  window._statusEmployees = employees;
+
+  setTimeout(()=>{
+    const search = document.getElementById('status-search');
+    if(search) search.addEventListener('input', function(){
+      const q = this.value.toLowerCase();
+      document.querySelectorAll('#status-tbody tr').forEach(tr=>{
+        tr.style.display = tr.children[0].textContent.toLowerCase().includes(q) ? '' : 'none';
+      });
+    });
+  },50);
+
   return `
+  <div id="status-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;padding:32px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="status-modal-title">Editar Colaborador</div>
+      <div class="form-grid" style="margin-bottom:16px">
+        <div class="form-group form-full"><label class="form-label">Nome</label><input class="form-input" id="sm-nome"></div>
+        <div class="form-group"><label class="form-label">Cargo</label><input class="form-input" id="sm-cargo"></div>
+        <div class="form-group"><label class="form-label">Status</label>
+          <select class="form-select" id="sm-status"><option>Ativo</option><option>Afastado</option><option>Desligado</option></select>
+        </div>
+        <div class="form-group"><label class="form-label">Desde</label><input class="form-input" id="sm-desde" type="date"></div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn" onclick="document.getElementById('status-modal').style.display='none'">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveStatusEmployee()">Salvar</button>
+      </div>
+    </div>
+  </div>
+  <div id="status-view-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;padding:32px;width:420px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:20px">Ficha do Colaborador</div>
+      <div id="status-view-body" style="font-size:13px;line-height:2;color:var(--text)"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">
+        <button class="btn" onclick="document.getElementById('status-view-modal').style.display='none'">Fechar</button>
+        <button class="btn btn-primary" onclick="printStatusCard()">🖨 Imprimir</button>
+      </div>
+    </div>
+  </div>
   <div class="table-card">
-    <div class="table-header"><span class="table-title">Status dos Colaboradores</span></div>
+    <div class="table-header">
+      <span class="table-title">Status dos Colaboradores</span>
+      <input class="search-input" id="status-search" placeholder="Buscar por nome…" style="margin-left:12px">
+    </div>
     <table>
-      <thead><tr><th>Colaborador</th><th>Cargo</th><th>Departamento</th><th>Status Atual</th><th>Desde</th></tr></thead>
-      <tbody>
-        ${[
-          ['Carlos Souza','Analista','TI','Ativo','01/03/2023'],
-          ['Ana Lima','Coordenadora','RH','Ativo','15/05/2022'],
-          ['João Pereira','Supervisor','Logística','Afastado','18/06/2024'],
-          ['Felipe Neto','Analista','Comercial','Afastado','12/06/2024'],
-          ['Rebeca Alves','Assistente','TI','Desligado','30/05/2024'],
-        ].map(([n,c,d,st,desde])=>`
-          <tr><td>${n}</td><td>${c}</td><td>${d}</td>
-          <td><span class="badge ${st==='Ativo'?'badge-active':st==='Afastado'?'badge-pending':'badge-inactive'}">${st}</span></td>
-          <td>${desde}</td></tr>`).join('')}
+      <thead><tr><th>Colaborador</th><th>Cargo</th><th>Status Atual</th><th>Desde</th><th>Ações</th></tr></thead>
+      <tbody id="status-tbody">
+        ${employees.map(([n,c,st,desde],i)=>`
+          <tr data-i="${i}">
+            <td><strong>${n}</strong></td>
+            <td>${c}</td>
+            <td><span class="badge ${st==='Ativo'?'badge-active':st==='Afastado'?'badge-pending':'badge-inactive'}">${st}</span></td>
+            <td>${desde}</td>
+            <td>
+              <button class="action-btn" title="Visualizar" onclick="viewStatusEmployee(${i})">👁</button>
+              <button class="action-btn" title="Editar" onclick="editStatusEmployee(${i})">✎</button>
+              <button class="action-btn" title="Imprimir" onclick="printStatusRow(${i})">🖨</button>
+            </td>
+          </tr>`).join('')}
       </tbody>
     </table>
+    <div class="table-pagination"><span>${employees.length} colaboradores</span></div>
   </div>`;
 }
+
+window.openStatusModal = function(idx=null){
+  const m = document.getElementById('status-modal');
+  const emp = window._statusEmployees;
+  window._editingStatusIdx = idx;
+  if(idx!==null){
+    const [n,c,st,desde] = emp[idx];
+    document.getElementById('sm-nome').value=n;
+    document.getElementById('sm-cargo').value=c;
+    document.getElementById('sm-status').value=st;
+    const parts = desde.split('/');
+    document.getElementById('sm-desde').value = parts.length===3?`${parts[2]}-${parts[1]}-${parts[0]}`:'';
+    document.getElementById('status-modal-title').textContent='Editar Colaborador';
+  } else {
+    ['sm-nome','sm-cargo','sm-desde'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('sm-status').value='Ativo';
+    document.getElementById('status-modal-title').textContent='Novo Colaborador';
+  }
+  m.style.display='flex';
+};
+window.editStatusEmployee = function(i){ openStatusModal(i); };
+window.saveStatusEmployee = function(){
+  const emp = window._statusEmployees;
+  const n=document.getElementById('sm-nome').value.trim();
+  const c=document.getElementById('sm-cargo').value.trim();
+  const st=document.getElementById('sm-status').value;
+  const rawDate=document.getElementById('sm-desde').value;
+  const desde = rawDate ? rawDate.split('-').reverse().join('/') : '';
+  const idx=window._editingStatusIdx;
+  if(idx!==null) emp[idx]=[n,c,st,desde]; else emp.push([n,c,st,desde]);
+  document.getElementById('status-modal').style.display='none';
+  navigate('col-status','Status');
+};
+window.viewStatusEmployee = function(i){
+  const [n,c,st,desde]=window._statusEmployees[i];
+  document.getElementById('status-view-body').innerHTML=`
+    <div><strong>Nome:</strong> ${n}</div>
+    <div><strong>Cargo:</strong> ${c}</div>
+    <div><strong>Status:</strong> ${st}</div>
+    <div><strong>Desde:</strong> ${desde}</div>`;
+  document.getElementById('status-view-modal').style.display='flex';
+};
+window.printStatusRow = function(i){
+  const [n,c,st,desde]=window._statusEmployees[i];
+  const w=window.open('','_blank');
+  w.document.write(`<html><head><title>Colaborador</title><style>body{font-family:sans-serif;padding:40px}h2{margin-bottom:20px}p{margin:6px 0;font-size:14px}</style></head><body>
+    <h2>Minart Móveis — Ficha de Status</h2>
+    <p><strong>Nome:</strong> ${n}</p>
+    <p><strong>Cargo:</strong> ${c}</p>
+    <p><strong>Status:</strong> ${st}</p>
+    <p><strong>Desde:</strong> ${desde}</p>
+    <p style="margin-top:30px;color:#888;font-size:12px">Impresso em: ${new Date().toLocaleDateString('pt-BR')}</p>
+  </body></html>`);w.print();
+};
+window.printStatusCard = function(){
+  const body=document.getElementById('status-view-body').innerHTML;
+  const w=window.open('','_blank');
+  w.document.write(`<html><head><title>Colaborador</title><style>body{font-family:sans-serif;padding:40px}h2{margin-bottom:20px}div{margin:6px 0;font-size:14px}</style></head><body>
+    <h2>Minart Móveis — Ficha de Status</h2>${body}
+    <p style="margin-top:30px;color:#888;font-size:12px">Impresso em: ${new Date().toLocaleDateString('pt-BR')}</p>
+  </body></html>`);w.print();
+};
 
 // ------------------------------------------------------------
 // EXAMES
@@ -1131,58 +1282,116 @@ function pageCadCargos() {
 // CARGOS E SALÁRIOS ATUAL
 // ------------------------------------------------------------
 function pageCargosTabela() {
+  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" onclick="openCargoModal()">+ Novo Cargo</button>`;
+  if(!window._cargos) window._cargos = [
+    ['Serviços Gerais','R$ 1.628,00'],
+    ['Recepcionista','R$ 1.628,00'],
+    ['Auxiliar de Cozinha','R$ 1.628,00'],
+    ['Auxiliar de Produção','R$ 1.765,00'],
+    ['Auxiliar de Montador','R$ 1.765,00'],
+    ['Auxiliar de Vidraceiro','R$ 1.765,00'],
+    ['Desenhista','R$ 1.765,00'],
+    ['Vendedor','R$ 1.765,00'],
+    ['Orçamentista','R$ 1.765,00'],
+    ['Cozinheira(o)','R$ 1.765,00'],
+    ['Entregador e Montador - Nível 1','R$ 1.956,00'],
+    ['Entregador e Montador - Nível 2','R$ 2.138,00'],
+    ['Entregador e Montador - Nível 3','R$ 2.304,00'],
+    ['Operador de Máquinas - Nível 1','R$ 1.956,00'],
+    ['Operador de Máquinas - Nível 2','R$ 2.138,00'],
+    ['Operador de Máquinas - Nível 3','R$ 2.300,00'],
+    ['Auxiliar Administrativo - Nível 1','R$ 1.960,00'],
+    ['Auxiliar Administrativo - Nível 2','R$ 2.142,00'],
+    ['Auxiliar Administrativo - Nível 3','R$ 2.308,00'],
+    ['Desenhista, Orçamentista e Vendedor','R$ 2.351,00'],
+    ['Marceneiro - Nível 1','R$ 2.352,00'],
+    ['Marceneiro - Nível 2','R$ 2.569,00'],
+    ['Marceneiro - Nível 3','R$ 2.765,00'],
+    ['Pintor','R$ 2.352,00'],
+    ['Soldador - Nível 1','R$ 2.352,00'],
+    ['Soldador - Nível 2','R$ 2.569,00'],
+    ['Soldador - Nível 3','R$ 2.765,00'],
+    ['Tapeceiro','R$ 2.352,00'],
+    ['Vidraceiro','R$ 2.352,00'],
+    ['Encarregado de Setor - Nível 1','R$ 2.355,00'],
+    ['Encarregado de Setor - Nível 2','R$ 2.482,00'],
+    ['Encarregado de Setor - Nível 3','R$ 2.610,00'],
+    ['Encarregado Geral','R$ 2.611,00'],
+    ['Designer de Interiores','R$ 2.611,00'],
+    ['Gerente Geral - Nível 1','R$ 2.852,00'],
+    ['Gerente Geral - Nível 2','R$ 3.070,00'],
+  ];
   const revisao = '01/01/2026';
   return `
+  <div id="cargo-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;padding:32px;width:420px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="cargo-modal-title">Novo Cargo</div>
+      <div class="form-group" style="margin-bottom:14px"><label class="form-label">Nome do Cargo</label><input class="form-input" id="cm-cargo" placeholder="Ex: Soldador - Nível 4"></div>
+      <div class="form-group" style="margin-bottom:20px"><label class="form-label">Salário Base</label><input class="form-input" id="cm-salario" placeholder="Ex: R$ 2.500,00"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn" onclick="document.getElementById('cargo-modal').style.display='none'">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveCargo()">Salvar</button>
+      </div>
+    </div>
+  </div>
   <div class="table-card">
-    <div class="table-header"><span class="table-title">Tabela Salarial Atual</span>
-      <div class="table-actions"><button class="btn btn-sm btn-print">🖨 Imprimir</button></div>
+    <div class="table-header">
+      <span class="table-title">Tabela Salarial Atual</span>
+      <div class="table-actions">
+        <button class="btn btn-sm btn-print" onclick="printCargosTabela()">🖨 Imprimir</button>
+      </div>
     </div>
     <table>
-      <thead><tr><th>Cargo</th><th>Salário Base</th><th>Última Revisão</th></tr></thead>
-      <tbody>
-        ${[
-          ['Serviços Gerais','R$ 1.628,00'],
-          ['Recepcionista','R$ 1.628,00'],
-          ['Auxiliar de Cozinha','R$ 1.628,00'],
-          ['Auxiliar de Produção','R$ 1.765,00'],
-          ['Auxiliar de Montador','R$ 1.765,00'],
-          ['Auxiliar de Vidraceiro','R$ 1.765,00'],
-          ['Desenhista','R$ 1.765,00'],
-          ['Vendedor','R$ 1.765,00'],
-          ['Orçamentista','R$ 1.765,00'],
-          ['Cozinheira(o)','R$ 1.765,00'],
-          ['Entregador e Montador nv 1','R$ 1.956,00'],
-          ['Entregador e Montador nv 2','R$ 2.138,00'],
-          ['Entregador e Montador nv 3','R$ 2.304,00'],
-          ['Operador de Máquinas nv 1','R$ 1.956,00'],
-          ['Operador de Máquinas nv 2','R$ 2.138,00'],
-          ['Operador de Máquinas nv 3','R$ 2.300,00'],
-          ['Auxiliar Administrativo nv 1','R$ 1.960,00'],
-          ['Auxiliar Administrativo nv 2','R$ 2.142,00'],
-          ['Auxiliar Administrativo nv 3','R$ 2.308,00'],
-          ['Desenhista, Orçamentista e Vendedor','R$ 2.351,00'],
-          ['Marceneiro nv 1','R$ 2.352,00'],
-          ['Marceneiro nv 2','R$ 2.569,00'],
-          ['Marceneiro nv 3','R$ 2.765,00'],
-          ['Pintor','R$ 2.352,00'],
-          ['Soldador nv 1','R$ 2.352,00'],
-          ['Soldador nv 2','R$ 2.569,00'],
-          ['Soldador nv 3','R$ 2.765,00'],
-          ['Tapeceiro','R$ 2.352,00'],
-          ['Vidraceiro','R$ 2.352,00'],
-          ['Encarregado de Setor nv 1','R$ 2.355,00'],
-          ['Encarregado de Setor nv 2','R$ 2.482,00'],
-          ['Encarregado de Setor nv 3','R$ 2.610,00'],
-          ['Encarregado Geral','R$ 2.611,00'],
-          ['Designer de Interiores','R$ 2.611,00'],
-          ['Gerente Geral nv 1','R$ 2.852,00'],
-          ['Gerente Geral nv 2','R$ 3.070,00'],
-        ].map(([c,sb])=>`
-          <tr><td><strong>${c}</strong></td><td style="font-weight:600">${sb}</td><td>${revisao}</td></tr>`).join('')}
+      <thead><tr><th>Cargo</th><th>Salário Base</th><th>Última Revisão</th><th>Ações</th></tr></thead>
+      <tbody id="cargos-tbody">
+        ${window._cargos.map(([c,sb],i)=>`
+          <tr><td><strong>${c}</strong></td><td style="font-weight:600">${sb}</td><td>${revisao}</td>
+          <td>
+            <button class="action-btn" title="Editar" onclick="editCargo(${i})">✎</button>
+            <button class="action-btn btn-danger" title="Excluir" onclick="deleteCargo(${i})">✕</button>
+          </td></tr>`).join('')}
       </tbody>
     </table>
+    <div class="table-pagination"><span>${window._cargos.length} cargos cadastrados</span></div>
   </div>`;
 }
+
+window.openCargoModal = function(idx=null){
+  window._editingCargoIdx=idx;
+  const m=document.getElementById('cargo-modal');
+  if(idx!==null){
+    document.getElementById('cm-cargo').value=window._cargos[idx][0];
+    document.getElementById('cm-salario').value=window._cargos[idx][1];
+    document.getElementById('cargo-modal-title').textContent='Editar Cargo';
+  } else {
+    document.getElementById('cm-cargo').value='';
+    document.getElementById('cm-salario').value='';
+    document.getElementById('cargo-modal-title').textContent='Novo Cargo';
+  }
+  m.style.display='flex';
+};
+window.editCargo=function(i){openCargoModal(i);};
+window.deleteCargo=function(i){
+  if(confirm('Excluir este cargo?')){ window._cargos.splice(i,1); navigate('dep-tabela','Cargos e Salários Atual'); }
+};
+window.saveCargo=function(){
+  const c=document.getElementById('cm-cargo').value.trim();
+  const s=document.getElementById('cm-salario').value.trim();
+  if(!c||!s) return alert('Preencha todos os campos.');
+  const idx=window._editingCargoIdx;
+  if(idx!==null) window._cargos[idx]=[c,s]; else window._cargos.push([c,s]);
+  document.getElementById('cargo-modal').style.display='none';
+  navigate('dep-tabela','Cargos e Salários Atual');
+};
+window.printCargosTabela=function(){
+  const rows=window._cargos.map(([c,s])=>`<tr><td>${c}</td><td>${s}</td><td>01/01/2026</td></tr>`).join('');
+  const w=window.open('','_blank');
+  w.document.write(`<html><head><title>Tabela Salarial</title><style>body{font-family:sans-serif;padding:40px}h2{margin-bottom:20px}table{width:100%;border-collapse:collapse}th,td{padding:8px 12px;border:1px solid #ddd;font-size:13px}th{background:#f5f5f5;font-weight:600;text-align:left}</style></head><body>
+    <h2>Minart Móveis — Tabela Salarial Atual</h2>
+    <table><thead><tr><th>Cargo</th><th>Salário Base</th><th>Última Revisão</th></tr></thead><tbody>${rows}</tbody></table>
+    <p style="margin-top:24px;color:#888;font-size:12px">Impresso em: ${new Date().toLocaleDateString('pt-BR')}</p>
+  </body></html>`);w.print();
+};
 
 // ------------------------------------------------------------
 // HISTÓRICO DEPARTAMENTO
