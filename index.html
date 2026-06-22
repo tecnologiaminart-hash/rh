@@ -1342,7 +1342,6 @@ function pageCargosTabela() {
       </div>
     </div>
     <table>
-<<<<<<< HEAD
       <thead><tr><th>Cargo</th><th>Salário Base</th><th>Última Revisão</th><th>Ações</th></tr></thead>
       <tbody id="cargos-tbody">
         ${window._cargos.map(([c,sb],i)=>`
@@ -1351,7 +1350,6 @@ function pageCargosTabela() {
             <button class="action-btn" title="Editar" onclick="editCargo(${i})">✎</button>
             <button class="action-btn btn-danger" title="Excluir" onclick="deleteCargo(${i})">✕</button>
           </td></tr>`).join('')}
-=======
       <thead><tr><th>Cargo</th><th>Salário Base</th><th>Última Revisão</th></tr></thead>
       <tbody>
         ${[
@@ -1393,7 +1391,6 @@ function pageCargosTabela() {
           ['Gerente Geral - Nível 2','R$ 3.070,00'],
         ].map(([c,sb])=>`
           <tr><td><strong>${c}</strong></td><td style="font-weight:600">${sb}</td><td>${revisao}</td></tr>`).join('')}
->>>>>>> 5b0d6501beb294823f28373a89b58231aa88b64d
       </tbody>
     </table>
     <div class="table-pagination"><span>${window._cargos.length} cargos cadastrados</span></div>
