@@ -913,12 +913,10 @@ function pageDocumentos() {
       <div style="padding:24px">
         <div class="form-group" style="margin-bottom:16px">
           <label class="form-label">Colaborador</label>
-          
-         <select class="form-select" id="alt-novo-cargo">
-  <option value="">— Mesmo Cargo —</option>
-  ${(window._cargos||[]).map(([c]) => `<option value="${c}">${c}</option>`).join('')}
-</select>
-          
+          <select class="form-select" id="enviar-doc-colab">
+            <option value="">— Selecione —</option>
+            ${emp.map((e,i)=>`<option value="${i}">${e[0]}</option>`).join('')}
+          </select>
         </div>
         <div class="form-group" style="margin-bottom:16px">
           <label class="form-label">Tipo de Documento</label>
@@ -1360,90 +1358,104 @@ function pageEnviar() {
 // CANDIDATOS
 // ------------------------------------------------------------
 function pageCandidatos() {
-  if (!window._candidatosPorVaga) window._candidatosPorVaga = {};
+  if (!window._vagas) window._vagas = [];
+  if (!window._candidaturas) window._candidaturas = [];
+
+  document.getElementById('topbar-actions').innerHTML = '';
+
+  // Agrupa candidaturas por vaga
+  const grupos = window._vagas.map((v, vi) => {
+    const cands = window._candidaturas.filter(c => c.vagaToken === v.token);
+    return { vaga: v, vagaIdx: vi, cands };
+  }).filter(g => g.cands.length > 0);
+
+  const semCandidatos = grupos.length === 0;
+
+  const rows = grupos.map(g => `
+    <div class="table-card" style="margin-bottom:16px">
+      <div class="table-header">
+        <div>
+          <span class="table-title">${g.vaga.cargo}</span>
+          <span style="font-size:12px;color:var(--text3);margin-left:12px">
+            Abertura: ${g.vaga.abertura} &nbsp;·&nbsp;
+            <span class="badge badge-info">${g.cands.length} candidato${g.cands.length > 1 ? 's' : ''}</span>
+          </span>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Nome</th>
+            <th>E-mail</th>
+            <th>Currículo</th>
+            <th>Data de Envio</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${g.cands.map((c, ci) => `
+            <tr>
+              <td><strong>${c.nome}</strong></td>
+              <td>${c.email}</td>
+              <td>
+                ${c.curriculo
+                  ? `<span class="badge badge-active">Enviado</span>`
+                  : `<span class="badge badge-gray">Não enviado</span>`}
+              </td>
+              <td style="color:var(--text3);font-size:12px">${c.dataEnvio}</td>
+              <td>
+                <button class="action-btn" onclick="verCandidato('${c.vagaToken}', ${ci})" title="Ver dados completos">👁</button>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  `).join('');
 
   return `
-  <div id="candidato-detalhe-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:6px;padding:32px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
-      <div style="font-size:15px;font-weight:700;margin-bottom:20px">Dados do Candidato</div>
-      <div id="candidato-detalhe-body" style="font-size:13px;line-height:2"></div>
-      <div style="display:flex;justify-content:flex-end;margin-top:20px">
-        <button class="btn" onclick="document.getElementById('candidato-detalhe-modal').style.display='none'">Fechar</button>
+  <!-- Modal de detalhe do candidato -->
+  <div id="candidato-detalhe-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+      <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:15px;font-weight:700">Dados do Candidato</div>
+        <button class="btn btn-sm" onclick="document.getElementById('candidato-detalhe-modal').style.display='none'">✕ Fechar</button>
       </div>
+      <div style="padding:24px" id="candidato-detalhe-body"></div>
     </div>
   </div>
 
-  <div class="table-card">
-    <div class="table-header"><span class="table-title">Candidatos por Vaga</span></div>
-    <table>
-      <thead><tr><th>Vaga</th><th>Abertura</th><th>Status</th><th>Candidatos</th><th>Ações</th></tr></thead>
-      <tbody>
-        ${window._vagas.length === 0
-          ? '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma vaga cadastrada</td></tr>'
-          : window._vagas.map(v => {
-              const cands = window._candidatosPorVaga[v.id] || [];
-              return `
-              <tr>
-                <td><strong>${v.cargo}</strong>${v.depto ? `<div style="font-size:11px;color:var(--text3)">${v.depto}</div>` : ''}</td>
-                <td>${v.abertura}</td>
-                <td><span class="badge ${v.status === 'Aberta' ? 'badge-active' : 'badge-inactive'}">${v.status}</span></td>
-                <td><span class="badge badge-info">${cands.length} candidato${cands.length !== 1 ? 's' : ''}</span></td>
-                <td><button class="btn btn-sm" onclick="expandirCandidatos('${v.id}')">Ver candidatos</button></td>
-              </tr>
-              <tr id="expand-${v.id}" style="display:none">
-                <td colspan="5" style="padding:0;background:var(--bg2)">
-                  <table style="width:100%;margin:0">
-                    <thead><tr style="background:var(--bg3)">
-                      <th style="padding:8px 16px;font-size:11px">Nome</th>
-                      <th style="padding:8px 16px;font-size:11px">E-mail</th>
-                      <th style="padding:8px 16px;font-size:11px">Data</th>
-                      <th style="padding:8px 16px;font-size:11px">Ações</th>
-                    </tr></thead>
-                    <tbody>
-                      ${cands.length === 0
-                        ? '<tr><td colspan="4" style="text-align:center;padding:16px;color:var(--text3);font-size:12px">Nenhum candidato ainda</td></tr>'
-                        : cands.map((c,ci) => `
-                          <tr style="background:#fff;border-bottom:1px solid var(--border)">
-                            <td style="padding:8px 16px;font-size:13px"><strong>${c.nome}</strong></td>
-                            <td style="padding:8px 16px;font-size:12px;color:var(--text2)">${c.email}</td>
-                            <td style="padding:8px 16px;font-size:12px;color:var(--text3)">${c.data}</td>
-                            <td style="padding:8px 16px">
-                              <button class="btn btn-sm" onclick="verCandidato('${v.id}',${ci})">👁 Ver dados</button>
-                            </td>
-                          </tr>`).join('')}
-                    </tbody>
-                  </table>
-                </td>
-              </tr>`;
-            }).join('')}
-      </tbody>
-    </table>
-  </div>`;
+  ${semCandidatos
+    ? `<div class="empty-state">
+        <div class="empty-state-icon">📋</div>
+        <div class="empty-state-title">Nenhum candidato ainda</div>
+        <div class="empty-state-desc">Quando alguém preencher o formulário de uma vaga, aparecerá aqui agrupado por vaga.</div>
+      </div>`
+    : rows}`;
 }
 
-window.expandirCandidatos = function(vagaId) {
-  const row = document.getElementById(`expand-${vagaId}`);
-  if (!row) return;
-  row.style.display = row.style.display === 'none' ? '' : 'none';
-};
-
-window.verCandidato = function(vagaId, idx) {
-  const c = window._candidatosPorVaga[vagaId][idx];
+window.verCandidato = function(token, ci) {
+  const cand = (window._candidaturas || []).filter(c => c.vagaToken === token)[ci];
+  if (!cand) return;
   document.getElementById('candidato-detalhe-body').innerHTML = `
-    <div><strong>Nome:</strong> ${c.nome}</div>
-    <div><strong>E-mail:</strong> ${c.email}</div>
-    <div><strong>Currículo:</strong> ${c.curriculo}
-      <button class="btn btn-sm" style="margin-left:8px" onclick="showToast('Download: ${c.curriculo}')">⬇ Download</button>
-    </div>
-    <div><strong>Data de envio:</strong> ${c.data}</div>`;
+    <div style="display:flex;flex-direction:column;gap:12px;font-size:13px">
+      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Nome</span><div style="margin-top:4px">${cand.nome}</div></div>
+      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">E-mail</span><div style="margin-top:4px">${cand.email}</div></div>
+      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Vaga</span><div style="margin-top:4px">${cand.vagaCargo}</div></div>
+      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Data de Envio</span><div style="margin-top:4px">${cand.dataEnvio}</div></div>
+      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Currículo</span><div style="margin-top:4px">
+        ${cand.curriculo
+          ? `<span class="badge badge-active">Arquivo enviado: ${cand.curriculo}</span>`
+          : '<span class="badge badge-gray">Não enviado</span>'}
+      </div></div>
+    </div>`;
   document.getElementById('candidato-detalhe-modal').style.display = 'flex';
 };
+
 // ------------------------------------------------------------
 // VAGAS
 // ------------------------------------------------------------
 function pageVagas() {
   if (!window._vagas) window._vagas = [];
-  if (!window._candidatosPorVaga) window._candidatosPorVaga = {};
 
   document.getElementById('topbar-actions').innerHTML =
     `<button class="btn btn-primary" onclick="openVagaModal()">+ Abrir Vaga</button>`;
@@ -1453,25 +1465,44 @@ function pageVagas() {
     if (!tbody) return;
     tbody.innerHTML = window._vagas.length === 0
       ? '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma vaga cadastrada</td></tr>'
-      : window._vagas.map((v, i) => `
-          <tr>
-            <td><strong>${v.cargo}</strong></td>
-            <td>${v.depto || '—'}</td>
-            <td>${v.abertura}</td>
-            <td>${v.prazo || '—'}</td>
-            <td><span class="badge badge-info">${v.candidatos || 0}</span></td>
-            <td><span class="badge ${v.status === 'Aberta' ? 'badge-active' : 'badge-inactive'}">${v.status}</span></td>
-            <td>
-              <button class="btn btn-sm" onclick="copiarLinkVaga('${v.id}')" title="Copiar link público">🔗 Link</button>
-            </td>
-            <td>
-              ${v.status === 'Aberta'
-                ? `<button class="action-btn" title="Encerrar" onclick="encerrarVaga(${i})">🔒</button>`
-                : `<button class="action-btn" title="Reabrir" onclick="reabrirVaga(${i})">🔓</button>`}
-              <button class="action-btn" onclick="visualizarVaga('${v.id}')">👁</button>
-              <button class="action-btn" style="color:var(--danger)" title="Excluir" onclick="deletarVaga(${i})">✕</button>
-            </td>
-          </tr>`).join('');
+      : window._vagas.map((v, i) => {
+          const link = `${location.origin}${location.pathname}?candidatura=${v.token}`;
+          return `
+            <tr>
+              <td><strong>${v.cargo}</strong></td>
+              <td>${v.depto || '—'}</td>
+              <td>${v.abertura}</td>
+              <td>${v.prazo || '—'}</td>
+              <td><span class="badge badge-info">${v.candidatos || 0}</span></td>
+              <td><span class="badge ${v.status === 'Aberta' ? 'badge-active' : 'badge-inactive'}">${v.status}</span></td>
+              <td>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <input
+                    type="text"
+                    value="${link}"
+                    readonly
+                    style="font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:3px;background:var(--bg2);width:220px;color:var(--text2);cursor:default"
+                  >
+                  <button class="btn btn-sm" onclick="copiarLinkVaga(${i})" title="Copiar link">📋</button>
+                </div>
+              </td>
+              <td>
+                ${v.status === 'Aberta'
+                  ? `<button class="action-btn" title="Encerrar" onclick="encerrarVaga(${i})">🔒</button>`
+                  : `<button class="action-btn" title="Reabrir" onclick="reabrirVaga(${i})">🔓</button>`}
+                <button class="action-btn" onclick="showToast('Visualizando')">👁</button>
+                <button class="action-btn" title="Excluir" onclick="deletarVaga(${i})" style="color:var(--danger)">✕</button>
+              </td>
+            </tr>`;
+        }).join('');
+  };
+
+  window.deletarVaga = function(i) {
+    if (!confirm('Excluir esta vaga?')) return;
+    window._vagas.splice(i, 1);
+    window._renderVagasTabela();
+    document.getElementById('vagas-pagination').innerHTML = `<span>${window._vagas.length} vagas</span>`;
+    showToast('Vaga excluída.');
   };
 
   window._renderVagasTabela = renderVagasTabela;
@@ -1503,189 +1534,65 @@ function pageVagas() {
     </div>
   </div>
 
-  <div id="link-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:6px;padding:32px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
-      <div style="font-size:15px;font-weight:700;margin-bottom:8px">Link Público da Vaga</div>
-      <div style="font-size:12px;color:var(--text3);margin-bottom:20px">Compartilhe este link com os candidatos. Não é necessário login para acessar.</div>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:20px">
-        <input class="form-input" id="link-vaga-url" readonly style="flex:1;font-size:12px;color:var(--text2)">
-        <button class="btn btn-primary" onclick="copiarTextoLink()">Copiar</button>
-      </div>
-      <div style="display:flex;justify-content:flex-end">
-        <button class="btn" onclick="document.getElementById('link-modal').style.display='none'">Fechar</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="vaga-publica-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:6px;width:560px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.18)">
-      <div style="padding:32px">
-        <div style="font-size:18px;font-weight:700;margin-bottom:4px" id="vp-titulo"></div>
-        <div style="font-size:13px;color:var(--text3);margin-bottom:24px" id="vp-depto"></div>
-        <div style="font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:16px">Candidatura</div>
-        <div class="form-group" style="margin-bottom:14px">
-          <label class="form-label">Nome Completo</label>
-          <input class="form-input" id="vp-nome" placeholder="Seu nome completo">
-        </div>
-        <div class="form-group" style="margin-bottom:14px">
-          <label class="form-label">E-mail</label>
-          <input class="form-input" type="email" id="vp-email" placeholder="seu@email.com">
-        </div>
-        <div class="form-group" style="margin-bottom:24px">
-          <label class="form-label">Currículo (PDF, DOC)</label>
-          <input class="form-input" type="file" id="vp-curriculo" accept=".pdf,.doc,.docx">
-        </div>
-        <div style="display:flex;gap:8px;justify-content:flex-end">
-          <button class="btn" onclick="document.getElementById('vaga-publica-modal').style.display='none'">Fechar</button>
-          <button class="btn btn-primary" onclick="enviarCandidatura()">Enviar Candidatura</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <div class="table-card">
-    <div class="table-header"><span class="table-title">Vagas</span></div>
+    <div class="table-header"><span class="table-title">Vagas em Aberto</span></div>
     <table>
-      <thead><tr><th>Vaga</th><th>Departamento</th><th>Abertura</th><th>Prazo</th><th>Candidatos</th><searching_in_web>
-</searching_in_web>
-
-Aqui está a versão completa e consolidada com tudo junto, incluindo `openVagaModal`, `salvarVaga`, `encerrarVaga`, `reabrirVaga` e `deletarVaga`:
-
-```js
-function pageVagas() {
-  if (!window._vagas) window._vagas = [];
-  if (!window._candidatosPorVaga) window._candidatosPorVaga = {};
-
-  document.getElementById('topbar-actions').innerHTML =
-    `<button class="btn btn-primary" onclick="openVagaModal()">+ Abrir Vaga</button>`;
-
-  const renderVagasTabela = () => {
-    const tbody = document.getElementById('vagas-tbody');
-    if (!tbody) return;
-    tbody.innerHTML = window._vagas.length === 0
-      ? '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma vaga cadastrada</td></tr>'
-      : window._vagas.map((v, i) => `
-          <tr>
-            <td><strong>${v.cargo}</strong></td>
-            <td>${v.depto || '—'}</td>
-            <td>${v.abertura}</td>
-            <td>${v.prazo || '—'}</td>
-            <td><span class="badge badge-info">${v.candidatos || 0}</span></td>
-            <td><span class="badge ${v.status === 'Aberta' ? 'badge-active' : 'badge-inactive'}">${v.status}</span></td>
-            <td>
-              <button class="btn btn-sm" onclick="copiarLinkVaga('${v.id}')" title="Copiar link público">🔗 Link</button>
-            </td>
-            <td>
-              ${v.status === 'Aberta'
-                ? `<button class="action-btn" title="Encerrar" onclick="encerrarVaga(${i})">🔒</button>`
-                : `<button class="action-btn" title="Reabrir" onclick="reabrirVaga(${i})">🔓</button>`}
-              <button class="action-btn" onclick="visualizarVaga('${v.id}')">👁</button>
-              <button class="action-btn" style="color:var(--danger)" title="Excluir" onclick="deletarVaga(${i})">✕</button>
-            </td>
-          </tr>`).join('');
-    const pag = document.getElementById('vagas-pagination');
-    if (pag) pag.innerHTML = `<span>${window._vagas.length} vagas</span>`;
-  };
-
-  window._renderVagasTabela = renderVagasTabela;
-  setTimeout(renderVagasTabela, 0);
-
-  return `
-  <div id="vaga-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:6px;padding:32px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
-      <div style="font-size:15px;font-weight:700;margin-bottom:20px">Abrir Nova Vaga</div>
-      <div class="form-group" style="margin-bottom:14px">
-        <label class="form-label">Cargo</label>
-        <select class="form-select" id="vaga-cargo">
-          <option value="">— Selecione o Cargo —</option>
-          ${(window._cargos||[]).map(([c]) => `<option value="${c}">${c}</option>`).join('')}
-        </select>
-      </div>
-      <div class="form-group" style="margin-bottom:14px">
-        <label class="form-label">Departamento</label>
-        <input class="form-input" id="vaga-depto" placeholder="Ex: Produção, Administrativo...">
-      </div>
-      <div class="form-group" style="margin-bottom:14px">
-        <label class="form-label">Prazo</label>
-        <input class="form-input" type="date" id="vaga-prazo">
-      </div>
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">
-        <button class="btn" onclick="document.getElementById('vaga-modal').style.display='none'">Cancelar</button>
-        <button class="btn btn-primary" onclick="salvarVaga()">Salvar</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="link-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:6px;padding:32px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
-      <div style="font-size:15px;font-weight:700;margin-bottom:8px">Link Público da Vaga</div>
-      <div style="font-size:12px;color:var(--text3);margin-bottom:20px">Compartilhe este link. Não é necessário login para acessar.</div>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:20px">
-        <input class="form-input" id="link-vaga-url" readonly style="flex:1;font-size:12px;color:var(--text2)">
-        <button class="btn btn-primary" onclick="copiarTextoLink()">Copiar</button>
-      </div>
-      <div style="display:flex;justify-content:flex-end">
-        <button class="btn" onclick="document.getElementById('link-modal').style.display='none'">Fechar</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="vaga-publica-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:6px;width:560px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.18)">
-      <div style="padding:32px">
-        <div style="font-size:18px;font-weight:700;margin-bottom:4px" id="vp-titulo"></div>
-        <div style="font-size:13px;color:var(--text3);margin-bottom:24px" id="vp-depto"></div>
-        <div style="font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:16px">Candidatura</div>
-        <div class="form-group" style="margin-bottom:14px">
-          <label class="form-label">Nome Completo</label>
-          <input class="form-input" id="vp-nome" placeholder="Seu nome completo">
-        </div>
-        <div class="form-group" style="margin-bottom:14px">
-          <label class="form-label">E-mail</label>
-          <input class="form-input" type="email" id="vp-email" placeholder="seu@email.com">
-        </div>
-        <div class="form-group" style="margin-bottom:24px">
-          <label class="form-label">Currículo (PDF, DOC)</label>
-          <input class="form-input" type="file" id="vp-curriculo" accept=".pdf,.doc,.docx">
-        </div>
-        <div style="display:flex;gap:8px;justify-content:flex-end">
-          <button class="btn" onclick="document.getElementById('vaga-publica-modal').style.display='none'">Fechar</button>
-          <button class="btn btn-primary" onclick="enviarCandidatura()">Enviar Candidatura</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="table-card">
-    <div class="table-header"><span class="table-title">Vagas</span></div>
-    <table>
-      <thead><tr><th>Vaga</th><th>Departamento</th><th>Abertura</th><th>Prazo</th><th>Candidatos</th><th>Status</th><th>Link</th><th>Ações</th></tr></thead>
-      <tbody id="vagas-tbody"><tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
+      <thead>
+        <tr>
+          <th>Vaga</th>
+          <th>Departamento</th>
+          <th>Abertura</th>
+          <th>Prazo</th>
+          <th>Candidatos</th>
+          <th>Status</th>
+          <th>Link de Candidatura</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="vagas-tbody">
+        <tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
+      </tbody>
     </table>
     <div class="table-pagination" id="vagas-pagination"><span>${window._vagas.length} vagas</span></div>
   </div>`;
 }
 
+window.copiarLinkVaga = function(i) {
+  const v = window._vagas[i];
+  const link = `${location.origin}${location.pathname}?candidatura=${v.token}`;
+  navigator.clipboard.writeText(link).then(() => {
+    showToast('Link copiado para a área de transferência!');
+  }).catch(() => {
+    // fallback para navegadores sem suporte
+    const el = document.createElement('textarea');
+    el.value = link;
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand('copy');
+    document.body.removeChild(el);
+    showToast('Link copiado!');
+  });
+};
+
+window.encerrarVaga = function(i) {
+  window._vagas[i].status = 'Encerrada';
+  window._renderVagasTabela();
+  document.getElementById('vagas-pagination').innerHTML =
+    `<span>${window._vagas.length} vagas</span>`;
+  showToast('Vaga encerrada.');
+};
+
+window.reabrirVaga = function(i) {
+  window._vagas[i].status = 'Aberta';
+  window._renderVagasTabela();
+  showToast('Vaga reaberta.');
+};
+
 window.openVagaModal = function() {
-  const modal = document.getElementById('vaga-modal');
-  if (!modal) {
-    // Modal não está no DOM, navega para vagas e tenta novamente
-    navigate('cont-vagas', 'Vagas', 'Contratação');
-    setTimeout(() => {
-      const m = document.getElementById('vaga-modal');
-      if (m) {
-        document.getElementById('vaga-cargo').value = '';
-        document.getElementById('vaga-depto').value = '';
-        document.getElementById('vaga-prazo').value = '';
-        m.style.display = 'flex';
-      }
-    }, 80);
-    return;
-  }
   document.getElementById('vaga-cargo').value = '';
   document.getElementById('vaga-depto').value = '';
   document.getElementById('vaga-prazo').value = '';
-  modal.style.display = 'flex';
+  document.getElementById('vaga-modal').style.display = 'flex';
 };
 
 window.salvarVaga = function() {
@@ -1693,95 +1600,25 @@ window.salvarVaga = function() {
   const depto = document.getElementById('vaga-depto').value;
   const prazo = document.getElementById('vaga-prazo').value;
   if (!cargo) return showToast('Selecione um cargo.');
-  const id = 'vaga_' + Date.now() + '_' + Math.random().toString(36).substr(2,6);
-  if (!window._vagas) window._vagas = [];
+
+  // Gera token único para o link público
+  const token = Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+
   window._vagas.push({
-    id, cargo, depto,
+    cargo,
+    depto,
     prazo: prazo ? prazo.split('-').reverse().join('/') : '—',
     abertura: new Date().toLocaleDateString('pt-BR'),
     candidatos: 0,
-    status: 'Aberta'
+    status: 'Aberta',
+    token
   });
-  const modal = document.getElementById('vaga-modal');
-  if (modal) modal.style.display = 'none';
+  document.getElementById('vaga-modal').style.display = 'none';
   showToast('Vaga aberta com sucesso!');
-  if (window._renderVagasTabela) window._renderVagasTabela();
+  window._renderVagasTabela();
+  document.getElementById('vagas-pagination').innerHTML =
+    `<span>${window._vagas.length} vagas</span>`;
 };
-
-window.encerrarVaga = function(i) {
-  window._vagas[i].status = 'Encerrada';
-  if (window._renderVagasTabela) window._renderVagasTabela();
-  showToast('Vaga encerrada.');
-};
-
-window.reabrirVaga = function(i) {
-  window._vagas[i].status = 'Aberta';
-  if (window._renderVagasTabela) window._renderVagasTabela();
-  showToast('Vaga reaberta.');
-};
-
-window.deletarVaga = function(i) {
-  if (!confirm('Excluir esta vaga?')) return;
-  window._vagas.splice(i, 1);
-  if (window._renderVagasTabela) window._renderVagasTabela();
-  showToast('Vaga excluída.');
-};
-
-window.copiarLinkVaga = function(vagaId) {
-  const url = `${location.href.split('?')[0]}?vaga=${vagaId}`;
-  document.getElementById('link-vaga-url').value = url;
-  window._linkVagaAtual = vagaId;
-  document.getElementById('link-modal').style.display = 'flex';
-};
-
-window.copiarTextoLink = function() {
-  const input = document.getElementById('link-vaga-url');
-  input.select();
-  navigator.clipboard.writeText(input.value).then(() => {
-    showToast('Link copiado!');
-  }).catch(() => {
-    document.execCommand('copy');
-    showToast('Link copiado!');
-  });
-};
-
-window.visualizarVaga = function(vagaId) {
-  const vaga = window._vagas.find(v => v.id === vagaId);
-  if (!vaga) return;
-  window._vagaPublicaAtual = vagaId;
-  document.getElementById('vp-titulo').textContent = vaga.cargo;
-  document.getElementById('vp-depto').textContent  = vaga.depto ? `Departamento: ${vaga.depto}` : '';
-  document.getElementById('vp-nome').value      = '';
-  document.getElementById('vp-email').value     = '';
-  document.getElementById('vp-curriculo').value = '';
-  document.getElementById('vaga-publica-modal').style.display = 'flex';
-};
-
-window.enviarCandidatura = function() {
-  const vagaId = window._vagaPublicaAtual;
-  const nome   = document.getElementById('vp-nome').value.trim();
-  const email  = document.getElementById('vp-email').value.trim();
-  const arq    = document.getElementById('vp-curriculo').files[0];
-  if (!nome)  return showToast('Informe seu nome.');
-  if (!email) return showToast('Informe seu e-mail.');
-  if (!arq)   return showToast('Anexe seu currículo.');
-  if (!window._candidatosPorVaga) window._candidatosPorVaga = {};
-  if (!window._candidatosPorVaga[vagaId]) window._candidatosPorVaga[vagaId] = [];
-  window._candidatosPorVaga[vagaId].push({
-    nome, email,
-    curriculo: arq.name,
-    data: new Date().toLocaleDateString('pt-BR')
-  });
-  const vaga = window._vagas.find(v => v.id === vagaId);
-  if (vaga) vaga.candidatos = (vaga.candidatos || 0) + 1;
-  document.getElementById('vaga-publica-modal').style.display = 'none';
-  showToast('Candidatura enviada com sucesso!');
-  if (window._renderVagasTabela) window._renderVagasTabela();
-};
-```
-
-Substitua toda a função `pageVagas()` antiga e todos os `window.*` relacionados a vagas pelo bloco acima. Tudo está consolidado em um único lugar agora, sem dependências externas quebradas.
-
 
 // ------------------------------------------------------------
 // FORMULÁRIO DE ENTREVISTA
@@ -3085,29 +2922,113 @@ function pageGeneric(id) {
   </div>`;
 }
 
+  // ============================================================
+// FORMULÁRIO PÚBLICO DE CANDIDATURA (sem autenticação)
 // ============================================================
-// INIT — restore config
-// ============================================================
+function checkCandidaturaLink() {
+  const params = new URLSearchParams(location.search);
+  const token  = params.get('candidatura');
+  if (!token) return; // não é link de candidatura, carrega normalmente
+
+  // Esconde tudo e mostra o formulário público
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'none';
+
+  if (!window._vagas) window._vagas = [];
+
+  // Renderiza o formulário público no body
+  const vaga = window._vagas.find(v => v.token === token);
+
+  document.body.innerHTML = `
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .pub-box { background: #fff; border-radius: 6px; padding: 40px; width: 480px; max-width: 100%; border: 1px solid #ddd; }
+    .pub-logo { font-size: 18px; font-weight: 700; color: #111; margin-bottom: 4px; }
+    .pub-sub { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 28px; }
+    .pub-cargo { font-size: 20px; font-weight: 700; color: #111; margin-bottom: 4px; }
+    .pub-depto { font-size: 13px; color: #888; margin-bottom: 28px; }
+    .pub-label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #555; margin-bottom: 6px; margin-top: 16px; }
+    .pub-input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 3px; font-size: 14px; outline: none; background: #fafafa; }
+    .pub-input:focus { border-color: #111; background: #fff; }
+    .pub-btn { width: 100%; padding: 12px; background: #111; color: #fff; border: none; border-radius: 3px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 24px; }
+    .pub-btn:hover { background: #333; }
+    .pub-msg { text-align: center; margin-top: 16px; font-size: 13px; min-height: 20px; }
+    .pub-success { color: #1a7a3c; }
+    .pub-error { color: #c0392b; }
+    .pub-not-found { text-align: center; padding: 48px 0; color: #888; }
+  </style>
+  <div class="pub-box" id="pub-box">
+    ${!vaga
+      ? `<div class="pub-not-found">
+          <div style="font-size:32px;margin-bottom:12px">🔒</div>
+          <div style="font-size:16px;font-weight:600;color:#333;margin-bottom:8px">Vaga não encontrada</div>
+          <div style="font-size:13px">Este link pode estar incorreto ou a vaga foi encerrada.</div>
+        </div>`
+      : vaga.status !== 'Aberta'
+        ? `<div class="pub-not-found">
+            <div style="font-size:32px;margin-bottom:12px">🔒</div>
+            <div style="font-size:16px;font-weight:600;color:#333;margin-bottom:8px">Vaga encerrada</div>
+            <div style="font-size:13px">Esta vaga não está mais recebendo candidaturas.</div>
+          </div>`
+        : `<div class="pub-logo">MINART MÓVEIS</div>
+           <div class="pub-sub">Candidatura Online</div>
+           <div class="pub-cargo">${vaga.cargo}</div>
+           <div class="pub-depto">${vaga.depto || 'Minart Móveis'}</div>
+           <label class="pub-label">Nome Completo *</label>
+           <input class="pub-input" id="pub-nome" placeholder="Seu nome completo">
+           <label class="pub-label">E-mail *</label>
+           <input class="pub-input" id="pub-email" type="email" placeholder="seu@email.com">
+           <label class="pub-label">Currículo (PDF ou Word)</label>
+           <input class="pub-input" id="pub-curriculo" type="file" accept=".pdf,.doc,.docx" style="padding:8px">
+           <button class="pub-btn" onclick="enviarCandidatura('${token}')">Enviar Candidatura</button>
+           <div class="pub-msg" id="pub-msg"></div>`}
+  </div>`;
+}
+
+window.enviarCandidatura = function(token) {
+  const nome     = (document.getElementById('pub-nome')?.value || '').trim();
+  const email    = (document.getElementById('pub-email')?.value || '').trim();
+  const currFile = document.getElementById('pub-curriculo')?.files[0];
+  const msgEl    = document.getElementById('pub-msg');
+
+  if (!nome)  { msgEl.textContent = 'Informe seu nome.'; msgEl.className = 'pub-msg pub-error'; return; }
+  if (!email) { msgEl.textContent = 'Informe seu e-mail.'; msgEl.className = 'pub-msg pub-error'; return; }
+
+  if (!window._candidaturas) window._candidaturas = [];
+  if (!window._vagas) window._vagas = [];
+
+  const vaga = window._vagas.find(v => v.token === token);
+
+  window._candidaturas.push({
+    vagaToken: token,
+    vagaCargo: vaga ? vaga.cargo : '—',
+    nome,
+    email,
+    curriculo: currFile ? currFile.name : null,
+    dataEnvio: new Date().toLocaleString('pt-BR')
+  });
+
+  // Incrementa contador da vaga
+  if (vaga) vaga.candidatos = (vaga.candidatos || 0) + 1;
+
+  // Feedback visual
+  document.getElementById('pub-box').innerHTML = `
+    <div style="text-align:center;padding:32px 0">
+      <div style="font-size:40px;margin-bottom:16px">✅</div>
+      <div style="font-size:18px;font-weight:700;color:#111;margin-bottom:8px">Candidatura enviada!</div>
+      <div style="font-size:14px;color:#666">Obrigado, <strong>${nome}</strong>. Entraremos em contato em breve.</div>
+    </div>`;
+};
+
+// Executa ao carregar a página
 document.addEventListener('DOMContentLoaded', () => {
   const url = localStorage.getItem('supa_url');
   const key = localStorage.getItem('supa_key');
-  if (url) document.getElementById('sb-url').value = url;
-  if (key) document.getElementById('sb-key').value = key;
-  // Detecta link público de vaga na URL
-const params = new URLSearchParams(location.search);
-const vagaParam = params.get('vaga');
-if (vagaParam) {
-  // Entra sem login mostrando o formulário público
-  document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('app').classList.add('visible');
-  document.getElementById('user-name').textContent = 'Candidato';
-  document.getElementById('user-avatar').textContent = 'C';
-  buildSidebar();
-  navigate('cont-vagas', 'Vagas', 'Contratação');
-  setTimeout(() => {
-    if (window.visualizarVaga) visualizarVaga(vagaParam);
-  }, 100);
-}
+  if (url) document.getElementById('sb-url')?.value && (document.getElementById('sb-url').value = url);
+  if (key) document.getElementById('sb-key')?.value && (document.getElementById('sb-key').value = key);
+
+  checkCandidaturaLink(); // ← verifica se é link de candidatura
 });
 </script>
 </body>
