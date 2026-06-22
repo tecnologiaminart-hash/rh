@@ -344,6 +344,46 @@
 </div>
 
 <script>
+  // Inicializa cargos globalmente para estar disponível em qualquer página
+if (!window._cargos) window._cargos = [
+  ['Serviços Gerais','R$ 1.628,00'],
+  ['Recepcionista','R$ 1.628,00'],
+  ['Auxiliar de Cozinha','R$ 1.628,00'],
+  ['Auxiliar de Produção','R$ 1.765,00'],
+  ['Auxiliar de Montador','R$ 1.765,00'],
+  ['Auxiliar de Vidraceiro','R$ 1.765,00'],
+  ['Desenhista','R$ 1.765,00'],
+  ['Vendedor','R$ 1.765,00'],
+  ['Orçamentista','R$ 1.765,00'],
+  ['Cozinheira(o)','R$ 1.765,00'],
+  ['Entregador e Montador - Nível 1','R$ 1.956,00'],
+  ['Entregador e Montador - Nível 2','R$ 2.138,00'],
+  ['Entregador e Montador - Nível 3','R$ 2.304,00'],
+  ['Operador de Máquinas - Nível 1','R$ 1.956,00'],
+  ['Operador de Máquinas - Nível 2','R$ 2.138,00'],
+  ['Operador de Máquinas - Nível 3','R$ 2.300,00'],
+  ['Auxiliar Administrativo - Nível 1','R$ 1.960,00'],
+  ['Auxiliar Administrativo - Nível 2','R$ 2.142,00'],
+  ['Auxiliar Administrativo - Nível 3','R$ 2.308,00'],
+  ['Desenhista, Orçamentista e Vendedor','R$ 2.351,00'],
+  ['Marceneiro - Nível 1','R$ 2.352,00'],
+  ['Marceneiro - Nível 2','R$ 2.569,00'],
+  ['Marceneiro - Nível 3','R$ 2.765,00'],
+  ['Pintor','R$ 2.352,00'],
+  ['Soldador - Nível 1','R$ 2.352,00'],
+  ['Soldador - Nível 2','R$ 2.569,00'],
+  ['Soldador - Nível 3','R$ 2.765,00'],
+  ['Tapeceiro','R$ 2.352,00'],
+  ['Vidraceiro','R$ 2.352,00'],
+  ['Encarregado de Setor - Nível 1','R$ 2.355,00'],
+  ['Encarregado de Setor - Nível 2','R$ 2.482,00'],
+  ['Encarregado de Setor - Nível 3','R$ 2.610,00'],
+  ['Encarregado Geral','R$ 2.611,00'],
+  ['Designer de Interiores','R$ 2.611,00'],
+  ['Gerente Geral - Nível 1','R$ 2.852,00'],
+  ['Gerente Geral - Nível 2','R$ 3.070,00'],
+];
+  
 // ============================================================
 // CONFIG & SUPABASE
 // ============================================================
@@ -1064,8 +1104,12 @@ function pageStatus() {
       <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="status-modal-title">Editar Colaborador</div>
       <div class="form-grid" style="margin-bottom:16px">
         <div class="form-group form-full"><label class="form-label">Nome</label><input class="form-input" id="sm-nome"></div>
-       <div class="form-group"><label class="form-label">Cargo</label>
+    <div class="form-group"><label class="form-label">Cargo</label>
   <select class="form-select" id="sm-cargo">
+    <option value="">— Selecione o Cargo —</option>
+    ${(window._cargos||[]).map(([c])=>`<option value="${c}">${c}</option>`).join('')}
+  </select>
+</div>
     <option value="">— Selecione o Cargo —</option>
     ${(window._cargos||[]).map(([c])=>`<option value="${c}">${c}</option>`).join('')}
   </select>
