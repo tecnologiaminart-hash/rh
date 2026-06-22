@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RH Sistema — ERP</title>
+<title>Minart Móveis - RH</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root {
@@ -292,7 +292,7 @@
 <!-- LOGIN -->
 <div id="login-screen">
   <div class="login-box">
-    <div class="login-logo">⬛ RH Sistema</div>
+    <div class="login-logo">MINART MÓVEIS</div>
     <div class="login-sub">ERP Recursos Humanos</div>
     <label for="l-email">E-mail</label>
     <input id="l-email" type="email" placeholder="seu@email.com" autocomplete="email">
@@ -301,16 +301,8 @@
     <button class="login-btn" onclick="doLogin()">Entrar</button>
     <div class="login-error" id="login-error"></div>
     <div class="login-config">
-      <details>
-        <summary>⚙ Configurar conexão Supabase</summary>
-        <div style="margin-top:12px;">
-          <label style="display:block;font-size:11px;color:#666;margin-bottom:4px;">URL do Projeto</label>
-          <input id="sb-url" class="form-input" style="width:100%;margin-bottom:8px;" placeholder="https://xxxx.supabase.co" value="https://bxzgrqmmrswpytzwngwv.supabase.co">
-          <label style="display:block;font-size:11px;color:#666;margin-bottom:4px;">Anon Key</label>
-          <input id="sb-key" class="form-input" style="width:100%;margin-bottom:8px;" placeholder="eyJhbGciOiJIUzI1NiI..." value="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ4emdycW1tcnN3cHl0enduZ3d2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MDA0ODksImV4cCI6MjA5NTQ3NjQ4OX0.SXGblVdHviiaOKXLvY50BZIXlDHdgolIu2vI-e-S3kE">
-          <button class="btn btn-sm" onclick="saveConfig()">Salvar</button>
-        </div>
-      </details>
+      <input id="sb-url" type="hidden" value="https://bxzgrqmmrswpytzwngwv.supabase.co">
+<input id="sb-key" type="hidden" value="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ4emdycW1tcnN3cHl0enduZ3d2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MDA0ODksImV4cCI6MjA5NTQ3NjQ4OX0.SXGblVdHviiaOKXLvY50BZIXlDHdgolIu2vI-e-S3kE">
     </div>
   </div>
 </div>
@@ -323,7 +315,7 @@
   <!-- SIDEBAR -->
   <nav class="sidebar">
     <div class="sidebar-header">
-      <div class="sidebar-logo">⬛ RH Sistema</div>
+      <div class="sidebar-logo">MINART MÓVEIS</div>
       <div class="sidebar-tagline">ERP Recursos Humanos</div>
     </div>
     <div class="sidebar-user">
@@ -1139,22 +1131,54 @@ function pageCadCargos() {
 // CARGOS E SALÁRIOS ATUAL
 // ------------------------------------------------------------
 function pageCargosTabela() {
+  const revisao = '01/01/2026';
   return `
   <div class="table-card">
     <div class="table-header"><span class="table-title">Tabela Salarial Atual</span>
       <div class="table-actions"><button class="btn btn-sm btn-print">🖨 Imprimir</button></div>
     </div>
     <table>
-      <thead><tr><th>Cargo</th><th>Nível</th><th>Salário Base</th><th>Piso</th><th>Teto</th><th>Benefícios</th><th>Última Revisão</th></tr></thead>
+      <thead><tr><th>Cargo</th><th>Salário Base</th><th>Última Revisão</th></tr></thead>
       <tbody>
         ${[
-          ['Analista de Sistemas','Pleno','R$ 4.800','R$ 4.000','R$ 6.000','VT+VA+Plano','01/01/2024'],
-          ['Coordenador de RH','Sênior','R$ 7.500','R$ 6.000','R$ 9.000','VT+VA+Plano+VR','01/01/2024'],
-          ['Operador de Produção','Júnior','R$ 2.600','R$ 2.200','R$ 3.000','VT+VA','01/01/2024'],
-          ['Gerente Comercial','Gestão','R$ 11.000','R$ 9.000','R$ 14.000','VT+VA+Plano+Bônus','01/01/2024'],
-        ].map(([c,n,sb,p,t,b,r])=>`
-          <tr><td><strong>${c}</strong></td><td><span class="badge badge-gray">${n}</span></td>
-          <td style="font-weight:600">${sb}</td><td>${p}</td><td>${t}</td><td style="font-size:11px;color:var(--text3)">${b}</td><td>${r}</td></tr>`).join('')}
+          ['Serviços Gerais','R$ 1.628,00'],
+          ['Recepcionista','R$ 1.628,00'],
+          ['Auxiliar de Cozinha','R$ 1.628,00'],
+          ['Auxiliar de Produção','R$ 1.765,00'],
+          ['Auxiliar de Montador','R$ 1.765,00'],
+          ['Auxiliar de Vidraceiro','R$ 1.765,00'],
+          ['Desenhista','R$ 1.765,00'],
+          ['Vendedor','R$ 1.765,00'],
+          ['Orçamentista','R$ 1.765,00'],
+          ['Cozinheira(o)','R$ 1.765,00'],
+          ['Entregador e Montador nv 1','R$ 1.956,00'],
+          ['Entregador e Montador nv 2','R$ 2.138,00'],
+          ['Entregador e Montador nv 3','R$ 2.304,00'],
+          ['Operador de Máquinas nv 1','R$ 1.956,00'],
+          ['Operador de Máquinas nv 2','R$ 2.138,00'],
+          ['Operador de Máquinas nv 3','R$ 2.300,00'],
+          ['Auxiliar Administrativo nv 1','R$ 1.960,00'],
+          ['Auxiliar Administrativo nv 2','R$ 2.142,00'],
+          ['Auxiliar Administrativo nv 3','R$ 2.308,00'],
+          ['Desenhista, Orçamentista e Vendedor','R$ 2.351,00'],
+          ['Marceneiro nv 1','R$ 2.352,00'],
+          ['Marceneiro nv 2','R$ 2.569,00'],
+          ['Marceneiro nv 3','R$ 2.765,00'],
+          ['Pintor','R$ 2.352,00'],
+          ['Soldador nv 1','R$ 2.352,00'],
+          ['Soldador nv 2','R$ 2.569,00'],
+          ['Soldador nv 3','R$ 2.765,00'],
+          ['Tapeceiro','R$ 2.352,00'],
+          ['Vidraceiro','R$ 2.352,00'],
+          ['Encarregado de Setor nv 1','R$ 2.355,00'],
+          ['Encarregado de Setor nv 2','R$ 2.482,00'],
+          ['Encarregado de Setor nv 3','R$ 2.610,00'],
+          ['Encarregado Geral','R$ 2.611,00'],
+          ['Designer de Interiores','R$ 2.611,00'],
+          ['Gerente Geral nv 1','R$ 2.852,00'],
+          ['Gerente Geral nv 2','R$ 3.070,00'],
+        ].map(([c,sb])=>`
+          <tr><td><strong>${c}</strong></td><td style="font-weight:600">${sb}</td><td>${revisao}</td></tr>`).join('')}
       </tbody>
     </table>
   </div>`;
