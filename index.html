@@ -1101,17 +1101,19 @@ function pageStatus() {
   <div id="status-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
     <div style="background:#fff;border-radius:6px;padding:32px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
       <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="status-modal-title">Editar Colaborador</div>
+     
       <div class="form-grid" style="margin-bottom:16px">
-        <div class="form-group form-full"><label class="form-label">Nome</label><input class="form-input" id="sm-nome"></div>
-<div class="form-group"><label class="form-label">Cargo</label>
-  <select class="form-select" id="sm-cargo">
-    <option value="">— Selecione o Cargo —</option>
-    ${(window._cargos||[]).map(([c])=>`<option value="${c}">${c}</option>`).join('')}
-  </select>
-</div>
-<div class="form-group"><label class="form-label">Status</label>
+  <div class="form-group form-full"><label class="form-label">Nome</label><input class="form-input" id="sm-nome"></div>
+  <div class="form-group"><label class="form-label">Cargo</label>
+    <select class="form-select" id="sm-cargo">
+      <option value="">— Selecione o Cargo —</option>
+      ${(window._cargos||[]).map(([c])=>`<option value="${c}">${c}</option>`).join('')}
+    </select>
+  </div>
+  <div class="form-group"><label class="form-label">Status</label>
 
         <div class="form-group"><label class="form-label">Status</label>
+        
           <select class="form-select" id="sm-status"><option>Ativo</option><option>Afastado</option><option>Desligado</option></select>
         </div>
         <div class="form-group"><label class="form-label">Desde</label><input class="form-input" id="sm-desde" type="date"></div>
