@@ -1079,7 +1079,7 @@ function pageAtestados() {
 }
 
 // ------------------------------------------------------------
-// STATUS
+// Informações Contratuais
 // ------------------------------------------------------------
 function pageStatus() {
   document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" onclick="openStatusModal()">+ Novo Colaborador</button>`;
@@ -1098,23 +1098,31 @@ function pageStatus() {
   return `
   <div id="status-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
     <div style="background:#fff;border-radius:6px;padding:32px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
-      <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="status-modal-title">Editar Colaborador</div>
-     
+      <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="status-modal-title">Novo Colaborador</div>
       <div class="form-grid" style="margin-bottom:16px">
-  <div class="form-group form-full"><label class="form-label">Nome</label><input class="form-input" id="sm-nome"></div>
-  <div class="form-group"><label class="form-label">Cargo</label>
-    <select class="form-select" id="sm-cargo">
-      <option value="">— Selecione o Cargo —</option>
-      ${(window._cargos||[]).map(([c])=>`<option value="${c}">${c}</option>`).join('')}
-    </select>
-  </div>
-  <div class="form-group"><label class="form-label">Status</label>
-
-        <div class="form-group"><label class="form-label">Status</label>
-        
-          <select class="form-select" id="sm-status"><option>Ativo</option><option>Afastado</option><option>Desligado</option></select>
+        <div class="form-group form-full">
+          <label class="form-label">Nome</label>
+          <input class="form-input" id="sm-nome">
         </div>
-        <div class="form-group"><label class="form-label">Desde</label><input class="form-input" id="sm-desde" type="date"></div>
+        <div class="form-group">
+          <label class="form-label">Cargo</label>
+          <select class="form-select" id="sm-cargo">
+            <option value="">— Selecione o Cargo —</option>
+            ${(window._cargos||[]).map(([c])=>`<option value="${c}">${c}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <select class="form-select" id="sm-status">
+            <option>Ativo</option>
+            <option>Afastado</option>
+            <option>Desligado</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Desde</label>
+          <input class="form-input" id="sm-desde" type="date">
+        </div>
       </div>
       <div style="display:flex;gap:8px;justify-content:flex-end">
         <button class="btn" onclick="document.getElementById('status-modal').style.display='none'">Cancelar</button>
@@ -1122,6 +1130,7 @@ function pageStatus() {
       </div>
     </div>
   </div>
+
   <div id="status-view-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
     <div style="background:#fff;border-radius:6px;padding:32px;width:420px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
       <div style="font-size:15px;font-weight:700;margin-bottom:20px">Ficha do Colaborador</div>
@@ -1132,13 +1141,22 @@ function pageStatus() {
       </div>
     </div>
   </div>
+
   <div class="table-card">
     <div class="table-header">
       <span class="table-title">Status dos Colaboradores</span>
       <input class="search-input" id="status-search" placeholder="Buscar por nome…" style="margin-left:12px">
     </div>
     <table>
-      <thead><tr><th>Colaborador</th><th>Cargo</th><th>Status Atual</th><th>Desde</th><th>Ações</th></tr></thead>
+      <thead>
+        <tr>
+          <th>Colaborador</th>
+          <th>Cargo</th>
+          <th>Status Atual</th>
+          <th>Desde</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
       <tbody id="status-tbody">
         ${employees.map(([n,c,st,desde],i)=>`
           <tr data-i="${i}">
