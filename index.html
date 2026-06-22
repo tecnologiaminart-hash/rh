@@ -429,6 +429,25 @@ let SUPA_URL = localStorage.getItem('supa_url') || '';
 let SUPA_KEY = localStorage.getItem('supa_key') || '';
 let supaClient = null;
 let currentUser = null;
+  window._salvarStorage = function() {
+  const campos = [
+    '_cargosDescricao',
+    '_cargosHistorico',
+    '_statusEmployees',
+    '_documentosPorColab',
+    '_perfisPorColab',
+    '_dadosPessoais',
+    '_contratosPorColab',
+    '_ocorrencias',
+    '_vagas',
+    '_candidatosPorVaga',
+  ];
+  campos.forEach(chave => {
+    try {
+      localStorage.setItem(chave, JSON.stringify(window[chave] || []));
+    } catch(e) {}
+  });
+};
   
 function salvarVagasLocal() {
   localStorage.setItem('rh_vagas', JSON.stringify(window._vagas || []));
@@ -862,6 +881,7 @@ window.salvarDescricao = function() {
       window._cargosDescricao[existente] = registro;
     } else {
       window._cargosDescricao.push(registro);
+      window._salvarStorage();
     }
   }
   document.getElementById('descricao-modal').style.display = 'none';
@@ -872,6 +892,7 @@ window.salvarDescricao = function() {
 window.deletarDescricao = function(i) {
   if (!confirm('Excluir esta descrição?')) return;
   window._cargosDescricao.splice(i, 1);
+  window._salvarStorage();
   showToast('Descrição removida.');
   renderDescricaoTabela();
 };
@@ -1367,6 +1388,7 @@ window.saveStatusEmployee = function(){
   const desde = rawDate ? rawDate.split('-').reverse().join('/') : '';
   const idx=window._editingStatusIdx;
   if(idx!==null) emp[idx]=[n,c,st,desde]; else emp.push([n,c,st,desde]);
+  window._salvarStorage();
   document.getElementById('status-modal').style.display='none';
   navigate('col-status','Informações Contratuais', 'Colaboradores');
 };
@@ -2691,6 +2713,7 @@ window.salvarOcorrencia = function() {
   const idx = window._editingOcorrenciaIdx;
   if (idx !== null) window._ocorrencias[idx] = registro;
   else window._ocorrencias.push(registro);
+  window._salvarStorage();
   document.getElementById('ocorrencia-modal').style.display = 'none';
   showToast('Ocorrência salva!');
   renderOcorrenciasTabela();
