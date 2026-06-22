@@ -3218,6 +3218,15 @@ document.addEventListener('DOMContentLoaded', () => {
   if (key) document.getElementById('sb-key')?.value && (document.getElementById('sb-key').value = key);
   carregarVagasLocal(); // carrega vagas salvas antes de qualquer coisa
     carregarCandidaturasLocal();
+
+  
+  // Carregar _cargosDescricao do localStorage
+  try {
+    const salvo = localStorage.getItem('_cargosDescricao');
+    window._cargosDescricao = salvo ? JSON.parse(salvo) : [];
+  } catch(e) {
+    window._cargosDescricao = [];
+  }
   checkCandidaturaLink(); // ← verifica se é link de candidatura
 });
 </script>
