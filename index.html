@@ -913,10 +913,12 @@ function pageDocumentos() {
       <div style="padding:24px">
         <div class="form-group" style="margin-bottom:16px">
           <label class="form-label">Colaborador</label>
-          <select class="form-select" id="enviar-doc-colab">
-            <option value="">— Selecione —</option>
-            ${emp.map((e,i)=>`<option value="${i}">${e[0]}</option>`).join('')}
-          </select>
+          
+         <select class="form-select" id="alt-novo-cargo">
+  <option value="">— Mesmo Cargo —</option>
+  ${(window._cargos||[]).map(([c]) => `<option value="${c}">${c}</option>`).join('')}
+</select>
+          
         </div>
         <div class="form-group" style="margin-bottom:16px">
           <label class="form-label">Tipo de Documento</label>
