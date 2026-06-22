@@ -831,7 +831,6 @@ window.salvarDescricao = function() {
   if (idx !== null) {
     window._cargosDescricao[idx] = registro;
   } else {
-    // Verifica se já existe descrição para esse cargo
     const existente = window._cargosDescricao.findIndex(d => d.cargo === cargo);
     if (existente !== -1) {
       if (!confirm(`Já existe uma descrição para "${cargo}". Deseja substituir?`)) return;
@@ -842,21 +841,33 @@ window.salvarDescricao = function() {
   }
   document.getElementById('descricao-modal').style.display = 'none';
   showToast('Descrição salva com sucesso!');
-  navigate('dep-descricao', 'Cargos e Descrição', 'Departamentos');
+  renderDescricaoTabela();
 };
 
 window.deletarDescricao = function(i) {
   if (!confirm('Excluir esta descrição?')) return;
   window._cargosDescricao.splice(i, 1);
   showToast('Descrição removida.');
-  navigate('dep-descricao', 'Cargos e Descrição', 'Departamentos');
+  renderDescricaoTabela();
 };
 
-window.filtrarDescricoes = function(q) {
-  q = q.toLowerCase();
-  document.querySelectorAll('#descricao-tbody tr').forEach(tr => {
-    tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
-  });
+window.renderDescricaoTabela = function() {
+  const tbody = document.getElementById('descricao-tbody');
+  const pag   = document.getElementById('descricao-pagination');
+  if (!tbody) return;
+  const lista = window._cargosDescricao || [];
+  tbody.innerHTML = lista.length === 0
+    ? '<tr><td colspan="3" style="text-align:center;padding:32px;color:var(--text3)">Nenhuma descrição cadastrada. Clique em "+ Adicionar Descrição" para começar.</td></tr>'
+    : lista.map((d, i) => `
+        <tr>
+          <td><strong>${d.cargo}</strong></td>
+          <td style="max-width:480px;color:var(--text2);font-size:13px;white-space:pre-wrap">${d.texto}</td>
+          <td style="white-space:nowrap">
+            <button class="action-btn" title="Editar" onclick="editarDescricao(${i})">✎</button>
+            <button class="action-btn" title="Excluir" style="color:var(--danger)" onclick="deletarDescricao(${i})">✕</button>
+          </td>
+        </tr>`).join('');
+  if (pag) pag.innerHTML = `<span>${lista.length} descrição${lista.length !== 1 ? 'ões' : ''} cadastrada${lista.length !== 1 ? 's' : ''}</span>`;
 };
 // ------------------------------------------------------------
 // DASHBOARD
