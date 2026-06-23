@@ -426,8 +426,8 @@ if (!window._cargos) window._cargos = [
 // CONFIG & SUPABASE
 // ============================================================
 // Altere estas duas linhas:
-let SUPA_URL = localStorage.getItem('supa_url') || document.getElementById('sb-url').value || '';
-let SUPA_KEY = localStorage.getItem('supa_key') || document.getElementById('sb-key').value || '';
+let SUPA_URL = null; // Ou '';
+let SUPA_KEY = null; // Ou '';
 
 let supaClient = null;
 let currentUser = null;
@@ -506,7 +506,6 @@ async function doLogin() {
     return;
   }
 
-  supaClient = initSupabase();
   if (!supaClient) {
     errEl.textContent = 'Erro de configuração: Supabase não inicializado. Verifique as chaves.';
     console.error('Login: Supabase não configurado ou falhou ao inicializar.');
@@ -3604,6 +3603,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // const key = localStorage.getItem('supa_key');
   // if (url) document.getElementById('sb-url')?.value && (document.getElementById('sb-url').value = url);
   // if (key) document.getElementById('sb-key')?.value && (document.getElementById('sb-key').value = key);
+
+   // Carrega SUPA_URL e SUPA_KEY aqui, após o DOM estar pronto
+  SUPA_URL = localStorage.getItem('supa_url') || document.getElementById('sb-url').value || '';
+  SUPA_KEY = localStorage.getItem('supa_key') || document.getElementById('sb-key').value || '';
+
+  // Agora que SUPA_URL e SUPA_KEY estão definidos, podemos inicializar supaClient
+  supaClient = initSupabase(); // Chame initSupabase aqui!
+  
   carregarVagasLocal(); // carrega vagas salvas antes de qualquer coisa
     carregarCandidaturasLocal();
 
@@ -3623,6 +3630,11 @@ document.addEventListener('DOMContentLoaded', () => {
     window._historicoCarreira = [];
   }
   checkCandidaturaLink(); // ← verifica se é link de candidatura
+  // Se o usuário já estiver logado (ex: sessão persistente do Supabase), entra no app
+  // Isso é importante para o Supabase Auth nativo
+  if (supaClient && supaClient.auth.session()) {
+    currentUser = { email: supaClient.auth.session().user.email, name: supaClient.auth.session().user.email, role: 'user' };
+    enterApp();
 });
 </script>
 </body>
