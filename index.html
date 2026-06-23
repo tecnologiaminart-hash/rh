@@ -488,10 +488,8 @@ function initSupabase() {
     return supabase.createClient(SUPA_URL, SUPA_KEY);
   } catch(e) { return null; }
 }
-
 // ============================================================
-// AUTH — login via tabela "users" no Supabase
-// (também suporta Supabase Auth nativo como fallback)
+// AUTH — login
 // ============================================================
 async function doLogin() {
   const email = document.getElementById('l-email').value.trim();
@@ -499,20 +497,20 @@ async function doLogin() {
   const errEl = document.getElementById('login-error');
   errEl.textContent = '';
 
-  if (!email || !pass) { errEl.textContent = 'Preencha e-mail e senha.'; return; }
-
-  supaClient = initSupabase();
-
-  if (!supaClient) {
-    // modo demo sem Supabase
-    if (email === 'admin@rh.com' && pass === 'admin123') {
-      currentUser = { email, name: 'Admin Demo', role: 'admin' };
-      enterApp();
-    } else {
-      errEl.textContent = 'Credenciais inválidas. (Demo: admin@rh.com / admin123)';
-    }
+  if (!email || !pass) {
+    errEl.textContent = 'Preencha e-mail e senha.';
+    console.log('Login: E-mail ou senha vazios.');
     return;
   }
+
+  supaClient = initSupabase();
+  if (!supaClient) {
+    errEl.textContent = 'Erro de configuração: Supabase não inicializado. Verifique as chaves.';
+    console.error('Login: Supabase não configurado ou falhou ao inicializar.');
+    return;
+  }
+
+  console.log('Login: Tentando autenticar');
 
   // Tentativa 1: tabela custom "usuarios"
   try {
@@ -520,27 +518,42 @@ async function doLogin() {
       .from('usuarios')
       .select('*')
       .eq('email', email)
-      .eq('senha', pass) // hash ideal; aqui demo plaintext
+      .eq('senha', pass) // Idealmente, 'senha' deveria ser um hash
       .eq('ativo', true)
       .single();
 
     if (data && !error) {
       currentUser = { email, name: data.nome || data.name || email, role: data.perfil || 'user' };
-      enterApp(); return;
+      console.log('Login: Autenticação via tabela "usuarios" bem-sucedida.', currentUser);
+      enterApp();
+      return;
+    } else if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found (não é um erro real, só não encontrou)
+      console.warn('Login: Erro na autenticação via tabela "usuarios":', error.message);
     }
-  } catch(e) {}
+  } catch(e) {
+    console.error('Login: Exceção ao autenticar via tabela "usuarios":', e);
+  }
 
-  // Tentativa 2: Supabase Auth nativo
+  // Tentativa 2: (se a primeira falhou ou não encontrou)
   try {
     const { data, error } = await supaClient.auth.signInWithPassword({ email, password: pass });
     if (data?.user && !error) {
       currentUser = { email, name: data.user.email, role: 'user' };
-      enterApp(); return;
+      console.log('Login: Autenticação via Supabase Auth nativo bem-sucedida.', currentUser);
+      enterApp();
+      return;
+    } else if (error) {
+      console.warn('Login: Erro na autenticação Supabase Auth nativo:', error.message);
     }
-  } catch(e) {}
+  } catch(e) {
+    console.error('Login: Exceção ao autenticar via Supabase Auth nativo:', e);
+  }
 
+  // Se chegou aqui, nenhuma das tentativas de login Supabase funcionou
   errEl.textContent = 'E-mail ou senha incorretos.';
+  console.log('Login: Todas as tentativas de login Supabase falharam.');
 }
+
 
 document.getElementById('l-pass').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
 
