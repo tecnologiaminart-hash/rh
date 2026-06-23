@@ -3612,45 +3612,49 @@ salvarVagasLocal();        // ← adicionar (atualiza contador)
 
 // Executa ao carregar a página
 document.addEventListener('DOMContentLoaded', () => {
-const sbUrlEl = document.getElementById('sb-url');
+  const sbUrlEl = document.getElementById('sb-url');
   const sbKeyEl = document.getElementById('sb-key');
 
-   // Carrega SUPA_URL e SUPA_KEY aqui, após o DOM estar pronto
-   SUPA_URL = localStorage.getItem('supa_url') || (sbUrlEl ? sbUrlEl.value : '');
+  // Carrega SUPA_URL e SUPA_KEY aqui, após o DOM estar pronto
+  SUPA_URL = localStorage.getItem('supa_url') || (sbUrlEl ? sbUrlEl.value : '');
   SUPA_KEY = localStorage.getItem('supa_key') || (sbKeyEl ? sbKeyEl.value : '');
 
-    // Preenche os inputs ocultos com os valores carregados (útil para debug ou para o saveConfig)
+  // Preenche os inputs ocultos com os valores carregados (útil para debug ou para o saveConfig)
   if (sbUrlEl) sbUrlEl.value = SUPA_URL;
   if (sbKeyEl) sbKeyEl.value = SUPA_KEY;
-  
-  // Agora que SUPA_URL e SUPA_KEY estão definidos, podemos inicializar supaClient
-  supaClient = initSupabase(); // Chame initSupabase aqui!
 
-   if (supaClient && supaClient.auth && supaClient.auth.session && supaClient.auth.session()) {
+  // Agora que SUPA_URL e SUPA_KEY estão definidos, podemos inicializar supaClient
+  supaClient = initSupabase();
+
+  // Se houver uma sessão Supabase ativa, entra no app
+  if (supaClient && supaClient.auth && supaClient.auth.session && supaClient.auth.session()) {
     const session = supaClient.auth.session();
     currentUser = { email: session.user.email, name: session.user.email, role: 'user' }; // Ajuste conforme seu objeto de usuário
     enterApp();
   }
-  
-  carregarVagasLocal(); // carrega vagas salvas antes de qualquer coisa
-    carregarCandidaturasLocal();
 
-  
-  // Carregar _cargosDescricao do localStorage
-  try {
-    const salvo = localStorage.getItem('_cargosDescricao');
-    window._cargosDescricao = salvo ? JSON.parse(salvo) : [];
-  } catch(e) {
-    window._cargosDescricao = [];
-  }
-  // Carregar _historicoCarreira do localStorage
-  try {
-    const salvo = localStorage.getItem('_historicoCarreira');
-    window._historicoCarreira = salvo ? JSON.parse(salvo) : [];
-  } catch(e) {
-    window._historicoCarreira = [];
-  }
-  checkCandidaturaLink(); // ← verifica se é link de candidatura
+  carregarVagasLocal();
+  carregarCandidaturasLocal();
+
+  // --- ESTA É A PARTE CRÍTICA QUE PRECISA SER SUBSTITUÍDA ---
+  // Função auxiliar para carregar dados do localStorage de forma robusta
+  const carregarDoLocalStorage = (chave, valorPadrao = []) => {
+    try {
+      const salvo = localStorage.getItem(chave);
+      return salvo ? JSON.parse(salvo) : valorPadrao;
+    } catch (e) {
+      console.error(`Erro ao carregar ${chave} do localStorage:`, e);
+      return valorPadrao;
+    }
+  };
+
+  window._cargosDescricao = carregarDoLocalStorage('_cargosDescricao');
+  window._historicoCarreira = carregarDoLocalStorage('_historicoCarreira');
+  // Adicione outras variáveis que você carrega do localStorage aqui, se houver
+  // Ex: window._documentosPorColab = carregarDoLocalStorage('_documentosPorColab', {});
+  // --- FIM DA PARTE CRÍTICA ---
+
+  checkCandidaturaLink();
 });
 </script>
 </body>
