@@ -425,10 +425,13 @@ if (!window._cargos) window._cargos = [
 // ============================================================
 // CONFIG & SUPABASE
 // ============================================================
-let SUPA_URL = localStorage.getItem('supa_url') || '';
-let SUPA_KEY = localStorage.getItem('supa_key') || '';
+// Altere estas duas linhas:
+let SUPA_URL = localStorage.getItem('supa_url') || document.getElementById('sb-url').value || '';
+let SUPA_KEY = localStorage.getItem('supa_key') || document.getElementById('sb-key').value || '';
+
 let supaClient = null;
 let currentUser = null;
+  
   window._salvarStorage = function() {
   const campos = [
     '_cargosDescricao',
@@ -3597,10 +3600,10 @@ salvarVagasLocal();        // ← adicionar (atualiza contador)
 
 // Executa ao carregar a página
 document.addEventListener('DOMContentLoaded', () => {
-  const url = localStorage.getItem('supa_url');
-  const key = localStorage.getItem('supa_key');
-  if (url) document.getElementById('sb-url')?.value && (document.getElementById('sb-url').value = url);
-  if (key) document.getElementById('sb-key')?.value && (document.getElementById('sb-key').value = key);
+  // const url = localStorage.getItem('supa_url');
+  // const key = localStorage.getItem('supa_key');
+  // if (url) document.getElementById('sb-url')?.value && (document.getElementById('sb-url').value = url);
+  // if (key) document.getElementById('sb-key')?.value && (document.getElementById('sb-key').value = key);
   carregarVagasLocal(); // carrega vagas salvas antes de qualquer coisa
     carregarCandidaturasLocal();
 
