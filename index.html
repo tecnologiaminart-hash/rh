@@ -704,7 +704,7 @@ function showToast(msg, dur=2500) {
 // ============================================================
 // PAGES
 // ============================================================
-function renderPage(id) {
+function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
   const el = document.getElementById('content-area');
   const pages = {
     'dashboard':       pageDashboard,
@@ -727,8 +727,6 @@ function renderPage(id) {
     'dep-relatorio':   pageRelatorio,
     'ficha-perfil':    pagePerfil,
     'ficha-dados':     pageDadosPessoais,
-    'ficha-docs':      pageDocumentos,
-    'ficha-treinamentos': pageTreinamentosCol,
     'ficha-contratos': pageContratos,
     'ficha-ocorrencias': pageOcorrencias,
     'ficha-relatorio': pageRelatorio,
@@ -747,8 +745,8 @@ function renderPage(id) {
     'int-cultura':     pageCultura,
     'int-regulamento': pageRegulamento,
   };
-   const fn = pages[id];
-  el.innerHTML = fn ? fn(param) : pageGeneric(id); // Passa o 'param' para a função da página
+  const fn = pages[id];
+  el.innerHTML = fn ? fn(param) : pageGeneric(id);
   postRender(id);
 }
 
