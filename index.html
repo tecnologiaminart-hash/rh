@@ -1456,44 +1456,56 @@ function pageHistoricoCol() {
   const renderCarreiraTabela = () => {
     const tbody = document.getElementById('carreira-tbody');
     if (!tbody) return;
-const registrosAgrupados = {};
-window._historicoCarreira.forEach(reg =&gt; {
-  if (!registrosAgrupados[reg.colabIdx]) {
-    registrosAgrupados[reg.colabIdx] = [];
-  }
-  registrosAgrupados[reg.colabIdx].push(reg);
-});
 
-let htmlContent = '';
-if (Object.keys(registrosAgrupados).length === 0) {
-  htmlContent = `&lt;tr&gt;&lt;td colspan="7" style="text-align:center;padding:24px;color:var(--text3)"&gt;Nenhum registro de carreira.&lt;/td&gt;&lt;/tr&gt;`;
-} else {
-  for (const colabIdx in registrosAgrupados) {
-    const nomeColab = emp[colabIdx] ? emp[colabIdx][0] : 'Colaborador Desconhecido';
-    const registros = registrosAgrupados[colabIdx].sort((a, b) =&gt; new Date(b.periodoInicio) - new Date(a.periodoInicio)); // Ordena por data mais recente
-
-    htmlContent += `
-      &lt;tr style="background:var(--bg2);font-weight:600;"&gt;
-        &lt;td colspan="7" style="padding: 10px 16px; border-bottom: 1px solid var(--border);"&gt;${nomeColab}&lt;/td&gt;
-      &lt;/tr&gt;`;
-
-    registros.forEach((reg, i) =&gt; {
-      htmlContent += `
-        &lt;tr&gt;
-          &lt;td&gt;${reg.periodoInicio}&lt;/td&gt;
-          &lt;td&gt;${reg.periodoFim || 'Atual'}&lt;/td&gt;
-          &lt;td&gt;${reg.cargo}&lt;/td&gt;
-          &lt;td&gt;${reg.salario}&lt;/td&gt;
-          &lt;td&gt;${reg.motivo || '—'}&lt;/td&gt;
-          &lt;td&gt;
-            &lt;button class="action-btn" title="Editar" onclick="editarCarreira(${colabIdx}, ${i})"&gt;✎&lt;/button&gt;
-            &lt;button class="action-btn" title="Excluir" style="color:var(--danger)" onclick="deletarCarreira(${colabIdx}, ${i})"&gt;✕&lt;/button&gt;
-          &lt;/td&gt;
-        &lt;/tr&gt;`;
+    // Adiciona um 'originalIndex' temporário para cada registro ao carregar,
+    // para que possamos identificar o registro correto na edição/exclusão
+    // mesmo após a ordenação ou filtragem.
+    // Isso é importante porque o índice no array pode mudar, mas o originalIndex não.
+    window._historicoCarreira.forEach((reg, idx) => {
+      if (reg.originalIndex === undefined) {
+        reg.originalIndex = idx;
+      }
     });
-  }
-}
-tbody.innerHTML = htmlContent;
+
+    const registrosAgrupados = {};
+    window._historicoCarreira.forEach(reg => {
+      if (!registrosAgrupados[reg.colabIdx]) {
+        registrosAgrupados[reg.colabIdx] = [];
+      }
+      registrosAgrupados[reg.colabIdx].push(reg);
+    });
+
+    let htmlContent = '';
+    if (Object.keys(registrosAgrupados).length === 0) {
+      htmlContent = `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro de carreira.</td></tr>`;
+    } else {
+      for (const colabIdx in registrosAgrupados) {
+        const nomeColab = emp[colabIdx] ? emp[colabIdx][0] : 'Colaborador Desconhecido';
+        // Ordena os registros de cada colaborador por data de início (mais recente primeiro)
+        const registros = registrosAgrupados[colabIdx].sort((a, b) => new Date(b.periodoInicio) - new Date(a.periodoInicio));
+
+        htmlContent += `
+          <tr style="background:var(--bg2);font-weight:600;">
+            <td colspan="7" style="padding: 10px 16px; border-bottom: 1px solid var(--border);">${nomeColab}</td>
+          </tr>`;
+
+        registros.forEach((reg) => { // Não precisamos do 'i' aqui, usamos reg.originalIndex
+          htmlContent += `
+            <tr>
+              <td>${reg.periodoInicio}</td>
+              <td>${reg.periodoFim || 'Atual'}</td>
+              <td>${reg.cargo}</td>
+              <td>${reg.salario}</td>
+              <td>${reg.motivo || '—'}</td>
+              <td>
+                <button class="action-btn" title="Editar" onclick="editarCarreira(${reg.colabIdx}, ${reg.originalIndex})">✎</button>
+                <button class="action-btn" title="Excluir" style="color:var(--danger)" onclick="deletarCarreira(${reg.colabIdx}, ${reg.originalIndex})">✕</button>
+              </td>
+            </tr>`;
+        });
+      }
+    }
+    tbody.innerHTML = htmlContent;
   };
 
   window.renderCarreiraTabela = renderCarreiraTabela; // Torna a função global
