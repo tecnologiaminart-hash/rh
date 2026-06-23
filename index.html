@@ -602,7 +602,6 @@ const NAV = [
     subs: [
       { id: 'ficha-perfil', label: 'Perfil e Hobbies (Minart)' },
       { id: 'ficha-dados', label: 'Dados Pessoais' },
-      { id: 'ficha-carreira', label: 'Histórico de Carreira' },
       { id: 'ficha-contratos', label: 'Contratos e Alinhamento' },
       { id: 'ficha-ocorrencias', label: 'Ocorrências e Obs' },
       { id: 'ficha-relatorio', label: 'Relatório e Impressão' },
@@ -728,7 +727,6 @@ function renderPage(id) {
     'ficha-perfil':    pagePerfil,
     'ficha-dados':     pageDadosPessoais,
     'ficha-docs':      pageDocumentos,
-    'ficha-carreira':  pageCarreira,
     'ficha-treinamentos': pageTreinamentosCol,
     'ficha-contratos': pageContratos,
     'ficha-ocorrencias': pageOcorrencias,
@@ -1448,53 +1446,123 @@ function pageExames() {
 // HISTÓRICO COLABORADOR
 // ------------------------------------------------------------
 function pageHistoricoCol() {
+  if (!window._historicoCarreira) window._historicoCarreira = [];
   const emp = window._statusEmployees || [];
-  const options = emp.map((e,i) => `<option value="${i}">${e[0]}</option>`).join('');
+  const cargos = window._cargos || [];
+
+  document.getElementById('topbar-actions').innerHTML =
+    `<button class="btn btn-primary" onclick="openCarreiraModal()">+ Adicionar Registro de Carreira</button>`;
+
+  const renderCarreiraTabela = () => {
+    const tbody = document.getElementById('carreira-tbody');
+    if (!tbody) return;
+const registrosAgrupados = {};
+window._historicoCarreira.forEach(reg =&gt; {
+  if (!registrosAgrupados[reg.colabIdx]) {
+    registrosAgrupados[reg.colabIdx] = [];
+  }
+  registrosAgrupados[reg.colabIdx].push(reg);
+});
+
+let htmlContent = '';
+if (Object.keys(registrosAgrupados).length === 0) {
+  htmlContent = `&lt;tr&gt;&lt;td colspan="7" style="text-align:center;padding:24px;color:var(--text3)"&gt;Nenhum registro de carreira.&lt;/td&gt;&lt;/tr&gt;`;
+} else {
+  for (const colabIdx in registrosAgrupados) {
+    const nomeColab = emp[colabIdx] ? emp[colabIdx][0] : 'Colaborador Desconhecido';
+    const registros = registrosAgrupados[colabIdx].sort((a, b) =&gt; new Date(b.periodoInicio) - new Date(a.periodoInicio)); // Ordena por data mais recente
+
+    htmlContent += `
+      &lt;tr style="background:var(--bg2);font-weight:600;"&gt;
+        &lt;td colspan="7" style="padding: 10px 16px; border-bottom: 1px solid var(--border);"&gt;${nomeColab}&lt;/td&gt;
+      &lt;/tr&gt;`;
+
+    registros.forEach((reg, i) =&gt; {
+      htmlContent += `
+        &lt;tr&gt;
+          &lt;td&gt;${reg.periodoInicio}&lt;/td&gt;
+          &lt;td&gt;${reg.periodoFim || 'Atual'}&lt;/td&gt;
+          &lt;td&gt;${reg.cargo}&lt;/td&gt;
+          &lt;td&gt;${reg.salario}&lt;/td&gt;
+          &lt;td&gt;${reg.motivo || '—'}&lt;/td&gt;
+          &lt;td&gt;
+            &lt;button class="action-btn" title="Editar" onclick="editarCarreira(${colabIdx}, ${i})"&gt;✎&lt;/button&gt;
+            &lt;button class="action-btn" title="Excluir" style="color:var(--danger)" onclick="deletarCarreira(${colabIdx}, ${i})"&gt;✕&lt;/button&gt;
+          &lt;/td&gt;
+        &lt;/tr&gt;`;
+    });
+  }
+}
+tbody.innerHTML = htmlContent;
+  };
+
+  window.renderCarreiraTabela = renderCarreiraTabela; // Torna a função global
+  setTimeout(renderCarreiraTabela, 0); // Renderiza a tabela após o HTML ser inserido
 
   return `
-  <div class="form-card" style="margin-bottom:16px">
-    <div class="form-group">
-      <label class="form-label">Selecionar Colaborador</label>
-      <select class="form-select" id="historico-select" onchange="renderHistoricoTimeline(this.value)">
-        <option value="">— Selecione um colaborador —</option>
-        ${options}
-      </select>
+  <div id="carreira-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;padding:32px;width:560px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="carreira-modal-title">Adicionar Registro de Carreira</div>
+      <div class="form-grid">
+        <div class="form-group form-full">
+          <label class="form-label">Colaborador</label>
+          <select class="form-select" id="carreira-colab">
+            <option value="">— Selecione —</option>
+            ${emp.map((e,i) => `<option value="${i}">${e[0]}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Período Início</label>
+          <input class="form-input" type="date" id="carreira-inicio">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Período Fim (opcional)</label>
+          <input class="form-input" type="date" id="carreira-fim">
+        </div>
+        <div class="form-group form-full">
+          <label class="form-label">Cargo</label>
+          <select class="form-select" id="carreira-cargo">
+            <option value="">— Selecione o Cargo —</option>
+            ${cargos.map(([c]) => `<option value="${c}">${c}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Salário</label>
+          <input class="form-input" type="text" id="carreira-salario" placeholder="R$ 0.000,00">
+        </div>
+        <div class="form-group form-full">
+          <label class="form-label">Motivo</label>
+          <textarea class="form-textarea" id="carreira-motivo" placeholder="Ex: Promoção, Transferência, Reajuste..."></textarea>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button class="btn" onclick="document.getElementById('carreira-modal').style.display='none'">Cancelar</button>
+        <button class="btn btn-primary" onclick="salvarCarreira()">Salvar</button>
+      </div>
     </div>
   </div>
-  <div class="chart-card" id="historico-timeline-wrap">
-    <div class="empty-state">
-      <div class="empty-state-icon">📋</div>
-      <div class="empty-state-title">Selecione um colaborador</div>
-      <div class="empty-state-desc">O histórico será exibido após a seleção.</div>
+
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">Histórico de Carreira</span>
     </div>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Período Início</th>
+          <th>Período Fim</th>
+          <th>Cargo</th>
+          <th>Salário</th>
+          <th>Motivo</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="carreira-tbody">
+        <!-- Registros serão inseridos aqui pelo JavaScript -->
+      </tbody>
+    </table>
   </div>`;
 }
-
-window.renderHistoricoTimeline = function(idx) {
-  const wrap = document.getElementById('historico-timeline-wrap');
-  if (idx === '') {
-    wrap.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-title">Selecione um colaborador</div></div>`;
-    return;
-  }
-  const emp = window._statusEmployees[parseInt(idx)];
-  // Histórico fictício baseado nos dados do colaborador
-  const eventos = [
-    [emp[3], 'Admissão', `Cargo: ${emp[1]} — Salário: ${emp[4]||'—'}`],
-    [emp[3], 'Cadastro no Sistema', 'Dados contratuais registrados no RH'],
-  ];
-  wrap.innerHTML = `
-    <div class="chart-title" style="margin-bottom:16px">Histórico — ${emp[0]}</div>
-    <div class="timeline">
-      ${eventos.map(([d,t,desc])=>`
-        <div class="timeline-item">
-          <div class="timeline-dot"></div>
-          <div class="timeline-date">${d}</div>
-          <div class="timeline-title">${t}</div>
-          <div class="timeline-desc">${desc}</div>
-        </div>`).join('')}
-    </div>`;
-};
-
 // ------------------------------------------------------------
 // ENVIAR COMUNICADO
 // ------------------------------------------------------------
