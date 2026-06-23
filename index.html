@@ -1453,57 +1453,40 @@ function pageHistoricoCol() {
   document.getElementById('topbar-actions').innerHTML =
     `<button class="btn btn-primary" onclick="openCarreiraModal()">+ Adicionar Registro de Carreira</button>`;
 
-  const renderCarreiraTabela = () => {
+   const renderCarreiraTabela = () => {
     const tbody = document.getElementById('carreira-tbody');
     if (!tbody) return;
 
-    // Adiciona um 'originalIndex' temporário para cada registro ao carregar,
-    // para que possamos identificar o registro correto na edição/exclusão
-    // mesmo após a ordenação ou filtragem.
-    // Isso é importante porque o índice no array pode mudar, mas o originalIndex não.
+    // Garante que cada registro tenha um originalIndex para referência
     window._historicoCarreira.forEach((reg, idx) => {
       if (reg.originalIndex === undefined) {
         reg.originalIndex = idx;
       }
     });
 
-    const registrosAgrupados = {};
-    window._historicoCarreira.forEach(reg => {
-      if (!registrosAgrupados[reg.colabIdx]) {
-        registrosAgrupados[reg.colabIdx] = [];
-      }
-      registrosAgrupados[reg.colabIdx].push(reg);
-    });
+    // Ordena todos os registros por data de início (mais recente primeiro)
+    const registrosOrdenados = [...window._historicoCarreira].sort((a, b) => new Date(b.periodoInicio) - new Date(a.periodoInicio));
 
     let htmlContent = '';
-    if (Object.keys(registrosAgrupados).length === 0) {
+    if (registrosOrdenados.length === 0) {
       htmlContent = `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro de carreira.</td></tr>`;
     } else {
-      for (const colabIdx in registrosAgrupados) {
-        const nomeColab = emp[colabIdx] ? emp[colabIdx][0] : 'Colaborador Desconhecido';
-        // Ordena os registros de cada colaborador por data de início (mais recente primeiro)
-        const registros = registrosAgrupados[colabIdx].sort((a, b) => new Date(b.periodoInicio) - new Date(a.periodoInicio));
-
+      registrosOrdenados.forEach((reg) => {
+        const nomeColab = emp[reg.colabIdx] ? emp[reg.colabIdx][0] : 'Colaborador Desconhecido';
         htmlContent += `
-          <tr style="background:var(--bg2);font-weight:600;">
-            <td colspan="7" style="padding: 10px 16px; border-bottom: 1px solid var(--border);">${nomeColab}</td>
+          <tr>
+            <td><strong>${nomeColab}</strong></td>
+            <td>${reg.periodoInicio}</td>
+            <td>${reg.periodoFim || 'Atual'}</td>
+            <td>${reg.cargo}</td>
+            <td>${reg.salario}</td>
+            <td>${reg.motivo || '—'}</td>
+            <td>
+              <button class="action-btn" title="Editar" onclick="editarCarreira(${reg.colabIdx}, ${reg.originalIndex})">✎</button>
+              <button class="action-btn" title="Excluir" style="color:var(--danger)" onclick="deletarCarreira(${reg.colabIdx}, ${reg.originalIndex})">✕</button>
+            </td>
           </tr>`;
-
-        registros.forEach((reg) => { // Não precisamos do 'i' aqui, usamos reg.originalIndex
-          htmlContent += `
-            <tr>
-              <td>${reg.periodoInicio}</td>
-              <td>${reg.periodoFim || 'Atual'}</td>
-              <td>${reg.cargo}</td>
-              <td>${reg.salario}</td>
-              <td>${reg.motivo || '—'}</td>
-              <td>
-                <button class="action-btn" title="Editar" onclick="editarCarreira(${reg.colabIdx}, ${reg.originalIndex})">✎</button>
-                <button class="action-btn" title="Excluir" style="color:var(--danger)" onclick="deletarCarreira(${reg.colabIdx}, ${reg.originalIndex})">✕</button>
-              </td>
-            </tr>`;
-        });
-      }
+      });
     }
     tbody.innerHTML = htmlContent;
   };
@@ -1560,7 +1543,8 @@ function pageHistoricoCol() {
     </div>
     <table class="table">
       <thead>
-        <tr>
+      <tr>
+          <th>Colaborador</th> <!-- Nova coluna aqui -->
           <th>Período Início</th>
           <th>Período Fim</th>
           <th>Cargo</th>
