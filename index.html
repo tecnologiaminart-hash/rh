@@ -687,11 +687,11 @@ function buildSidebar() {
 // ============================================================
 // NAVIGATION & CONTENT RENDERING
 // ============================================================
-function navigate(id, title, parent) {
+function navigate(id, title, parent, param = null) {
   document.getElementById('page-title').textContent = title;
   document.getElementById('page-breadcrumb').textContent = parent ? `RH Sistema › ${parent} › ${title}` : `RH Sistema › ${title}`;
   document.getElementById('topbar-actions').innerHTML = '';
-  renderPage(id);
+  renderPage(id, param);
 }
 
 function showToast(msg, dur=2500) {
@@ -714,6 +714,7 @@ function renderPage(id) {
     'col-status':      pageStatus,
     'col-exames':      pageExames,
     'col-historico':   pageHistoricoCol,
+    'col-historico-detalhe': pageHistoricoCarreiraDetalhe,
     'col-enviar':      pageEnviar,
     'cont-candidatos': pageCandidatos,
     'cont-vagas':      pageVagas,
@@ -746,8 +747,8 @@ function renderPage(id) {
     'int-cultura':     pageCultura,
     'int-regulamento': pageRegulamento,
   };
-  const fn = pages[id];
-  el.innerHTML = fn ? fn() : pageGeneric(id);
+   const fn = pages[id];
+  el.innerHTML = fn ? fn(param) : pageGeneric(id); // Passa o 'param' para a função da página
   postRender(id);
 }
 
@@ -989,7 +990,131 @@ function pageDashboard() {
     </div>
   </div>`;
 }
+// ------------------------------------------------------------
+// HISTÓRICO DE CARREIRA DETALHADO POR COLABORADOR
+// ------------------------------------------------------------
+function pageHistoricoCarreiraDetalhe(colabIdx) {
+  if (!window._historicoCarreira) window._historicoCarreira = [];
+  const emp = window._statusEmployees || [];
+  const cargos = window._cargos || [];
 
+  const colaborador = emp[colabIdx];
+  if (!colaborador) {
+    return `<div class="empty-state">
+              <div class="empty-state-icon">🤔</div>
+              <div class="empty-state-title">Colaborador não encontrado</div>
+              <div class="empty-state-desc">Não foi possível carregar o histórico para este colaborador.</div>
+              <button class="btn" onclick="navigate('col-historico','Histórico','Colaboradores')">← Voltar para a lista</button>
+            </div>`;
+  }
+
+  const nomeColab = colaborador[0];
+
+  document.getElementById('topbar-actions').innerHTML =
+    `<button class="btn btn-primary" onclick="openCarreiraModal(${colabIdx})">+ Adicionar Registro</button>`;
+
+  const renderCarreiraTabelaDetalhe = () => {
+    const tbody = document.getElementById('carreira-tbody-detalhe');
+    if (!tbody) return;
+
+    // Filtra os registros para o colaborador atual e ordena por data de início (mais recente primeiro)
+    const registrosDoColaborador = window._historicoCarreira
+      .filter(reg => reg.colabIdx == colabIdx)
+      .sort((a, b) => new Date(b.periodoInicio) - new Date(a.periodoInicio));
+
+    let htmlContent = '';
+    if (registrosDoColaborador.length === 0) {
+      htmlContent = `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro de carreira para ${nomeColab}.</td></tr>`;
+    } else {
+      registrosDoColaborador.forEach((reg) => {
+        htmlContent += `
+          <tr>
+            <td>${reg.periodoInicio}</td>
+            <td>${reg.periodoFim || 'Atual'}</td>
+            <td>${reg.cargo}</td>
+            <td>${reg.salario}</td>
+            <td>${reg.motivo || '—'}</td>
+            <td>
+              <button class="action-btn" title="Editar" onclick="openCarreiraModal(${colabIdx}, ${reg.originalIndex})">✎</button>
+              <button class="action-btn" title="Excluir" style="color:var(--danger)" onclick="deletarCarreira(${colabIdx}, ${reg.originalIndex})">✕</button>
+            </td>
+          </tr>`;
+      });
+    }
+    tbody.innerHTML = htmlContent;
+  };
+
+  // Torna a função de renderização global para ser chamada após salvar/deletar
+  window.renderCarreiraTabelaDetalhe = renderCarreiraTabelaDetalhe;
+  setTimeout(renderCarreiraTabelaDetalhe, 0); // Renderiza a tabela após o HTML ser inserido
+
+  return `
+  <div id="carreira-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;padding:32px;width:560px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="carreira-modal-title">Adicionar Registro de Carreira para ${nomeColab}</div>
+      <div class="form-grid">
+        <div class="form-group form-full hidden"> <!-- Colaborador oculto, já selecionado -->
+          <label class="form-label">Colaborador</label>
+          <select class="form-select" id="carreira-colab">
+            <option value="${colabIdx}">${nomeColab}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Período Início</label>
+          <input class="form-input" type="date" id="carreira-inicio">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Período Fim (opcional)</label>
+          <input class="form-input" type="date" id="carreira-fim">
+        </div>
+        <div class="form-group form-full">
+          <label class="form-label">Cargo</label>
+          <select class="form-select" id="carreira-cargo">
+            <option value="">— Selecione o Cargo —</option>
+            ${cargos.map(([c]) => `<option value="${c}">${c}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Salário</label>
+          <input class="form-input" type="text" id="carreira-salario" placeholder="R$ 0.000,00">
+        </div>
+        <div class="form-group form-full">
+          <label class="form-label">Motivo</label>
+          <textarea class="form-textarea" id="carreira-motivo" placeholder="Ex: Promoção, Transferência, Reajuste..."></textarea>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button class="btn" onclick="document.getElementById('carreira-modal').style.display='none'">Cancelar</button>
+        <button class="btn btn-primary" onclick="salvarCarreira()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">Histórico de Carreira de ${nomeColab}</span>
+      <div class="table-actions">
+        <button class="btn" onclick="navigate('col-historico', 'Histórico', 'Colaboradores')">← Voltar</button>
+      </div>
+    </div>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Período Início</th>
+          <th>Período Fim</th>
+          <th>Cargo</th>
+          <th>Salário</th>
+          <th>Motivo</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="carreira-tbody-detalhe">
+        <!-- Registros serão inseridos aqui pelo JavaScript -->
+      </tbody>
+    </table>
+  </div>`;
+}
+  
 // ------------------------------------------------------------
 // COLABORADORES — ADMISSÃO
 // ------------------------------------------------------------
@@ -1443,119 +1568,56 @@ function pageExames() {
 }
 
 // ------------------------------------------------------------
-// HISTÓRICO COLABORADOR
+// COLABORADORES — HISTÓRICO (LISTA DE COLABORADORES COM BOTÃO PARA VER HISTÓRICO INDIVIDUAL)
 // ------------------------------------------------------------
 function pageHistoricoCol() {
-  if (!window._historicoCarreira) window._historicoCarreira = [];
   const emp = window._statusEmployees || [];
-  const cargos = window._cargos || [];
 
   document.getElementById('topbar-actions').innerHTML =
-    `<button class="btn btn-primary" onclick="openCarreiraModal()">+ Adicionar Registro de Carreira</button>`;
+    `<button class="btn btn-primary" onclick="openCarreiraModal()">+ Adicionar Registro de Carreira</button>`; // Botão geral para adicionar
 
-  const renderCarreiraTabela = () => {
-    const tbody = document.getElementById('carreira-tbody');
+  const renderColaboradoresHistorico = (filtro = '') => {
+    const tbody = document.getElementById('colaboradores-historico-tbody');
     if (!tbody) return;
 
-    // Garante que cada registro tenha um originalIndex para referência
-    window._historicoCarreira.forEach((reg, idx) => {
-      if (reg.originalIndex === undefined) {
-        reg.originalIndex = idx;
-      }
-    });
+    const listaFiltrada = emp.filter(e => e[0].toLowerCase().includes(filtro.toLowerCase()));
 
-    // Ordena todos os registros por data de início (mais recente primeiro)
-    const registrosOrdenados = [...window._historicoCarreira].sort((a, b) => new Date(b.periodoInicio) - new Date(a.periodoInicio));
-
-    let htmlContent = '';
-    if (registrosOrdenados.length === 0) {
-      htmlContent = `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro de carreira.</td></tr>`;
-    } else {
-      registrosOrdenados.forEach((reg) => {
-        const nomeColab = emp[reg.colabIdx] ? emp[reg.colabIdx][0] : 'Colaborador Desconhecido';
-        htmlContent += `
+    tbody.innerHTML = listaFiltrada.length === 0
+      ? '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">Nenhum colaborador encontrado.</td></tr>'
+      : listaFiltrada.map((e, i) => `
           <tr>
-            <td><strong>${nomeColab}</strong></td>
-            <td>${reg.periodoInicio}</td>
-            <td>${reg.periodoFim || 'Atual'}</td>
-            <td>${reg.cargo}</td>
-            <td>${reg.salario}</td>
-            <td>${reg.motivo || '—'}</td>
+            <td><strong>${e[0]}</strong></td>
+            <td>${e[1]}</td>
+            <td>${e[3]}</td> <!-- Data de Admissão -->
             <td>
-              <button class="action-btn" title="Editar" onclick="openCarreiraModal(${reg.colabIdx}, ${reg.originalIndex})">✎</button>
-              <button class="action-btn" title="Excluir" style="color:var(--danger)" onclick="deletarCarreira(${reg.colabIdx}, ${reg.originalIndex})">✕</button>
+              <button class="action-btn" title="Ver Histórico de Carreira" onclick="navigate('col-historico-detalhe', 'Histórico de Carreira', 'Colaboradores', ${i})">📈</button>
             </td>
-          </tr>`;
-      });
-    }
-    tbody.innerHTML = htmlContent;
+          </tr>`).join('');
   };
 
-  // Torna a função de renderização global para ser chamada após salvar/deletar
-  window.renderCarreiraTabela = renderCarreiraTabela;
-  setTimeout(renderCarreiraTabela, 0); // Renderiza a tabela após o HTML ser inserido
+  window.filtrarColaboradoresHistorico = function(valor) {
+    renderColaboradoresHistorico(valor);
+  };
+
+  setTimeout(() => renderColaboradoresHistorico(), 0); // Renderiza a tabela inicial
 
   return `
-  <div id="carreira-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:6px;padding:32px;width:560px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
-      <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="carreira-modal-title">Adicionar Registro de Carreira</div>
-      <div class="form-grid">
-        <div class="form-group form-full">
-          <label class="form-label">Colaborador</label>
-          <select class="form-select" id="carreira-colab">
-            <option value="">— Selecione —</option>
-            ${emp.map((e,i) => `<option value="${i}">${e[0]}</option>`).join('')}
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Período Início</label>
-          <input class="form-input" type="date" id="carreira-inicio">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Período Fim (opcional)</label>
-          <input class="form-input" type="date" id="carreira-fim">
-        </div>
-        <div class="form-group form-full">
-          <label class="form-label">Cargo</label>
-          <select class="form-select" id="carreira-cargo">
-            <option value="">— Selecione o Cargo —</option>
-            ${cargos.map(([c]) => `<option value="${c}">${c}</option>`).join('')}
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Salário</label>
-          <input class="form-input" type="text" id="carreira-salario" placeholder="R$ 0.000,00">
-        </div>
-        <div class="form-group form-full">
-          <label class="form-label">Motivo</label>
-          <textarea class="form-textarea" id="carreira-motivo" placeholder="Ex: Promoção, Transferência, Reajuste..."></textarea>
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
-        <button class="btn" onclick="document.getElementById('carreira-modal').style.display='none'">Cancelar</button>
-        <button class="btn btn-primary" onclick="salvarCarreira()">Salvar</button>
-      </div>
-    </div>
-  </div>
-
   <div class="table-card">
     <div class="table-header">
-      <span class="table-title">Histórico de Carreira</span>
+      <span class="table-title">Colaboradores</span>
+      <input class="search-input" placeholder="Buscar colaborador..." oninput="filtrarColaboradoresHistorico(this.value)" style="margin-left:12px">
     </div>
     <table class="table">
       <thead>
         <tr>
-          <th>Colaborador</th>
-          <th>Período Início</th>
-          <th>Período Fim</th>
-          <th>Cargo</th>
-          <th>Salário</th>
-          <th>Motivo</th>
+          <th>Nome</th>
+          <th>Cargo Atual</th>
+          <th>Desde</th>
           <th>Ações</th>
         </tr>
       </thead>
-      <tbody id="carreira-tbody">
-        <!-- Registros serão inseridos aqui pelo JavaScript -->
+      <tbody id="colaboradores-historico-tbody">
+        <!-- Conteúdo gerado por JavaScript -->
       </tbody>
     </table>
   </div>`;
@@ -2610,27 +2672,28 @@ window.openCarreiraModal = function(colabIdx = null, originalIndex = null) {
       document.getElementById('carreira-cargo').value = registro.cargo;
       document.getElementById('carreira-salario').value = registro.salario;
       document.getElementById('carreira-motivo').value = registro.motivo;
-      document.getElementById('carreira-modal-title').textContent = 'Editar Registro de Carreira';
-      // Habilita o campo de seleção de colaborador para edição
-      document.getElementById('carreira-colab').disabled = false;
+      document.getElementById('carreira-modal-title').textContent = `Editar Registro de Carreira para ${window._statusEmployees[colabIdx][0]}`;
+      // Desabilita o campo de seleção de colaborador na edição
+      document.getElementById('carreira-colab').disabled = true;
     }
   } else {
     // Novo registro
-    document.getElementById('carreira-colab').value = ''; // Limpa a seleção
+    document.getElementById('carreira-colab').value = colabIdx !== null ? colabIdx : ''; // Pré-seleciona se veio de uma página de detalhes
     document.getElementById('carreira-inicio').value = hoje;
     document.getElementById('carreira-fim').value = '';
     document.getElementById('carreira-cargo').value = '';
     document.getElementById('carreira-salario').value = '';
     document.getElementById('carreira-motivo').value = '';
     document.getElementById('carreira-modal-title').textContent = 'Adicionar Registro de Carreira';
-    // Habilita o campo de seleção de colaborador para um novo registro
-    document.getElementById('carreira-colab').disabled = false;
+    // Habilita/desabilita o campo de seleção de colaborador
+    document.getElementById('carreira-colab').disabled = (colabIdx !== null);
   }
   modal.style.display = 'flex';
 };
 
 window.salvarCarreira = function() {
-  const colabIdx = document.getElementById('carreira-colab').value;
+  const colabSelect = document.getElementById('carreira-colab');
+  const colabIdx = colabSelect.value; // Pega o valor do select, que pode estar desabilitado
   const periodoInicio = document.getElementById('carreira-inicio').value;
   const periodoFim = document.getElementById('carreira-fim').value;
   const cargo = document.getElementById('carreira-cargo').value;
@@ -2668,9 +2731,12 @@ window.salvarCarreira = function() {
   window._salvarStorage();
   document.getElementById('carreira-modal').style.display = 'none';
   showToast('Registro de carreira salvo!');
-  // Chama a função de renderização da tabela geral
-  if (window.renderCarreiraTabela) {
-    window.renderCarreiraTabela();
+
+  // Chama a função de renderização apropriada
+  if (document.getElementById('carreira-tbody-detalhe')) { // Se estiver na página de detalhes
+    window.renderCarreiraTabelaDetalhe();
+  } else if (document.getElementById('colaboradores-historico-tbody')) { // Se estiver na lista geral de colaboradores
+    window.renderColaboradoresHistorico();
   }
 };
   
@@ -2688,12 +2754,15 @@ window.deletarCarreira = function(colabIdx, originalIndex) {
     window._historicoCarreira.splice(indexToDelete, 1);
     window._salvarStorage();
     showToast('Registro de carreira removido.');
-    // Chama a função de renderização da tabela geral
-    if (window.renderCarreiraTabela) {
-      window.renderCarreiraTabela();
+// Chama a função de renderização apropriada
+if (document.getElementById('carreira-tbody-detalhe')) { // Se estiver na página de detalhes
+  window.renderCarreiraTabelaDetalhe();
+} else if (document.getElementById('colaboradores-historico-tbody')) { // Se estiver na lista geral de colaboradores
+  window.renderColaboradoresHistorico();
+}
     }
-  }
 };
+  
 // ------------------------------------------------------------
 // TREINAMENTOS DO COLABORADOR
 // ------------------------------------------------------------
