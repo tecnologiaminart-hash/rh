@@ -2,7 +2,9 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" 
+
+Departamentos > 
 <title>Minart Móveis - RH</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
@@ -344,32 +346,96 @@
 </div>
 
 <script>
+  // Inicializa cargos globalmente para estar disponível em qualquer página
+if (!window._cargos) window._cargos = [ ];
+  if (!window._statusEmployees) window._statusEmployees = [ ];
+  
 // ============================================================
 // CONFIG & SUPABASE
 // ============================================================
-let SUPA_URL = localStorage.getItem('supa_url') || '';
-let SUPA_KEY = localStorage.getItem('supa_key') || '';
+let SUPA_URL = null;
+let SUPA_KEY = null;
 let supaClient = null;
 let currentUser = null;
+  
+let _colaboradoresSupabase = [];
+let _editingStatusColabId = null;
+let _historicoColaboradoresSupabase = [];
+let _editingHistoricoColabId = null;
+let _cargos = []; // Para armazenar os cargos do Supabase
+let _statusEmployees = [];
+  
+function salvarVagasLocal() {
+  localStorage.setItem('rh_vagas', JSON.stringify(window._vagas || []));
+}
+
+function carregarVagasLocal() {
+  try {
+    const salvo = localStorage.getItem('rh_vagas');
+    window._vagas = salvo ? JSON.parse(salvo) : [];
+  } catch(e) {
+    window._vagas = [];
+  }
+}
+
+function salvarCandidaturasLocal() {
+  localStorage.setItem('rh_candidaturas', JSON.stringify(window._candidaturas || []));
+}
+
+function carregarCandidaturasLocal() {
+  try {
+    const salvo = localStorage.getItem('rh_candidaturas');
+    window._candidaturas = salvo ? JSON.parse(salvo) : [];
+  } catch(e) {
+    window._candidaturas = [];
+  }
+}
 
 function saveConfig() {
-  SUPA_URL = document.getElementById('sb-url').value.trim();
-  SUPA_KEY = document.getElementById('sb-key').value.trim();
+  const sbUrlEl = document.getElementById('sb-url');
+  const sbKeyEl = document.getElementById('sb-key');
+  if (sbUrlEl) SUPA_URL = sbUrlEl.value.trim();
+  if (sbKeyEl) SUPA_KEY = sbKeyEl.value.trim();
+
   localStorage.setItem('supa_url', SUPA_URL);
   localStorage.setItem('supa_key', SUPA_KEY);
   showToast('Configuração salva!');
 }
 
 function initSupabase() {
-  if (!SUPA_URL || !SUPA_KEY) return null;
+  if (!SUPA_URL || !SUPA_KEY) {
+    console.warn('initSupabase: SUPA_URL ou SUPA_KEY estão vazios. Supabase não será inicializado.');
+    return null;
+  }
   try {
     return supabase.createClient(SUPA_URL, SUPA_KEY);
-  } catch(e) { return null; }
+  } catch(e) {
+    console.error('initSupabase: Erro ao criar cliente Supabase:', e);
+    return null;
+  }
+}
+async function loadCargosForApp() {
+  if (!supaClient) {
+    console.error('Supabase client não inicializado para cargos.');
+    return;
+  }
+  const { data, error } = await supaClient
+    .from('cargos')
+    .select('id_cargo, nome_cargo, salario_base')
+    .order('nome_cargo', { ascending: true });
+
+  if (error) {
+    console.error('Erro ao carregar cargos:', error.message);
+    _cargos = [];
+  } else {
+    _cargos = data;
+    console.log('Cargos carregados:', _cargos);
+  }
 }
 
+  
 // ============================================================
-// AUTH — login via tabela "users" no Supabase
-// (também suporta Supabase Auth nativo como fallback)
+// AUTH — login
 // ============================================================
 async function doLogin() {
   const email = document.getElementById('l-email').value.trim();
@@ -377,47 +443,29 @@ async function doLogin() {
   const errEl = document.getElementById('login-error');
   errEl.textContent = '';
 
-  if (!email || !pass) { errEl.textContent = 'Preencha e-mail e senha.'; return; }
-
-  supaClient = initSupabase();
-
-  if (!supaClient) {
-    // modo demo sem Supabase
-    if (email === 'admin@rh.com' && pass === 'admin123') {
-      currentUser = { email, name: 'Admin Demo', role: 'admin' };
-      enterApp();
-    } else {
-      errEl.textContent = 'Credenciais inválidas. (Demo: admin@rh.com / admin123)';
-    }
+  if (!email || !pass) {
+    errEl.textContent = 'Preencha e-mail e senha.';
     return;
   }
 
-  // Tentativa 1: tabela custom "usuarios"
-  try {
-    const { data, error } = await supaClient
-      .from('usuarios')
-      .select('*')
-      .eq('email', email)
-      .eq('senha', pass) // hash ideal; aqui demo plaintext
-      .eq('ativo', true)
-      .single();
+  if (!supaClient) {
+    errEl.textContent = 'Erro de configuração: Supabase não inicializado.';
+    return;
+  }
 
-    if (data && !error) {
-      currentUser = { email, name: data.nome || data.name || email, role: data.perfil || 'user' };
-      enterApp(); return;
-    }
-  } catch(e) {}
+  const { data, error } = await supaClient.auth.signInWithPassword({ email, password: pass });
 
-  // Tentativa 2: Supabase Auth nativo
-  try {
-    const { data, error } = await supaClient.auth.signInWithPassword({ email, password: pass });
-    if (data?.user && !error) {
-      currentUser = { email, name: data.user.email, role: 'user' };
-      enterApp(); return;
-    }
-  } catch(e) {}
+  if (error || !data?.user) {
+    errEl.textContent = 'E-mail ou senha incorretos.';
+    return;
+  }
 
-  errEl.textContent = 'E-mail ou senha incorretos.';
+  currentUser = {
+    email,
+    name: data.user.user_metadata?.nome || data.user.email,
+    role: data.user.user_metadata?.perfil || 'user'
+  };
+  enterApp();
 }
 
 document.getElementById('l-pass').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
@@ -449,12 +497,13 @@ const NAV = [
   {
     id: 'colaboradores', label: 'Colaboradores', icon: '◉',
     subs: [
+      { id: 'col-status', label: 'Informações Contratuais' },
       { id: 'col-documentos', label: 'Documentos' },
+      { id: 'col-historico', label: 'Histórico' },
+      
       { id: 'col-ferias', label: 'Férias' },
       { id: 'col-atestados', label: 'Atestados' },
-      { id: 'col-status', label: 'Informações Contratuais' },
       { id: 'col-exames', label: 'Exames' },
-      { id: 'col-historico', label: 'Histórico' },
       { id: 'col-enviar', label: 'Enviar Comunicado' },
     ]
   },
@@ -462,7 +511,7 @@ const NAV = [
     id: 'contratacao', label: 'Contratação', icon: '◎',
     subs: [
       { id: 'cont-candidatos', label: 'Candidatos' },
-      { id: 'cont-vagas', label: 'Vagas em Aberto' },
+      { id: 'cont-vagas', label: 'Vagas' },
       { id: 'cont-entrevista', label: 'Formulário de Entrevista' },
       { id: 'cont-relatorio', label: 'Relatório e Impressão' },
     ]
@@ -471,9 +520,7 @@ const NAV = [
     id: 'departamentos', label: 'Departamentos', icon: '◫',
     subs: [
       { id: 'dep-tabela', label: 'Cargos e Salários Atual' },
-      { id: 'dep-historico', label: 'Cargos e Salários Histórico' },
-      { id: 'dep-alteracao', label: 'Alteração de Cargos/Salários' },
-      { id: 'dep-relatorio', label: 'Relatório e Impressão' },
+      { id: 'dep-descricao', label: 'Cargos e Descrição' },
     ]
   },
   {
@@ -481,7 +528,6 @@ const NAV = [
     subs: [
       { id: 'ficha-perfil', label: 'Perfil e Hobbies (Minart)' },
       { id: 'ficha-dados', label: 'Dados Pessoais' },
-      { id: 'ficha-carreira', label: 'Histórico de Carreira' },
       { id: 'ficha-contratos', label: 'Contratos e Alinhamento' },
       { id: 'ficha-ocorrencias', label: 'Ocorrências e Obs' },
       { id: 'ficha-relatorio', label: 'Relatório e Impressão' },
@@ -567,11 +613,11 @@ function buildSidebar() {
 // ============================================================
 // NAVIGATION & CONTENT RENDERING
 // ============================================================
-function navigate(id, title, parent) {
+function navigate(id, title, parent, param = null) {
   document.getElementById('page-title').textContent = title;
   document.getElementById('page-breadcrumb').textContent = parent ? `RH Sistema › ${parent} › ${title}` : `RH Sistema › ${title}`;
   document.getElementById('topbar-actions').innerHTML = '';
-  renderPage(id);
+  renderPage(id, param);
 }
 
 function showToast(msg, dur=2500) {
@@ -579,263 +625,6 @@ function showToast(msg, dur=2500) {
   t.textContent = msg;
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), dur);
-}
-
-// ============================================================
-// DADOS COMPARTILHADOS — Colaboradores & Cargos
-// (fonte única usada por várias abas do sistema)
-// ============================================================
-function getCargos() {
-  if (!window._cargos) {
-    window._cargos = [
-      ['Serviços Gerais','R$ 1.628,00'],
-      ['Recepcionista','R$ 1.628,00'],
-      ['Auxiliar de Cozinha','R$ 1.628,00'],
-      ['Auxiliar de Produção','R$ 1.765,00'],
-      ['Auxiliar de Montador','R$ 1.765,00'],
-      ['Auxiliar de Vidraceiro','R$ 1.765,00'],
-      ['Desenhista','R$ 1.765,00'],
-      ['Vendedor','R$ 1.765,00'],
-      ['Orçamentista','R$ 1.765,00'],
-      ['Cozinheira(o)','R$ 1.765,00'],
-      ['Entregador e Montador - Nível 1','R$ 1.956,00'],
-      ['Entregador e Montador - Nível 2','R$ 2.138,00'],
-      ['Entregador e Montador - Nível 3','R$ 2.304,00'],
-      ['Operador de Máquinas - Nível 1','R$ 1.956,00'],
-      ['Operador de Máquinas - Nível 2','R$ 2.138,00'],
-      ['Operador de Máquinas - Nível 3','R$ 2.300,00'],
-      ['Auxiliar Administrativo - Nível 1','R$ 1.960,00'],
-      ['Auxiliar Administrativo - Nível 2','R$ 2.142,00'],
-      ['Auxiliar Administrativo - Nível 3','R$ 2.308,00'],
-      ['Desenhista, Orçamentista e Vendedor','R$ 2.351,00'],
-      ['Marceneiro - Nível 1','R$ 2.352,00'],
-      ['Marceneiro - Nível 2','R$ 2.569,00'],
-      ['Marceneiro - Nível 3','R$ 2.765,00'],
-      ['Pintor','R$ 2.352,00'],
-      ['Soldador - Nível 1','R$ 2.352,00'],
-      ['Soldador - Nível 2','R$ 2.569,00'],
-      ['Soldador - Nível 3','R$ 2.765,00'],
-      ['Tapeceiro','R$ 2.352,00'],
-      ['Vidraceiro','R$ 2.352,00'],
-      ['Encarregado de Setor - Nível 1','R$ 2.355,00'],
-      ['Encarregado de Setor - Nível 2','R$ 2.482,00'],
-      ['Encarregado de Setor - Nível 3','R$ 2.610,00'],
-      ['Encarregado Geral','R$ 2.611,00'],
-      ['Designer de Interiores','R$ 2.611,00'],
-      ['Gerente Geral - Nível 1','R$ 2.852,00'],
-      ['Gerente Geral - Nível 2','R$ 3.070,00'],
-    ];
-  }
-  return window._cargos;
-}
-
-function getColaboradores() {
-  if (!window._colaboradores) {
-    window._colaboradores = [
-      ['AMANDA SOUSA LIMA','Encarregado de Setor - Nível 1','Ativo','01/01/2024'],
-      ['LUCIANA DA SILVA','Auxiliar Administrativo - Nível 1','Ativo','01/01/2024'],
-      ['JUCICLÉIA DE CARVALHO','Gerente Geral - Nível 2','Ativo','01/01/2024'],
-      ['KAROL SILVA JARDIM','Auxiliar Administrativo - Nível 1','Ativo','01/01/2024'],
-      ['LEANDRO ALMEIDA','Encarregado de Setor - Nível 1','Ativo','01/01/2024'],
-      ['MAXSUEL DA SILVA SANTOS','Soldador - Nível 1','Ativo','01/01/2024'],
-      ['LEANDRO FELIX DA SILVA','Soldador - Nível 1','Ativo','01/01/2024'],
-      ['JOÃO ALVES MORAIS','Soldador - Nível 1','Ativo','01/01/2024'],
-      ['JACSON MARTINS','Soldador - Nível 1','Ativo','01/01/2024'],
-      ['MARCOS VINICIUS LIMA DA SILVA','Operador de Máquinas - Nível 1','Ativo','01/01/2024'],
-      ['JOSIELTON DIAS REIS','Operador de Máquinas - Nível 1','Ativo','01/01/2024'],
-      ['EDNELTON BORGES ANDRADE','Auxiliar de Produção','Ativo','01/01/2024'],
-      ['CLAUDIA CRISTINA DE HOLANDA DA SILVA','Auxiliar de Produção','Ativo','01/01/2024'],
-      ['JEIEL SILVA NUNES','Auxiliar de Produção','Ativo','01/01/2024'],
-      ['MARCOS ANTONIO DOS SANTOS','Auxiliar de Produção','Ativo','01/01/2024'],
-      ['JOAO PAULO FERNANDES','Auxiliar de Produção','Ativo','01/01/2024'],
-      ['LEU FRANCISCO DE SOUSA','Auxiliar de Produção','Ativo','01/01/2024'],
-      ['HELMETH FERREIRA','Auxiliar de Produção','Ativo','01/01/2024'],
-      ['CICERO RYAN TIMOTEO','Auxiliar de Produção','Ativo','01/01/2024'],
-      ['MARCOS DIONES CARVALHO','Auxiliar de Produção','Ativo','01/01/2024'],
-      ['PEDRO EYDSON','Auxiliar de Produção','Ativo','01/01/2024'],
-      ['MICAEL DA SILVA','Auxiliar de Produção','Ativo','01/01/2024'],
-      ['ANDREY THALYS RODRIGUES','Auxiliar de Produção','Ativo','01/01/2024'],
-      ['RAFAEL CAILO','Auxiliar de Produção','Ativo','01/01/2024'],
-      ['LUCAS MARTINS','Auxiliar de Produção','Ativo','01/01/2024'],
-      ['DANILLO MENDES','Auxiliar de Produção','Ativo','01/01/2024'],
-      ['RAILON DE SOUSA OLIVEIRA','Encarregado Geral','Ativo','01/01/2024'],
-      ['JOSIAS CARDOSO BONINA','Encarregado Geral','Ativo','01/01/2024'],
-      ['DARTO TIAGO DE ARAUJO','Entregador e Montador - Nível 3','Ativo','01/01/2024'],
-      ['JACIRA DE ARAÚJO GONÇALVES','Cozinheira','Ativo','01/01/2024'],
-      ['IVONETE DE ARAUJO','Serviços Gerais','Ativo','01/01/2024'],
-      ['MEIRILENE COSTA','Serviços Gerais','Ativo','01/01/2024'],
-      ['MARINETE DOS SANTOS','Serviços Gerais','Ativo','01/01/2024'],
-      ['CRISTIANO DOS SANTOS','Auxiliar Administrativo - Nível 1','Ativo','01/01/2024'],
-    ];
-  }
-  return window._colaboradores;
-}
-
-// Modal genérico de Colaborador (Cargo selecionado a partir de Cargos e Salários Atual)
-// Reutilizado em mais de uma aba (Informações Contratuais, Perfil e Hobbies, etc.)
-function colaboradorModalHTML() {
-  const cargos = getCargos();
-  return `
-  <div id="status-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:6px;padding:32px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
-      <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="status-modal-title">Editar Colaborador</div>
-      <div class="form-grid" style="margin-bottom:16px">
-        <div class="form-group form-full"><label class="form-label">Nome</label><input class="form-input" id="sm-nome"></div>
-        <div class="form-group"><label class="form-label">Cargo</label>
-          <select class="form-select" id="sm-cargo">
-            ${cargos.map(([c]) => `<option value="${c}">${c}</option>`).join('')}
-          </select>
-        </div>
-        <div class="form-group"><label class="form-label">Status</label>
-          <select class="form-select" id="sm-status"><option>Ativo</option><option>Afastado</option><option>Desligado</option></select>
-        </div>
-        <div class="form-group"><label class="form-label">Desde</label><input class="form-input" id="sm-desde" type="date"></div>
-      </div>
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button class="btn" onclick="document.getElementById('status-modal').style.display='none'">Cancelar</button>
-        <button class="btn btn-primary" onclick="saveStatusEmployee()">Salvar</button>
-      </div>
-    </div>
-  </div>`;
-}
-
-window.openStatusModal = function(idx=null, returnId='col-status', returnTitle='Informações Contratuais') {
-  window._colabModalReturn = { id: returnId, title: returnTitle };
-  const m = document.getElementById('status-modal');
-  const emp = getColaboradores();
-  window._editingStatusIdx = idx;
-  if (idx !== null) {
-    const [n,c,st,desde] = emp[idx];
-    document.getElementById('sm-nome').value = n;
-    document.getElementById('sm-cargo').value = c;
-    document.getElementById('sm-status').value = st;
-    const parts = desde.split('/');
-    document.getElementById('sm-desde').value = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : '';
-    document.getElementById('status-modal-title').textContent = 'Editar Colaborador';
-  } else {
-    document.getElementById('sm-nome').value = '';
-    document.getElementById('sm-desde').value = '';
-    document.getElementById('sm-status').value = 'Ativo';
-    document.getElementById('status-modal-title').textContent = 'Novo Colaborador';
-  }
-  m.style.display = 'flex';
-};
-window.editStatusEmployee = function(i, returnId, returnTitle) { openStatusModal(i, returnId, returnTitle); };
-window.saveStatusEmployee = function() {
-  const emp = getColaboradores();
-  const n = document.getElementById('sm-nome').value.trim();
-  const c = document.getElementById('sm-cargo').value;
-  const st = document.getElementById('sm-status').value;
-  const rawDate = document.getElementById('sm-desde').value;
-  const desde = rawDate ? rawDate.split('-').reverse().join('/') : '';
-  if (!n) return alert('Preencha o nome do colaborador.');
-  const idx = window._editingStatusIdx;
-  if (idx !== null) emp[idx] = [n,c,st,desde]; else emp.push([n,c,st,desde]);
-  document.getElementById('status-modal').style.display = 'none';
-  const ret = window._colabModalReturn || { id: 'col-status', title: 'Informações Contratuais' };
-  navigate(ret.id, ret.title);
-};
-window.viewStatusEmployee = function(i) {
-  const [n,c,st,desde] = getColaboradores()[i];
-  document.getElementById('status-view-body').innerHTML = `
-    <div><strong>Nome:</strong> ${n}</div>
-    <div><strong>Cargo:</strong> ${c}</div>
-    <div><strong>Status:</strong> ${st}</div>
-    <div><strong>Desde:</strong> ${desde}</div>`;
-  document.getElementById('status-view-modal').style.display = 'flex';
-};
-window.printStatusRow = function(i) {
-  const [n,c,st,desde] = getColaboradores()[i];
-  const w = window.open('','_blank');
-  w.document.write(`<html><head><title>Colaborador</title><style>body{font-family:sans-serif;padding:40px}h2{margin-bottom:20px}p{margin:6px 0;font-size:14px}</style></head><body>
-    <h2>Minart Móveis — Ficha de Status</h2>
-    <p><strong>Nome:</strong> ${n}</p>
-    <p><strong>Cargo:</strong> ${c}</p>
-    <p><strong>Status:</strong> ${st}</p>
-    <p><strong>Desde:</strong> ${desde}</p>
-    <p style="margin-top:30px;color:#888;font-size:12px">Impresso em: ${new Date().toLocaleDateString('pt-BR')}</p>
-  </body></html>`);w.print();
-};
-window.printStatusCard = function() {
-  const body = document.getElementById('status-view-body').innerHTML;
-  const w = window.open('','_blank');
-  w.document.write(`<html><head><title>Colaborador</title><style>body{font-family:sans-serif;padding:40px}h2{margin-bottom:20px}div{margin:6px 0;font-size:14px}</style></head><body>
-    <h2>Minart Móveis — Ficha de Status</h2>${body}
-    <p style="margin-top:30px;color:#888;font-size:12px">Impresso em: ${new Date().toLocaleDateString('pt-BR')}</p>
-  </body></html>`);w.print();
-};
-
-// ============================================================
-// PAGES
-// ============================================================
-function renderPage(id) {
-  const el = document.getElementById('content-area');
-  const pages = {
-    'dashboard':       pageDashboard,
-    'col-documentos':  pageDocumentos,
-    'col-ferias':      pageFerias,
-    'col-atestados':   pageAtestados,
-    'col-status':      pageStatus,
-    'col-exames':      pageExames,
-    'col-historico':   pageHistoricoCol,
-    'col-enviar':      pageEnviar,
-    'cont-candidatos': pageCandidatos,
-    'cont-vagas':      pageVagas,
-    'cont-entrevista': pageEntrevista,
-    'cont-relatorio':  pageRelatorio,
-    'dep-tabela':      pageCargosTabela,
-    'dep-historico':   pageDepHistorico,
-    'dep-alteracao':   pageAlteracao,
-    'dep-relatorio':   pageRelatorio,
-    'ficha-perfil':    pagePerfil,
-    'ficha-dados':     pageDadosPessoais,
-    'ficha-carreira':  pageCarreira,
-    'ficha-contratos': pageContratos,
-    'ficha-ocorrencias': pageOcorrencias,
-    'ficha-relatorio': pageRelatorio,
-    'av-competencias': pageCompetencias,
-    'av-colaborador':  pageAvColaborador,
-    'av-cronograma':   pageCronograma,
-    'av-20dias':       page20dias,
-    'av-90dias':       page90dias,
-    'bon-regras':      pageBonRegras,
-    'bon-historico':   pageBonHistorico,
-    'bon-relatorio':   pageRelatorio,
-    'trei-cargo':      pageTreiCargo,
-    'trei-status':     pageTreiStatus,
-    'trei-cronograma': pageCronograma,
-    'trei-alterar':    pageTreiAlterar,
-    'int-cultura':     pageCultura,
-    'int-regulamento': pageRegulamento,
-  };
-  const fn = pages[id];
-  el.innerHTML = fn ? fn() : pageGeneric(id);
-  postRender(id);
-}
-
-function postRender(id) {
-  // Tab handling
-  document.querySelectorAll('.tab').forEach(t => {
-    t.addEventListener('click', () => {
-      const group = t.closest('.tabs');
-      group.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
-      t.classList.add('active');
-      const target = t.dataset.target;
-      const panel = document.getElementById(target);
-      if (panel) {
-        document.querySelectorAll('[data-panel]').forEach(p => p.style.display='none');
-        panel.style.display = '';
-      }
-    });
-  });
-  // Forms
-  document.querySelectorAll('form').forEach(f => f.addEventListener('submit', e => { e.preventDefault(); showToast('Salvo com sucesso!'); }));
-  // Buttons with data-toast
-  document.querySelectorAll('[data-toast]').forEach(b => {
-    b.addEventListener('click', () => showToast(b.dataset.toast));
-  });
-  // Print
-  document.querySelectorAll('.btn-print').forEach(b => b.addEventListener('click', () => window.print()));
 }
 
 // ------------------------------------------------------------
@@ -862,7 +651,7 @@ function pageDashboard() {
       <div class="kpi-delta delta-down">↑ 1 vs mês anterior</div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-label">Vagas em Aberto</div>
+      <div class="kpi-label">Vagas</div>
       <div class="kpi-value">11</div>
       <div class="kpi-delta" style="color:var(--text3)">3 em processo final</div>
     </div>
@@ -913,32 +702,332 @@ function pageDashboard() {
     </div>
   </div>`;
 }
+// ------------------------------------------------------------
+// HISTÓRICO DE CARREIRA DETALHADO POR COLABORADOR
+// ------------------------------------------------------------
+function pageHistoricoCarreiraDetalhe(colabIdx) {
+  if (!window._historicoCarreira) window._historicoCarreira = [];
+  const emp = window._statusEmployees || [];
+  const cargos = window._cargos || [];
 
+  const colaborador = emp[colabIdx];
+  if (!colaborador) {
+    return `<div class="empty-state">
+              <div class="empty-state-icon">🤔</div>
+              <div class="empty-state-title">Colaborador não encontrado</div>
+              <div class="empty-state-desc">Não foi possível carregar o histórico para este colaborador.</div>
+              <button class="btn" onclick="navigate('col-historico','Histórico','Colaboradores')">← Voltar para a lista</button>
+            </div>`;
+  }
 
-function pageDocumentos() {
-  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" data-toast="Upload iniciado">+ Enviar Documento</button>`;
+  const nomeColab = colaborador[0];
+  const cargoAtualColab = colaborador[1];
+  const dataAdmissaoColab = colaborador[3]; // Assumindo que o índice 3 é a data de admissão
+
+  // --- Lógica para criar o primeiro registro automaticamente ---
+  // Filtra os registros para o colaborador atual
+  let registrosDoColaborador = window._historicoCarreira.filter(reg => reg.colabIdx == colabIdx);
+
+  // Se não houver registros para este colaborador, cria o primeiro
+  if (registrosDoColaborador.length === 0) {
+    const salarioAtual = cargos.find(([c]) => c === cargoAtualColab)?.[1] || ''; // Busca o salário pelo cargo
+    const novoRegistroInicial = {
+      colabIdx: colabIdx,
+      periodoInicio: dataAdmissaoColab,
+      periodoFim: null, // Vazio
+      cargo: cargoAtualColab,
+      salario: salarioAtual,
+      motivo: 'Admissão', // Ou 'Registro Inicial'
+      originalIndex: window._historicoCarreira.length > 0 ? Math.max(...window._historicoCarreira.map(r => r.originalIndex)) + 1 : 0
+    };
+    window._historicoCarreira.push(novoRegistroInicial);
+    window._salvarStorage(); // Salva imediatamente para persistir o novo registro
+    registrosDoColaborador.push(novoRegistroInicial); // Adiciona ao array local para renderizar
+  }
+  // --- Fim da lógica de criação automática ---
+
+  document.getElementById('topbar-actions').innerHTML =
+    `<button class="btn btn-primary" onclick="openCarreiraModal(${colabIdx})">+ Adicionar Registro</button>`;
+
+  const renderCarreiraTabelaDetalhe = () => {
+    const tbody = document.getElementById('carreira-tbody-detalhe');
+    if (!tbody) return;
+
+    // Re-filtra e ordena para garantir que o registro recém-criado seja incluído e ordenado
+    const registrosParaRenderizar = window._historicoCarreira
+      .filter(reg => reg.colabIdx == colabIdx)
+      .sort((a, b) => {
+        // Converte datas para objetos Date para comparação, tratando null/vazio
+        const dateA = a.periodoInicio ? new Date(a.periodoInicio.split('/').reverse().join('-')) : new Date(0); // Epoch para null
+        const dateB = b.periodoInicio ? new Date(b.periodoInicio.split('/').reverse().join('-')) : new Date(0);
+        return dateB - dateA; // Mais recente primeiro
+      });
+
+    let htmlContent = '';
+    if (registrosParaRenderizar.length === 0) {
+      htmlContent = `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro de carreira para ${nomeColab}.</td></tr>`;
+    } else {
+      registrosParaRenderizar.forEach((reg) => {
+        htmlContent += `
+          <tr>
+            <td>${reg.periodoInicio || '—'}</td>
+            <td>${reg.periodoFim || 'Atual'}</td>
+            <td>${reg.cargo || '—'}</td>
+            <td>${reg.salario || '—'}</td>
+            <td>${reg.motivo || '—'}</td>
+            <td>
+              <button class="action-btn" title="Editar" onclick="openCarreiraModal(${colabIdx}, ${reg.originalIndex})">✎</button>
+              <button class="action-btn" title="Excluir" style="color:var(--danger)" onclick="deletarCarreira(${colabIdx}, ${reg.originalIndex})">✕</button>
+            </td>
+          </tr>`;
+      });
+    }
+    tbody.innerHTML = htmlContent;
+  };
+
+  // Torna a função de renderização global para ser chamada após salvar/deletar
+  window.renderCarreiraTabelaDetalhe = renderCarreiraTabelaDetalhe;
+  setTimeout(renderCarreiraTabelaDetalhe, 0); // Renderiza a tabela após o HTML ser inserido
+
+  // Pega a data atual para preencher o campo de data no modal
+  const hoje = new Date().toISOString().split('T')[0];
+
   return `
+  <div id="carreira-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;padding:32px;width:560px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="carreira-modal-title">Adicionar Registro de Carreira</div>
+      <div class="form-grid">
+        <div class="form-group form-full">
+          <label class="form-label">Colaborador</label>
+          <select class="form-select" id="carreira-colab" disabled>
+            <option value="${colabIdx}">${nomeColab}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Período Início</label>
+          <input class="form-input" type="date" id="carreira-inicio" value="${hoje}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Período Fim</label>
+          <input class="form-input" type="date" id="carreira-fim">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cargo</label>
+          <select class="form-select" id="carreira-cargo">
+            <option value="">— Selecione o Cargo —</option>
+            ${cargos.map(([c]) => `<option value="${c}">${c}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Salário</label>
+          <input class="form-input" type="text" id="carreira-salario" placeholder="R$ 0.000,00">
+        </div>
+        <div class="form-group form-full">
+          <label class="form-label">Motivo</label>
+          <textarea class="form-textarea" id="carreira-motivo" placeholder="Ex: Promoção, Transferência, Reajuste..."></textarea>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button class="btn" onclick="document.getElementById('carreira-modal').style.display='none'">Cancelar</button>
+        <button class="btn btn-primary" onclick="salvarCarreira()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
   <div class="table-card">
     <div class="table-header">
-      <span class="table-title">Documentos</span>
-      <input class="search-input" placeholder="Buscar documento...">
+      <span class="table-title">Histórico de Carreira de ${nomeColab}</span>
+      <div class="table-actions">
+        <button class="btn" onclick="navigate('col-historico', 'Histórico', 'Colaboradores')">← Voltar</button>
+      </div>
     </div>
-    <table>
-      <thead><tr><th>Documento</th><th>Colaborador</th><th>Tipo</th><th>Data Envio</th><th>Validade</th><th>Status</th><th>Ações</th></tr></thead>
-      <tbody>
-        ${[
-      
-        ].map(([doc,col,tipo,env,val,st]) => `
-          <tr>
-            <td>${doc}</td><td>${col}</td><td><span class="badge badge-gray">${tipo}</span></td>
-            <td>${env}</td><td>${val}</td>
-            <td><span class="badge ${st==='OK'?'badge-active':'badge-inactive'}">${st}</span></td>
-            <td><button class="action-btn" data-toast="Download iniciado">⬇</button><button class="action-btn" data-toast="Visualizando">👁</button></td>
-          </tr>`).join('')}
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Período Início</th>
+          <th>Período Fim</th>
+          <th>Cargo</th>
+          <th>Salário</th>
+          <th>Motivo</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="carreira-tbody-detalhe">
+        <!-- Registros serão inseridos aqui pelo JavaScript -->
       </tbody>
     </table>
   </div>`;
 }
+
+// ------------------------------------------------------------
+// DOCUMENTOS
+// ------------------------------------------------------------
+function pageDocumentos() {
+  // Garante que o array de documentos existe
+  if (!window._documentosPorColab) window._documentosPorColab = {};
+
+  const emp = window._statusEmployees || [];
+
+  document.getElementById('topbar-actions').innerHTML =
+    `<button class="btn btn-primary" onclick="openEnviarDocModal()">+ Enviar Documento</button>`;
+
+  const rows = emp.map((e, i) => {
+    const docs = window._documentosPorColab[i] || [];
+    const qtd  = docs.length;
+    const ini  = e[0][0].toUpperCase();
+    return `
+    <tr style="cursor:pointer" onclick="openDocColabModal(${i})">
+      <td>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="width:36px;height:36px;border-radius:50%;background:#111;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0">${ini}</div>
+          <strong>${e[0]}</strong>
+        </div>
+      </td>
+      <td>${e[1]}</td>
+      <td><span class="badge ${e[2]==='Ativo'?'badge-active':'badge-inactive'}">${e[2]}</span></td>
+      <td>${qtd > 0 ? `<span class="badge badge-info">${qtd} doc${qtd>1?'s':''}</span>` : '<span style="color:var(--text3);font-size:12px">Nenhum</span>'}</td>
+      <td><button class="btn btn-sm" onclick="event.stopPropagation();openDocColabModal(${i})">👁 Ver Documentos</button></td>
+    </tr>`;
+  }).join('');
+
+  return `
+  <!-- Modal: documentos do colaborador -->
+  <div id="doc-colab-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;width:620px;max-width:95vw;max-height:85vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+      <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:15px;font-weight:700" id="doc-colab-title">Documentos</div>
+        <button class="btn btn-sm" onclick="document.getElementById('doc-colab-modal').style.display='none'">✕ Fechar</button>
+      </div>
+      <div style="padding:24px" id="doc-colab-body"></div>
+    </div>
+  </div>
+
+  <!-- Modal: enviar documento -->
+  <div id="enviar-doc-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+      <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:15px;font-weight:700">Enviar Documento</div>
+        <button class="btn btn-sm" onclick="document.getElementById('enviar-doc-modal').style.display='none'">✕</button>
+      </div>
+      <div style="padding:24px">
+        <div class="form-group" style="margin-bottom:16px">
+          <label class="form-label">Colaborador</label>
+          <select class="form-select" id="enviar-doc-colab">
+            <option value="">— Selecione —</option>
+            ${emp.map((e,i)=>`<option value="${i}">${e[0]}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:16px">
+          <label class="form-label">Tipo de Documento</label>
+          <select class="form-select" id="enviar-doc-tipo">
+            <option value="">— Selecione —</option>
+            <option value="RG/CPF">Documento RG e CPF</option>
+            <option value="Contrato">Contrato</option>
+            <option value="ASO Admissional">ASO Admissional</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:20px">
+          <label class="form-label">Arquivo</label>
+          <input class="form-input" type="file" id="enviar-doc-arquivo" accept=".pdf,.jpg,.png,.jpeg">
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn" onclick="document.getElementById('enviar-doc-modal').style.display='none'">Cancelar</button>
+          <button class="btn btn-primary" onclick="salvarDocumento()">📤 Enviar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabela principal -->
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">Documentos por Colaborador</span>
+      <input class="search-input" id="doc-search" placeholder="Buscar colaborador..." oninput="filtrarDocColab(this.value)">
+    </div>
+    <table>
+      <thead><tr><th>Colaborador</th><th>Cargo</th><th>Status</th><th>Documentos</th><th>Ações</th></tr></thead>
+      <tbody id="doc-colab-tbody">${rows}</tbody>
+    </table>
+    <div class="table-pagination"><span>${emp.length} colaboradores</span></div>
+  </div>`;
+}
+
+window.filtrarDocColab = function(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('#doc-colab-tbody tr').forEach(tr => {
+    tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+};
+
+window.openDocColabModal = function(idx) {
+  const emp  = window._statusEmployees[idx];
+  const docs = window._documentosPorColab[idx] || [];
+  const tipos = { 'RG/CPF':'doc-rg', 'Contrato':'doc-contrato', 'ASO Admissional':'doc-aso' };
+
+  document.getElementById('doc-colab-title').textContent = `Documentos — ${emp[0]}`;
+
+  const corpo = docs.length === 0
+    ? `<div class="empty-state"><div class="empty-state-icon">📂</div><div class="empty-state-title">Nenhum documento enviado</div><div class="empty-state-desc">Clique em "Enviar Documento" para adicionar.</div></div>`
+    : `<table style="width:100%">
+        <thead><tr><th>Tipo</th><th>Arquivo</th><th>Envio</th><th>Status</th><th>Ações</th></tr></thead>
+        <tbody>
+          ${docs.map((d,di)=>`
+            <tr>
+              <td><span class="badge ${tipos[d.tipo]||'badge-gray'}">${d.tipo}</span></td>
+              <td style="font-size:12px">${d.nome}</td>
+              <td style="font-size:12px;color:var(--text3)">${d.envio}</td>
+              <td><span class="badge badge-active">${d.status}</span></td>
+              <td>
+                <button class="action-btn" onclick="showToast('Download: ${d.nome}')">⬇</button>
+                <button class="action-btn btn-danger" onclick="excluirDoc(${idx},${di})">✕</button>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+
+  document.getElementById('doc-colab-body').innerHTML = corpo;
+  document.getElementById('doc-colab-modal').style.display = 'flex';
+};
+
+window.excluirDoc = function(colabIdx, docIdx) {
+  if (!confirm('Excluir este documento?')) return;
+  window._documentosPorColab[colabIdx].splice(docIdx, 1);
+  openDocColabModal(colabIdx); // re-abre o modal atualizado
+  showToast('Documento removido.');
+};
+
+window.openEnviarDocModal = function(colabIdx=null) {
+  if (colabIdx !== null) {
+    document.getElementById('enviar-doc-colab').value = colabIdx;
+  }
+  document.getElementById('enviar-doc-tipo').value = '';
+  document.getElementById('enviar-doc-arquivo').value = '';
+  document.getElementById('enviar-doc-modal').style.display = 'flex';
+};
+
+window.salvarDocumento = function() {
+  const cidx  = document.getElementById('enviar-doc-colab').value;
+  const tipo  = document.getElementById('enviar-doc-tipo').value;
+  const arq   = document.getElementById('enviar-doc-arquivo').files[0];
+
+  if (cidx === '') return showToast('Selecione um colaborador.');
+  if (!tipo)       return showToast('Selecione o tipo de documento.');
+  if (!arq)        return showToast('Selecione um arquivo.');
+
+  if (!window._documentosPorColab[cidx]) window._documentosPorColab[cidx] = [];
+
+  const hoje = new Date().toLocaleDateString('pt-BR');
+  window._documentosPorColab[cidx].push({
+    tipo,
+    nome: arq.name,
+    envio: hoje,
+    status: 'OK'
+  });
+
+  document.getElementById('enviar-doc-modal').style.display = 'none';
+  showToast('Documento enviado com sucesso!');
+  navigate('col-documentos', 'Documentos', 'Colaboradores');
+};
 
 // ------------------------------------------------------------
 // FÉRIAS
@@ -991,174 +1080,542 @@ function pageAtestados() {
 }
 
 // ------------------------------------------------------------
-// STATUS
+// Informações Contratuais
 // ------------------------------------------------------------
+// Variável global para saber qual colaborador está sendo editado no modal
+async function loadColaboradoresFromSupabase() {
+  if (!supaClient) {
+    console.error('Supabase client não inicializado.');
+    return;
+  }
+  showToast('Carregando colaboradores...', 'info');
+  const { data, error } = await supaClient
+    .from('colaboradores')
+    .select('*, cargos(nome_cargo, salario_base)') // Seleciona o nome do cargo e salário base
+    .order('nome_colaborador', { ascending: true });
+
+  if (error) {
+    console.error('Erro ao carregar colaboradores:', error.message);
+    showToast('Erro ao carregar colaboradores.', 'danger');
+    _colaboradoresSupabase = [];
+  } else {
+    _colaboradoresSupabase = data;
+    showToast('Colaboradores carregados!', 'success');
+  }
+  renderStatusTable();
+}
+
+function renderStatusTable() {
+  const tbody = document.getElementById('status-table-body');
+  if (!tbody) return;
+
+  tbody.innerHTML = ''; // Limpa a tabela
+
+  if (_colaboradoresSupabase.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text3);">Nenhum colaborador encontrado.</td></tr>`;
+    return;
+  }
+
+  _colaboradoresSupabase.forEach(colab => {
+    const cargoNome = colab.cargos ? colab.cargos.nome_cargo : 'N/A';
+    const salarioBase = colab.cargos && colab.cargos.salario_base ?
+                        new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(colab.cargos.salario_base)) : 'N/A';
+    const statusBadgeClass = colab.status_colaborador === 'Ativo' ? 'badge-active' : 'badge-inactive';
+
+    tbody.innerHTML += `
+      <tr>
+        <td>${colab.nome_colaborador}</td>
+        <td>${cargoNome}</td>
+        <td>${colab.departamento || 'N/A'}</td>
+        <td>${colab.desde ? new Date(colab.desde).toLocaleDateString('pt-BR') : 'N/A'}</td>
+        <td>${salarioBase}</td>
+        <td><span class="badge ${statusBadgeClass}">${colab.status_colaborador}</span></td>
+        <td>
+          <button class="action-btn" onclick="openStatusModal('${colab.id_colaborador}')">✏️</button>
+          <button class="action-btn" onclick="viewStatusEmployee('${colab.id_colaborador}')">👁️</button>
+          <button class="action-btn" onclick="printStatusRow('${colab.id_colaborador}')">🖨️</button>
+        </td>
+      </tr>
+    `;
+  });
+}
 function pageStatus() {
-  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" onclick="openStatusModal()">+ Novo Colaborador</button>`;
-  const employees = [
-    ['AMANDA SOUSA LIMA','Encarregado de Setor - Nível 1','Ativo','01/01/2024'],
-    ['LUCIANA DA SILVA','Auxiliar Administrativo - Nível 1','Ativo','01/01/2024'],
-    ['JUCICLÉIA DE CARVALHO','Gerente Geral - Nível 2','Ativo','01/01/2024'],
-    ['KAROL SILVA JARDIM','Auxiliar Administrativo - Nível 1','Ativo','01/01/2024'],
-    ['LEANDRO ALMEIDA','Encarregado de Setor - Nível 1','Ativo','01/01/2024'],
-    ['MAXSUEL DA SILVA SANTOS','Soldador - Nível 1','Ativo','01/01/2024'],
-    ['LEANDRO FELIX DA SILVA','Soldador - Nível 1','Ativo','01/01/2024'],
-    ['JOÃO ALVES MORAIS','Soldador - Nível 1','Ativo','01/01/2024'],
-    ['JACSON MARTINS','Soldador - Nível 1','Ativo','01/01/2024'],
-    ['MARCOS VINICIUS LIMA DA SILVA','Operador de Máquinas - Nível 1','Ativo','01/01/2024'],
-    ['JOSIELTON DIAS REIS','Operador de Máquinas - Nível 1','Ativo','01/01/2024'],
-    ['EDNELTON BORGES ANDRADE','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['CLAUDIA CRISTINA DE HOLANDA DA SILVA','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['JEIEL SILVA NUNES','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['MARCOS ANTONIO DOS SANTOS','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['JOAO PAULO FERNANDES','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['LEU FRANCISCO DE SOUSA','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['HELMETH FERREIRA','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['CICERO RYAN TIMOTEO','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['MARCOS DIONES CARVALHO','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['PEDRO EYDSON','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['MICAEL DA SILVA','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['ANDREY THALYS RODRIGUES','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['RAFAEL CAILO','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['LUCAS MARTINS','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['DANILLO MENDES','Auxiliar de Produção','Ativo','01/01/2024'],
-    ['RAILON DE SOUSA OLIVEIRA','Encarregado Geral','Ativo','01/01/2024'],
-    ['JOSIAS CARDOSO BONINA','Encarregado Geral','Ativo','01/01/2024'],
-    ['DARTO TIAGO DE ARAUJO','Entregador e Montador - Nível 3','Ativo','01/01/2024'],
-    ['JACIRA DE ARAÚJO GONÇALVES','Cozinheira','Ativo','01/01/2024'],
-    ['IVONETE DE ARAUJO','Serviços Gerais','Ativo','01/01/2024'],
-    ['MEIRILENE COSTA','Serviços Gerais','Ativo','01/01/2024'],
-    ['MARINETE DOS SANTOS','Serviços Gerais','Ativo','01/01/2024'],
-    ['CRISTIANO DOS SANTOS','Auxiliar Administrativo - Nível 1','Ativo','01/01/2024'],
-  ];
-  window._statusEmployees = employees;
+  // Chama a função para carregar os dados do Supabase
+  // e renderizar a tabela assim que a página for exibida.
+  // Isso garante que os dados sejam carregados sempre que a aba for acessada.
+  loadColaboradoresFromSupabase();
 
-  setTimeout(()=>{
-    const search = document.getElementById('status-search');
-    if(search) search.addEventListener('input', function(){
-      const q = this.value.toLowerCase();
-      document.querySelectorAll('#status-tbody tr').forEach(tr=>{
-        tr.style.display = tr.children[0].textContent.toLowerCase().includes(q) ? '' : 'none';
-      });
-    });
-  },50);
-
+  // O HTML da página, incluindo o modal e a tabela vazia que será preenchida
   return `
+  <!-- Modal: Adicionar/Editar Colaborador -->
   <div id="status-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:6px;padding:32px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
-      <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="status-modal-title">Editar Colaborador</div>
-      <div class="form-grid" style="margin-bottom:16px">
-        <div class="form-group form-full"><label class="form-label">Nome</label><input class="form-input" id="sm-nome"></div>
-        <div class="form-group"><label class="form-label">Cargo</label><input class="form-input" id="sm-cargo"></div>
-        <div class="form-group"><label class="form-label">Status</label>
-          <select class="form-select" id="sm-status"><option>Ativo</option><option>Afastado</option><option>Desligado</option></select>
+    <div style="background:#fff;border-radius:6px;padding:32px;width:560px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="status-modal-title">Novo Colaborador</div>
+      <div class="form-grid">
+        <div class="form-group form-full">
+          <label class="form-label">Nome Completo</label>
+          <input class="form-input" id="sm-nome" placeholder="Nome do Colaborador">
         </div>
-        <div class="form-group"><label class="form-label">Desde</label><input class="form-input" id="sm-desde" type="date"></div>
+        <div class="form-group">
+          <label class="form-label">Cargo</label>
+          <select class="form-select" id="sm-cargo">
+            <!-- Opções de cargo serão preenchidas via JS -->
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Departamento</label>
+          <input class="form-input" id="sm-departamento" placeholder="Ex: Produção, RH">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Data de Admissão</label>
+          <input class="form-input" type="date" id="sm-desde">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Salário Base</label>
+          <input class="form-input" type="text" id="sm-salario-base" placeholder="R$ 0.000,00" readonly>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <select class="form-select" id="sm-status">
+            <option value="Ativo">Ativo</option>
+            <option value="Inativo">Inativo</option>
+            <option value="Férias">Férias</option>
+            <option value="Afastado">Afastado</option>
+          </select>
+        </div>
       </div>
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button class="btn" onclick="document.getElementById('status-modal').style.display='none'">Cancelar</button>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button class="btn" onclick="closeStatusModal()">Cancelar</button>
         <button class="btn btn-primary" onclick="saveStatusEmployee()">Salvar</button>
       </div>
     </div>
   </div>
-  <div id="status-view-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:6px;padding:32px;width:420px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
-      <div style="font-size:15px;font-weight:700;margin-bottom:20px">Ficha do Colaborador</div>
-      <div id="status-view-body" style="font-size:13px;line-height:2;color:var(--text)"></div>
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">
-        <button class="btn" onclick="document.getElementById('status-view-modal').style.display='none'">Fechar</button>
-        <button class="btn btn-primary" onclick="printStatusCard()">🖨 Imprimir</button>
+
+  <!-- Tabela principal de Colaboradores -->
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">Informações Contratuais</span>
+      <input class="search-input" placeholder="Buscar colaborador..." oninput="filterStatusTable(this.value)">
+      <div class="table-actions">
+        <button class="btn btn-primary" onclick="openStatusModal()">+ Adicionar Colaborador</button>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Cargo</th>
+          <th>Departamento</th>
+          <th>Desde</th>
+          <th>Salário Base</th>
+          <th>Status</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="status-table-body">
+        <!-- Dados serão carregados aqui pelo JavaScript -->
+        <tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text3);">Carregando colaboradores...</td></tr>
+      </tbody>
+    </table>
+  </div>`;
+}
+function openStatusModal(colabId = null) {
+  _editingStatusColabId = colabId;
+  const modal = document.getElementById('status-modal');
+  const modalTitle = document.getElementById('status-modal-title');
+  const smNome = document.getElementById('sm-nome');
+  const smCargo = document.getElementById('sm-cargo');
+  const smDepartamento = document.getElementById('sm-departamento'); // Novo campo
+  const smDesde = document.getElementById('sm-desde');
+  const smStatus = document.getElementById('sm-status');
+  const smSalarioBase = document.getElementById('sm-salario-base'); // Novo campo
+
+  // Popula o select de cargos
+  smCargo.innerHTML = '<option value="">— Selecione o Cargo —</option>';
+  window._cargos.forEach(cargo => {
+    smCargo.innerHTML += `<option value="${cargo.id_cargo}">${cargo.nome_cargo}</option>`;
+  });
+
+  // Event listener para atualizar o salário base ao mudar o cargo
+  smCargo.onchange = () => {
+    const selectedCargoId = smCargo.value;
+    const selectedCargo = window._cargos.find(c => c.id_cargo === selectedCargoId);
+    if (selectedCargo && selectedCargo.salario_base) {
+      smSalarioBase.value = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(selectedCargo.salario_base);
+    } else {
+      smSalarioBase.value = '';
+    }
+  };
+
+  if (colabId) {
+    modalTitle.textContent = 'Editar Colaborador';
+    const colab = _colaboradoresSupabase.find(c => c.id_colaborador === colabId);
+    if (colab) {
+      smNome.value = colab.nome_colaborador;
+      smCargo.value = colab.id_cargos;
+      smDepartamento.value = colab.departamento || ''; // Preenche o departamento
+      smDesde.value = colab.desde;
+      smStatus.value = colab.status_colaborador;
+      // Dispara o evento change para atualizar o salário base ao carregar o modal
+      smCargo.dispatchEvent(new Event('change'));
+    }
+  } else {
+    modalTitle.textContent = 'Novo Colaborador';
+    smNome.value = '';
+    smCargo.value = '';
+    smDepartamento.value = ''; // Limpa o departamento
+    smDesde.value = '';
+    smStatus.value = 'Ativo';
+    smSalarioBase.value = ''; // Limpa o salário base
+  }
+  modal.style.display = 'flex';
+}
+
+function closeStatusModal() {
+  document.getElementById('status-modal').style.display = 'none';
+}
+
+async function saveStatusEmployee() {
+  const smNome = document.getElementById('sm-nome').value.trim();
+  const smCargoId = document.getElementById('sm-cargo').value;
+  const smDepartamento = document.getElementById('sm-departamento').value.trim(); // Novo campo
+  const smDesde = document.getElementById('sm-desde').value;
+  const smStatus = document.getElementById('sm-status').value;
+
+  if (!smNome || !smCargoId || !smDesde || !smStatus) {
+    showToast('Preencha todos os campos obrigatórios.', 'danger');
+    return;
+  }
+
+  const newColabData = {
+    nome_colaborador: smNome,
+    id_cargos: smCargoId,
+    departamento: smDepartamento, // Salva o departamento
+    desde: smDesde,
+    status_colaborador: smStatus,
+  };
+
+  if (_editingStatusColabId) {
+    // Editar colaborador existente
+    const { error } = await supaClient
+      .from('colaboradores')
+      .update(newColabData)
+      .eq('id_colaborador', _editingStatusColabId);
+
+    if (error) {
+      console.error('Erro ao atualizar colaborador:', error.message);
+      showToast('Erro ao atualizar colaborador.', 'danger');
+    } else {
+      showToast('Colaborador atualizado com sucesso!', 'success');
+      closeStatusModal();
+      loadColaboradoresFromSupabase(); // Recarrega a lista
+    }
+  } else {
+    // Adicionar novo colaborador
+    const { error } = await supaClient
+      .from('colaboradores')
+      .insert([newColabData]);
+
+    if (error) {
+      console.error('Erro ao adicionar colaborador:', error.message);
+      showToast('Erro ao adicionar colaborador.', 'danger');
+    } else {
+      showToast('Colaborador adicionado com sucesso!', 'success');
+      closeStatusModal();
+      loadColaboradoresFromSupabase(); // Recarrega a lista
+    }
+  }
+}
+
+function viewStatusEmployee(colabId) {
+  const colab = _colaboradoresSupabase.find(c => c.id_colaborador === colabId);
+  if (!colab) {
+    showToast('Colaborador não encontrado.', 'error');
+    return;
+  }
+  const cargoNome = colab.cargos ? colab.cargos.nome_cargo : 'N/A';
+  const salarioBase = colab.cargos && colab.cargos.salario_base ?
+                      new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(colab.cargos.salario_base)) : 'N/A';
+
+  showToast(`
+    Nome: ${colab.nome_colaborador}
+    Cargo: ${cargoNome}
+    Departamento: ${colab.departamento || 'N/A'}
+    Salário Base: ${salarioBase}
+    Desde: ${colab.desde ? new Date(colab.desde).toLocaleDateString('pt-BR') : 'N/A'}
+    Status: ${colab.status_colaborador}
+  `, 'info', 5000); // Exibe por 5 segundos
+}
+
+function printStatusRow(colabId) {
+  const colab = _colaboradoresSupabase.find(c => c.id_colaborador === colabId);
+  if (!colab) {
+    showToast('Colaborador não encontrado para impressão.', 'error');
+    return;
+  }
+  const cargoNome = colab.cargos ? colab.cargos.nome_cargo : 'N/A';
+  const salarioBase = colab.cargos && colab.cargos.salario_base ?
+                      new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(colab.cargos.salario_base)) : 'N/A';
+
+  const w = window.open('', '_blank');
+  w.document.write(`<html><head><title>Colaborador</title><style>body{font-family:sans-serif;padding:40px}h2{margin-bottom:20px}p{margin:6px 0;font-size:14px}</style></head><body>
+    <h2>Minart Móveis — Ficha de Admissão</h2>
+    <p><strong>Nome:</strong> ${colab.nome_colaborador}</p>
+    <p><strong>Cargo:</strong> ${cargoNome}</p>
+    <p><strong>Departamento:</strong> ${colab.departamento || 'N/A'}</p>
+    <p><strong>Salário Base:</strong> ${salarioBase}</p>
+    <p><strong>Status:</strong> ${colab.status_colaborador}</p>
+    <p><strong>Desde:</strong> ${colab.desde ? new Date(colab.desde).toLocaleDateString('pt-BR') : 'N/A'}</p>
+    <p style="margin-top:30px;color:#888;font-size:12px">Impresso em: ${new Date().toLocaleDateString('pt-BR')}</p>
+  </body></html>`);
+  w.print();
+};
+
+// Função de filtro para a tabela (opcional, mas útil)
+function filterStatusTable(searchTerm) {
+  const filter = searchTerm.toUpperCase();
+  const tbody = document.getElementById('status-table-body');
+  if (!tbody) return;
+  const tr = tbody.getElementsByTagName('tr');
+
+  for (let i = 0; i < tr.length; i++) {
+    let tdNome = tr[i].getElementsByTagName('td')[0]; // Colaborador
+    let tdCargo = tr[i].getElementsByTagName('td')[1]; // Cargo
+    let tdDepartamento = tr[i].getElementsByTagName('td')[2]; // Departamento
+    let tdStatus = tr[i].getElementsByTagName('td')[5]; // Status
+
+    if (tdNome || tdCargo || tdDepartamento || tdStatus) {
+      const textValue = (tdNome ? tdNome.textContent : '') +
+                        (tdCargo ? tdCargo.textContent : '') +
+                        (tdDepartamento ? tdDepartamento.textContent : '') +
+                        (tdStatus ? tdStatus.textContent : '');
+      if (textValue.toUpperCase().indexOf(filter) > -1) {
+        tr[i].style.display = '';
+      } else {
+        tr[i].style.display = 'none';
+      }
+    }
+  }
+}
+// ============================================================
+// PAGES
+// ============================================================
+function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
+  const el = document.getElementById('content-area');
+  const pages = {
+    'dashboard':       pageDashboard,
+    'col-documentos':  pageDocumentos,
+    'col-ferias':      pageFerias,
+    'col-atestados':   pageAtestados,
+    'col-status':      pageStatus,
+    'col-exames':      pageExames,
+    'col-historico':   pageHistoricoCol,
+    'col-historico-detalhe': pageHistoricoCarreiraDetalhe,
+    'col-enviar':      pageEnviar,
+    'cont-candidatos': pageCandidatos,
+    'cont-vagas':      pageVagas,
+    'cont-entrevista': pageEntrevista,
+    'cont-relatorio':  pageRelatorio,
+    'dep-tabela':      pageCargosTabela,
+    'dep-historico':   pageDepHistorico,
+    'dep-descricao':   pageDepDescricao,
+    'dep-alteracao':   pageAlteracao,
+    'dep-relatorio':   pageRelatorio,
+    'ficha-perfil':    pagePerfil,
+    'ficha-dados':     pageDadosPessoais,
+    'ficha-contratos': pageContratos,
+    'ficha-ocorrencias': pageOcorrencias,
+    'ficha-relatorio': pageRelatorio,
+    'av-competencias': pageCompetencias,
+    'av-colaborador':  pageAvColaborador,
+    'av-cronograma':   pageCronograma,
+    'av-20dias':       page20dias,
+    'av-90dias':       page90dias,
+    'bon-regras':      pageBonRegras,
+    'bon-historico':   pageBonHistorico,
+    'bon-relatorio':   pageRelatorio,
+    'trei-cargo':      pageTreiCargo,
+    'trei-status':     pageTreiStatus,
+    'trei-cronograma': pageCronograma,
+    'trei-alterar':    pageTreiAlterar,
+    'int-cultura':     pageCultura,
+    'int-regulamento': pageRegulamento,
+  };
+  const fn = pages[id];
+  el.innerHTML = fn ? fn(param) : pageGeneric(id);
+  postRender(id);
+  if (id === 'col-status') {
+    // Garante que os cargos estejam carregados antes de tentar preencher o modal
+    loadCargosForApp().then(() => {
+      loadColaboradoresFromSupabase();
+    });
+  }
+}
+
+function postRender(id) {
+  // Tab handling
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      const group = t.closest('.tabs');
+      group.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      const target = t.dataset.target;
+      const panel = document.getElementById(target);
+      if (panel) {
+        document.querySelectorAll('[data-panel]').forEach(p => p.style.display='none');
+        panel.style.display = '';
+      }
+    });
+  });
+  // Forms
+  document.querySelectorAll('form').forEach(f => f.addEventListener('submit', e => { e.preventDefault(); showToast('Salvo com sucesso!'); }));
+  // Buttons with data-toast
+  document.querySelectorAll('[data-toast]').forEach(b => {
+    b.addEventListener('click', () => showToast(b.dataset.toast));
+  });
+  // Print
+  document.querySelectorAll('.btn-print').forEach(b => b.addEventListener('click', () => window.print()));
+  // Ocorrências
+  if (id === 'ficha-ocorrencias') {
+    setTimeout(() => { if (window.renderOcorrenciasTabela) renderOcorrenciasTabela(); }, 0);
+  }
+}
+
+
+  function pageDepDescricao() {
+  if (!window._cargosDescricao) window._cargosDescricao = [];
+
+  document.getElementById('topbar-actions').innerHTML =
+    `<button class="btn btn-primary" onclick="openDescricaoModal()">+ Adicionar Descrição</button>`;
+
+  return `
+  <div id="descricao-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;padding:32px;width:520px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="descricao-modal-title">Adicionar Descrição de Cargo</div>
+      <div class="form-group" style="margin-bottom:16px">
+        <label class="form-label">Nome do Cargo</label>
+        <select class="form-select" id="desc-cargo">
+          <option value="">— Selecione o Cargo —</option>
+          ${(window._cargos||[]).map(([c]) => `<option value="${c}">${c}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:20px">
+        <label class="form-label">Descrição do Cargo</label>
+        <textarea class="form-textarea" id="desc-texto" style="min-height:160px" placeholder="Descreva as responsabilidades, requisitos e atribuições do cargo..."></textarea>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn" onclick="document.getElementById('descricao-modal').style.display='none'">Cancelar</button>
+        <button class="btn btn-primary" onclick="salvarDescricao()">Salvar</button>
       </div>
     </div>
   </div>
+
   <div class="table-card">
     <div class="table-header">
-      <span class="table-title">Status dos Colaboradores</span>
-      <input class="search-input" id="status-search" placeholder="Buscar por nome…" style="margin-left:12px">
+      <span class="table-title">Cargos e Descrições</span>
+      <input class="search-input" placeholder="Buscar cargo..." oninput="filtrarDescricoes(this.value)" style="margin-left:12px">
     </div>
     <table>
-      <thead><tr><th>Colaborador</th><th>Cargo</th><th>Status Atual</th><th>Desde</th><th>Ações</th></tr></thead>
-      <tbody id="status-tbody">
-        ${employees.map(([n,c,st,desde],i)=>`
-          <tr data-i="${i}">
-            <td><strong>${n}</strong></td>
-            <td>${c}</td>
-            <td><span class="badge ${st==='Ativo'?'badge-active':st==='Afastado'?'badge-pending':'badge-inactive'}">${st}</span></td>
-            <td>${desde}</td>
-            <td>
-              <button class="action-btn" title="Visualizar" onclick="viewStatusEmployee(${i})">👁</button>
-              <button class="action-btn" title="Editar" onclick="editStatusEmployee(${i})">✎</button>
-              <button class="action-btn" title="Imprimir" onclick="printStatusRow(${i})">🖨</button>
-            </td>
-          </tr>`).join('')}
+      <thead>
+        <tr>
+          <th>Cargo</th>
+          <th>Descrição</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="descricao-tbody">
+        ${window._cargosDescricao.length === 0
+          ? '<tr><td colspan="3" style="text-align:center;padding:32px;color:var(--text3)">Nenhuma descrição cadastrada. Clique em "+ Adicionar Descrição" para começar.</td></tr>'
+          : window._cargosDescricao.map((d, i) => `
+              <tr>
+                <td><strong>${d.cargo}</strong></td>
+                <td style="max-width:480px;color:var(--text2);font-size:13px;white-space:pre-wrap">${d.texto}</td>
+                <td style="white-space:nowrap">
+                  <button class="action-btn" title="Editar" onclick="editarDescricao(${i})">✎</button>
+                  <button class="action-btn" title="Excluir" style="color:var(--danger)" onclick="deletarDescricao(${i})">✕</button>
+                </td>
+              </tr>`).join('')}
       </tbody>
     </table>
-    <div class="table-pagination"><span>${employees.length} colaboradores</span></div>
+    <div class="table-pagination" id="descricao-pagination">
+      <span>${window._cargosDescricao.length} descrição${window._cargosDescricao.length !== 1 ? 'ões' : ''} cadastrada${window._cargosDescricao.length !== 1 ? 's' : ''}</span>
+    </div>
   </div>`;
 }
 
-window.openStatusModal = function(idx=null){
-  const m = document.getElementById('status-modal');
-  const emp = window._statusEmployees;
-  window._editingStatusIdx = idx;
-  if(idx!==null){
-    const [n,c,st,desde] = emp[idx];
-    document.getElementById('sm-nome').value=n;
-    document.getElementById('sm-cargo').value=c;
-    document.getElementById('sm-status').value=st;
-    const parts = desde.split('/');
-    document.getElementById('sm-desde').value = parts.length===3?`${parts[2]}-${parts[1]}-${parts[0]}`:'';
-    document.getElementById('status-modal-title').textContent='Editar Colaborador';
+window.openDescricaoModal = function(idx) {
+  window._editingDescricaoIdx = (idx !== undefined) ? idx : null;
+  const modal = document.getElementById('descricao-modal');
+  if (!modal) return;
+  if (window._editingDescricaoIdx !== null) {
+    const d = window._cargosDescricao[window._editingDescricaoIdx];
+    document.getElementById('desc-cargo').value = d.cargo;
+    document.getElementById('desc-texto').value = d.texto;
+    document.getElementById('descricao-modal-title').textContent = 'Editar Descrição de Cargo';
   } else {
-    ['sm-nome','sm-cargo','sm-desde'].forEach(id=>document.getElementById(id).value='');
-    document.getElementById('sm-status').value='Ativo';
-    document.getElementById('status-modal-title').textContent='Novo Colaborador';
+    document.getElementById('desc-cargo').value = '';
+    document.getElementById('desc-texto').value = '';
+    document.getElementById('descricao-modal-title').textContent = 'Adicionar Descrição de Cargo';
   }
-  m.style.display='flex';
-};
-window.editStatusEmployee = function(i){ openStatusModal(i); };
-window.saveStatusEmployee = function(){
-  const emp = window._statusEmployees;
-  const n=document.getElementById('sm-nome').value.trim();
-  const c=document.getElementById('sm-cargo').value.trim();
-  const st=document.getElementById('sm-status').value;
-  const rawDate=document.getElementById('sm-desde').value;
-  const desde = rawDate ? rawDate.split('-').reverse().join('/') : '';
-  const idx=window._editingStatusIdx;
-  if(idx!==null) emp[idx]=[n,c,st,desde]; else emp.push([n,c,st,desde]);
-  document.getElementById('status-modal').style.display='none';
-  navigate('col-status','Status');
-};
-window.viewStatusEmployee = function(i){
-  const [n,c,st,desde]=window._statusEmployees[i];
-  document.getElementById('status-view-body').innerHTML=`
-    <div><strong>Nome:</strong> ${n}</div>
-    <div><strong>Cargo:</strong> ${c}</div>
-    <div><strong>Status:</strong> ${st}</div>
-    <div><strong>Desde:</strong> ${desde}</div>`;
-  document.getElementById('status-view-modal').style.display='flex';
-};
-window.printStatusRow = function(i){
-  const [n,c,st,desde]=window._statusEmployees[i];
-  const w=window.open('','_blank');
-  w.document.write(`<html><head><title>Colaborador</title><style>body{font-family:sans-serif;padding:40px}h2{margin-bottom:20px}p{margin:6px 0;font-size:14px}</style></head><body>
-    <h2>Minart Móveis — Ficha de Status</h2>
-    <p><strong>Nome:</strong> ${n}</p>
-    <p><strong>Cargo:</strong> ${c}</p>
-    <p><strong>Status:</strong> ${st}</p>
-    <p><strong>Desde:</strong> ${desde}</p>
-    <p style="margin-top:30px;color:#888;font-size:12px">Impresso em: ${new Date().toLocaleDateString('pt-BR')}</p>
-  </body></html>`);w.print();
-};
-window.printStatusCard = function(){
-  const body=document.getElementById('status-view-body').innerHTML;
-  const w=window.open('','_blank');
-  w.document.write(`<html><head><title>Colaborador</title><style>body{font-family:sans-serif;padding:40px}h2{margin-bottom:20px}div{margin:6px 0;font-size:14px}</style></head><body>
-    <h2>Minart Móveis — Ficha de Status</h2>${body}
-    <p style="margin-top:30px;color:#888;font-size:12px">Impresso em: ${new Date().toLocaleDateString('pt-BR')}</p>
-  </body></html>`);w.print();
+  modal.style.display = 'flex';
 };
 
+window.editarDescricao = function(i) {
+  openDescricaoModal(i);
+};
+
+window.salvarDescricao = function() {
+  const cargo = document.getElementById('desc-cargo').value;
+  const texto = document.getElementById('desc-texto').value.trim();
+  if (!cargo) return showToast('Selecione um cargo.');
+  if (!texto) return showToast('Digite a descrição do cargo.');
+  if (!window._cargosDescricao) window._cargosDescricao = [];
+  const registro = { cargo, texto };
+  const idx = window._editingDescricaoIdx;
+  if (idx !== null && idx !== undefined) {
+    window._cargosDescricao[idx] = registro;
+  } else {
+    const existente = window._cargosDescricao.findIndex(d => d.cargo === cargo);
+    if (existente !== -1) {
+      if (!confirm(`Já existe uma descrição para "${cargo}". Deseja substituir?`)) return;
+      window._cargosDescricao[existente] = registro;
+    } else {
+      window._cargosDescricao.push(registro);
+      window._salvarStorage();
+    }
+  }
+  document.getElementById('descricao-modal').style.display = 'none';
+  showToast('Descrição salva com sucesso!');
+  renderDescricaoTabela();
+};
+
+window.deletarDescricao = function(i) {
+  if (!confirm('Excluir esta descrição?')) return;
+  window._cargosDescricao.splice(i, 1);
+  window._salvarStorage();
+  showToast('Descrição removida.');
+  renderDescricaoTabela();
+};
+
+window.renderDescricaoTabela = function() {
+  const tbody = document.getElementById('descricao-tbody');
+  const pag   = document.getElementById('descricao-pagination');
+  if (!tbody) return;
+  const lista = window._cargosDescricao || [];
+  tbody.innerHTML = lista.length === 0
+    ? '<tr><td colspan="3" style="text-align:center;padding:32px;color:var(--text3)">Nenhuma descrição cadastrada.</td></tr>'
+    : lista.map((d, i) => `
+        <tr>
+          <td><strong>${d.cargo}</strong></td>
+          <td style="max-width:480px;color:var(--text2);font-size:13px;white-space:pre-wrap">${d.texto}</td>
+          <td style="white-space:nowrap">
+            <button class="action-btn" title="Editar" onclick="editarDescricao(${i})">✎</button>
+            <button class="action-btn" title="Excluir" style="color:var(--danger)" onclick="deletarDescricao(${i})">✕</button>
+          </td>
+        </tr>`).join('');
+  if (pag) pag.innerHTML = `<span>${lista.length} descrição${lista.length !== 1 ? 'ões' : ''} cadastrada${lista.length !== 1 ? 's' : ''}</span>`;
+};
+  
 // ------------------------------------------------------------
 // EXAMES
 // ------------------------------------------------------------
@@ -1181,29 +1638,60 @@ function pageExames() {
 }
 
 // ------------------------------------------------------------
-// HISTÓRICO COLABORADOR
+// COLABORADORES — HISTÓRICO (LISTA DE COLABORADORES COM BOTÃO PARA VER HISTÓRICO INDIVIDUAL)
 // ------------------------------------------------------------
 function pageHistoricoCol() {
+  const emp = window._statusEmployees || [];
+
+  // REMOVIDO: document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" onclick="openCarreiraModal()">+ Adicionar Registro de Carreira</button>`;
+  // O botão de adicionar registro agora só aparecerá na página de detalhes do colaborador.
+
+  const renderColaboradoresHistorico = (filtro = '') => {
+    const tbody = document.getElementById('colaboradores-historico-tbody');
+    if (!tbody) return;
+
+    const listaFiltrada = emp.filter(e => e[0].toLowerCase().includes(filtro.toLowerCase()));
+
+    tbody.innerHTML = listaFiltrada.length === 0
+      ? '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">Nenhum colaborador encontrado.</td></tr>'
+      : listaFiltrada.map((e, i) => `
+          <tr>
+            <td><strong>${e[0]}</strong></td>
+            <td>${e[1]}</td>
+            <td>${e[3]}</td> <!-- Data de Admissão -->
+            <td>
+              <button class="action-btn" title="Ver Histórico de Carreira" onclick="navigate('col-historico-detalhe', 'Histórico de Carreira', 'Colaboradores', ${i})">📈</button>
+            </td>
+          </tr>`).join('');
+  };
+
+  window.filtrarColaboradoresHistorico = function(valor) {
+    renderColaboradoresHistorico(valor);
+  };
+
+  setTimeout(() => renderColaboradoresHistorico(), 0); // Renderiza a tabela inicial
+
   return `
-  <div class="form-card" style="margin-bottom:16px">
-    <div class="form-group"><label class="form-label">Selecionar Colaborador</label>
-      <select class="form-select">
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">Colaboradores</span>
+      <input class="search-input" placeholder="Buscar colaborador..." oninput="filtrarColaboradoresHistorico(this.value)" style="margin-left:12px">
     </div>
-  </div>
-  <div class="chart-card">
-    <div class="timeline">
-      ${[
-      ].map(([d,t,desc])=>`
-        <div class="timeline-item">
-          <div class="timeline-dot"></div>
-          <div class="timeline-date">${d}</div>
-          <div class="timeline-title">${t}</div>
-          <div class="timeline-desc">${desc}</div>
-        </div>`).join('')}
-    </div>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Cargo Atual</th>
+          <th>Desde</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="colaboradores-historico-tbody">
+        <!-- Conteúdo gerado por JavaScript -->
+      </tbody>
+    </table>
   </div>`;
 }
-
 // ------------------------------------------------------------
 // ENVIAR COMUNICADO
 // ------------------------------------------------------------
@@ -1250,53 +1738,271 @@ function pageEnviar() {
 // CANDIDATOS
 // ------------------------------------------------------------
 function pageCandidatos() {
-  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" data-toast="Cadastrando candidato">+ Novo Candidato</button>`;
-  return `
-  <div class="table-card">
-    <div class="table-header">
-      <span class="table-title">Candidatos</span>
-      <input class="search-input" placeholder="Buscar por nome ou vaga...">
-    </div>
-    <table>
-      <thead><tr><th>Nome</th><th>E-mail</th><th>Celular</th><th>Vaga</th><th>Currículo</th><th>Fase</th><th>Ações</th></tr></thead>
-      <tbody>
-        ${[
-        ].map(([n,e,c,v,cv,f])=>`
+  if (!window._vagas) window._vagas = [];
+  if (!window._candidaturas) window._candidaturas = [];
+
+  document.getElementById('topbar-actions').innerHTML = '';
+
+  // Agrupa candidaturas por vaga
+  const grupos = window._vagas.map((v, vi) => {
+    const cands = window._candidaturas.filter(c => c.vagaToken === v.token);
+    return { vaga: v, vagaIdx: vi, cands };
+  }).filter(g => g.cands.length > 0);
+
+  const semCandidatos = grupos.length === 0;
+
+  const rows = grupos.map(g => `
+    <div class="table-card" style="margin-bottom:16px">
+      <div class="table-header">
+        <div>
+          <span class="table-title">${g.vaga.cargo}</span>
+          <span style="font-size:12px;color:var(--text3);margin-left:12px">
+            Abertura: ${g.vaga.abertura} &nbsp;·&nbsp;
+            <span class="badge badge-info">${g.cands.length} candidato${g.cands.length > 1 ? 's' : ''}</span>
+          </span>
+        </div>
+      </div>
+      <table>
+        <thead>
           <tr>
-            <td><strong>${n}</strong></td><td>${e}</td><td>${c}</td><td>${v}</td>
-            <td><span class="badge ${cv==='Sim'?'badge-active':'badge-inactive'}">${cv}</span></td>
-            <td><span class="badge badge-info">${f}</span></td>
-            <td><button class="action-btn" data-toast="Abrindo perfil">👁</button><button class="action-btn" data-toast="Entrevista agendada">📅</button></td>
-          </tr>`).join('')}
-      </tbody>
-    </table>
-  </div>`;
+            <th>Nome</th>
+            <th>E-mail</th>
+            <th>Currículo</th>
+            <th>Data de Envio</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${g.cands.map((c, ci) => `
+            <tr>
+              <td><strong>${c.nome}</strong></td>
+              <td>${c.email}</td>
+              <td>
+                ${c.curriculo
+                  ? `<span class="badge badge-active">Enviado</span>`
+                  : `<span class="badge badge-gray">Não enviado</span>`}
+              </td>
+              <td style="color:var(--text3);font-size:12px">${c.dataEnvio}</td>
+              <td>
+                <button class="action-btn" onclick="verCandidato('${c.vagaToken}', ${ci})" title="Ver dados completos">👁</button>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  `).join('');
+
+  return `
+  <!-- Modal de detalhe do candidato -->
+  <div id="candidato-detalhe-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+      <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:15px;font-weight:700">Dados do Candidato</div>
+        <button class="btn btn-sm" onclick="document.getElementById('candidato-detalhe-modal').style.display='none'">✕ Fechar</button>
+      </div>
+      <div style="padding:24px" id="candidato-detalhe-body"></div>
+    </div>
+  </div>
+
+  ${semCandidatos
+    ? `<div class="empty-state">
+        <div class="empty-state-icon">📋</div>
+        <div class="empty-state-title">Nenhum candidato ainda</div>
+        <div class="empty-state-desc">Quando alguém preencher o formulário de uma vaga, aparecerá aqui agrupado por vaga.</div>
+      </div>`
+    : rows}`;
 }
+
+window.verCandidato = function(token, ci) {
+  const cand = (window._candidaturas || []).filter(c => c.vagaToken === token)[ci];
+  if (!cand) return;
+  document.getElementById('candidato-detalhe-body').innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:12px;font-size:13px">
+      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Nome</span><div style="margin-top:4px">${cand.nome}</div></div>
+      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">E-mail</span><div style="margin-top:4px">${cand.email}</div></div>
+      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Vaga</span><div style="margin-top:4px">${cand.vagaCargo}</div></div>
+      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Data de Envio</span><div style="margin-top:4px">${cand.dataEnvio}</div></div>
+      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Currículo</span><div style="margin-top:4px">
+        ${cand.curriculo
+          ? `<span class="badge badge-active">Arquivo enviado: ${cand.curriculo}</span>`
+          : '<span class="badge badge-gray">Não enviado</span>'}
+      </div></div>
+    </div>`;
+  document.getElementById('candidato-detalhe-modal').style.display = 'flex';
+};
 
 // ------------------------------------------------------------
 // VAGAS
 // ------------------------------------------------------------
 function pageVagas() {
-  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" data-toast="Abrindo nova vaga">+ Abrir Vaga</button>`;
+  if (!window._vagas) window._vagas = [];
+
+  document.getElementById('topbar-actions').innerHTML =
+    `<button class="btn btn-primary" onclick="openVagaModal()">+ Abrir Vaga</button>`;
+
+  const renderVagasTabela = () => {
+    const tbody = document.getElementById('vagas-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = window._vagas.length === 0
+      ? '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma vaga cadastrada</td></tr>'
+      : window._vagas.map((v, i) => {
+          const link = `${location.origin}${location.pathname}?candidatura=${v.token}`;
+          return `
+            <tr>
+              <td><strong>${v.cargo}</strong></td>
+              <td>${v.depto || '—'}</td>
+              <td>${v.abertura}</td>
+              <td>${v.prazo || '—'}</td>
+              <td><span class="badge badge-info">${v.candidatos || 0}</span></td>
+              <td><span class="badge ${v.status === 'Aberta' ? 'badge-active' : 'badge-inactive'}">${v.status}</span></td>
+              <td>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <input
+                    type="text"
+                    value="${link}"
+                    readonly
+                    style="font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:3px;background:var(--bg2);width:220px;color:var(--text2);cursor:default"
+                  >
+                  <button class="btn btn-sm" onclick="copiarLinkVaga(${i})" title="Copiar link">📋</button>
+                </div>
+              </td>
+              <td>
+                ${v.status === 'Aberta'
+                  ? `<button class="action-btn" title="Encerrar" onclick="encerrarVaga(${i})">🔒</button>`
+                  : `<button class="action-btn" title="Reabrir" onclick="reabrirVaga(${i})">🔓</button>`}
+                <button class="action-btn" onclick="showToast('Visualizando')">👁</button>
+                <button class="action-btn" title="Excluir" onclick="deletarVaga(${i})" style="color:var(--danger)">✕</button>
+              </td>
+            </tr>`;
+        }).join('');
+  };
+
+  window.deletarVaga = function(i) {
+    if (!confirm('Excluir esta vaga?')) return;
+    window._vagas.splice(i, 1);
+    salvarVagasLocal(); // ← adicionar
+    window._renderVagasTabela();
+    document.getElementById('vagas-pagination').innerHTML = `<span>${window._vagas.length} vagas</span>`;
+    showToast('Vaga excluída.');
+  };
+
+  window._renderVagasTabela = renderVagasTabela;
+  setTimeout(renderVagasTabela, 0);
+
   return `
+  <div id="vaga-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;padding:32px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:20px">Abrir Nova Vaga</div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">Cargo</label>
+        <select class="form-select" id="vaga-cargo">
+          <option value="">— Selecione o Cargo —</option>
+          ${(window._cargos||[]).map(([c]) => `<option value="${c}">${c}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">Departamento</label>
+        <input class="form-input" id="vaga-depto" placeholder="Ex: Produção, Administrativo...">
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">Prazo</label>
+        <input class="form-input" type="date" id="vaga-prazo">
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">
+        <button class="btn" onclick="document.getElementById('vaga-modal').style.display='none'">Cancelar</button>
+        <button class="btn btn-primary" onclick="salvarVaga()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
   <div class="table-card">
     <div class="table-header"><span class="table-title">Vagas em Aberto</span></div>
     <table>
-      <thead><tr><th>Vaga</th><th>Departamento</th><th>Abertura</th><th>Prazo</th><th>Candidatos</th><th>Status</th><th>Ações</th></tr></thead>
-      <tbody>
-        ${[
-        ].map(([v,d,ab,pr,c,st])=>`
-          <tr><td><strong>${v}</strong></td><td>${d}</td><td>${ab}</td><td>${pr}</td>
-          <td><span class="badge badge-info">${c}</span></td>
-          <td><span class="badge ${st==='Aberta'?'badge-active':'badge-inactive'}">${st}</span></td>
-          <td>
-            <button class="action-btn" data-toast="Vaga encerrada">${st==='Aberta'?'🔒 Fechar':''}</button>
-            <button class="action-btn" data-toast="Visualizando">👁</button>
-          </td></tr>`).join('')}
+      <thead>
+        <tr>
+          <th>Vaga</th>
+          <th>Departamento</th>
+          <th>Abertura</th>
+          <th>Prazo</th>
+          <th>Candidatos</th>
+          <th>Status</th>
+          <th>Link de Candidatura</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="vagas-tbody">
+        <tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
       </tbody>
     </table>
+    <div class="table-pagination" id="vagas-pagination"><span>${window._vagas.length} vagas</span></div>
   </div>`;
 }
+
+window.copiarLinkVaga = function(i) {
+  const v = window._vagas[i];
+  const link = `${location.origin}${location.pathname}?candidatura=${v.token}`;
+  navigator.clipboard.writeText(link).then(() => {
+    showToast('Link copiado para a área de transferência!');
+  }).catch(() => {
+    // fallback para navegadores sem suporte
+    const el = document.createElement('textarea');
+    el.value = link;
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand('copy');
+    document.body.removeChild(el);
+    showToast('Link copiado!');
+  });
+};
+
+window.encerrarVaga = function(i) {
+  window._vagas[i].status = 'Encerrada';
+  salvarVagasLocal(); // ← adicionar
+  window._renderVagasTabela();
+  document.getElementById('vagas-pagination').innerHTML =
+    `<span>${window._vagas.length} vagas</span>`;
+  showToast('Vaga encerrada.');
+};
+
+window.reabrirVaga = function(i) {
+  window._vagas[i].status = 'Aberta';
+  salvarVagasLocal(); // ← adicionar
+  window._renderVagasTabela();
+  showToast('Vaga reaberta.');
+};
+
+window.openVagaModal = function() {
+  document.getElementById('vaga-cargo').value = '';
+  document.getElementById('vaga-depto').value = '';
+  document.getElementById('vaga-prazo').value = '';
+  document.getElementById('vaga-modal').style.display = 'flex';
+};
+
+window.salvarVaga = function() {
+  const cargo = document.getElementById('vaga-cargo').value;
+  const depto = document.getElementById('vaga-depto').value;
+  const prazo = document.getElementById('vaga-prazo').value;
+  if (!cargo) return showToast('Selecione um cargo.');
+
+  // Gera token único para o link público
+  const token = Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+
+  window._vagas.push({
+    cargo,
+    depto,
+    prazo: prazo ? prazo.split('-').reverse().join('/') : '—',
+    abertura: new Date().toLocaleDateString('pt-BR'),
+    candidatos: 0,
+    status: 'Aberta',
+    token
+  });
+  salvarVagasLocal(); // ← adicionar
+  document.getElementById('vaga-modal').style.display = 'none';
+  showToast('Vaga aberta com sucesso!');
+  window._renderVagasTabela();
+  document.getElementById('vagas-pagination').innerHTML =
+    `<span>${window._vagas.length} vagas</span>`;
+};
 
 // ------------------------------------------------------------
 // FORMULÁRIO DE ENTREVISTA
@@ -1380,44 +2086,8 @@ function pageCadCargos() {
 // ------------------------------------------------------------
 function pageCargosTabela() {
   document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" onclick="openCargoModal()">+ Novo Cargo</button>`;
-  if(!window._cargos) window._cargos = [
-    ['Serviços Gerais','R$ 1.628,00'],
-    ['Recepcionista','R$ 1.628,00'],
-    ['Auxiliar de Cozinha','R$ 1.628,00'],
-    ['Auxiliar de Produção','R$ 1.765,00'],
-    ['Auxiliar de Montador','R$ 1.765,00'],
-    ['Auxiliar de Vidraceiro','R$ 1.765,00'],
-    ['Desenhista','R$ 1.765,00'],
-    ['Vendedor','R$ 1.765,00'],
-    ['Orçamentista','R$ 1.765,00'],
-    ['Cozinheira(o)','R$ 1.765,00'],
-    ['Entregador e Montador - Nível 1','R$ 1.956,00'],
-    ['Entregador e Montador - Nível 2','R$ 2.138,00'],
-    ['Entregador e Montador - Nível 3','R$ 2.304,00'],
-    ['Operador de Máquinas - Nível 1','R$ 1.956,00'],
-    ['Operador de Máquinas - Nível 2','R$ 2.138,00'],
-    ['Operador de Máquinas - Nível 3','R$ 2.300,00'],
-    ['Auxiliar Administrativo - Nível 1','R$ 1.960,00'],
-    ['Auxiliar Administrativo - Nível 2','R$ 2.142,00'],
-    ['Auxiliar Administrativo - Nível 3','R$ 2.308,00'],
-    ['Desenhista, Orçamentista e Vendedor','R$ 2.351,00'],
-    ['Marceneiro - Nível 1','R$ 2.352,00'],
-    ['Marceneiro - Nível 2','R$ 2.569,00'],
-    ['Marceneiro - Nível 3','R$ 2.765,00'],
-    ['Pintor','R$ 2.352,00'],
-    ['Soldador - Nível 1','R$ 2.352,00'],
-    ['Soldador - Nível 2','R$ 2.569,00'],
-    ['Soldador - Nível 3','R$ 2.765,00'],
-    ['Tapeceiro','R$ 2.352,00'],
-    ['Vidraceiro','R$ 2.352,00'],
-    ['Encarregado de Setor - Nível 1','R$ 2.355,00'],
-    ['Encarregado de Setor - Nível 2','R$ 2.482,00'],
-    ['Encarregado de Setor - Nível 3','R$ 2.610,00'],
-    ['Encarregado Geral','R$ 2.611,00'],
-    ['Designer de Interiores','R$ 2.611,00'],
-    ['Gerente Geral - Nível 1','R$ 2.852,00'],
-    ['Gerente Geral - Nível 2','R$ 3.070,00'],
-  ];
+  if(!window._cargos) window._cargos = [ ];
+  
   const revisao = '01/01/2026';
   return `
   <div id="cargo-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
@@ -1447,47 +2117,6 @@ function pageCargosTabela() {
             <button class="action-btn" title="Editar" onclick="editCargo(${i})">✎</button>
             <button class="action-btn btn-danger" title="Excluir" onclick="deleteCargo(${i})">✕</button>
           </td></tr>`).join('')}
-      <thead><tr><th>Cargo</th><th>Salário Base</th><th>Última Revisão</th></tr></thead>
-      <tbody>
-        ${[
-          ['Serviços Gerais','R$ 1.628,00'],
-          ['Recepcionista','R$ 1.628,00'],
-          ['Auxiliar de Cozinha','R$ 1.628,00'],
-          ['Auxiliar de Produção','R$ 1.765,00'],
-          ['Auxiliar de Montador','R$ 1.765,00'],
-          ['Auxiliar de Vidraceiro','R$ 1.765,00'],
-          ['Desenhista','R$ 1.765,00'],
-          ['Vendedor','R$ 1.765,00'],
-          ['Orçamentista','R$ 1.765,00'],
-          ['Cozinheira(o)','R$ 1.765,00'],
-          ['Entregador e Montador - Nível 1','R$ 1.956,00'],
-          ['Entregador e Montador - Nível 2','R$ 2.138,00'],
-          ['Entregador e Montador - Nível 3','R$ 2.304,00'],
-          ['Operador de Máquinas - Nível 1','R$ 1.956,00'],
-          ['Operador de Máquinas - Nível 2','R$ 2.138,00'],
-          ['Operador de Máquinas - Nível 3','R$ 2.300,00'],
-          ['Auxiliar Administrativo - Nível 1','R$ 1.960,00'],
-          ['Auxiliar Administrativo - Nível 2','R$ 2.142,00'],
-          ['Auxiliar Administrativo - Nível 3','R$ 2.308,00'],
-          ['Desenhista, Orçamentista e Vendedor','R$ 2.351,00'],
-          ['Marceneiro - Nível 1','R$ 2.352,00'],
-          ['Marceneiro - Nível 2','R$ 2.569,00'],
-          ['Marceneiro - Nível 3','R$ 2.765,00'],
-          ['Pintor','R$ 2.352,00'],
-          ['Soldador - Nível 1','R$ 2.352,00'],
-          ['Soldador - Nível 2','R$ 2.569,00'],
-          ['Soldador - Nível 3','R$ 2.765,00'],
-          ['Tapeceiro','R$ 2.352,00'],
-          ['Vidraceiro','R$ 2.352,00'],
-          ['Encarregado de Setor - Nível 1','R$ 2.355,00'],
-          ['Encarregado de Setor - Nível 2','R$ 2.482,00'],
-          ['Encarregado de Setor - Nível 3','R$ 2.610,00'],
-          ['Encarregado Geral','R$ 2.611,00'],
-          ['Designer de Interiores','R$ 2.611,00'],
-          ['Gerente Geral - Nível 1','R$ 2.852,00'],
-          ['Gerente Geral - Nível 2','R$ 3.070,00'],
-        ].map(([c,sb])=>`
-          <tr><td><strong>${c}</strong></td><td style="font-weight:600">${sb}</td><td>${revisao}</td></tr>`).join('')}
       </tbody>
     </table>
     <div class="table-pagination"><span>${window._cargos.length} cargos cadastrados</span></div>
@@ -1535,138 +2164,636 @@ window.printCargosTabela=function(){
 // HISTÓRICO DEPARTAMENTO
 // ------------------------------------------------------------
 function pageDepHistorico() {
+  if (!window._cargosHistorico) {
+    // Inicializa histórico espelhando os cargos atuais
+    window._cargosHistorico = (window._cargos||[]).map(([c,s]) => ({
+      cargo: c, salario: s, revisao: '01/01/2026', motivo: 'Tabela inicial'
+    }));
+  }
+
+  document.getElementById('topbar-actions').innerHTML =
+    `<button class="btn btn-primary" onclick="openHistoricoCargoModal()">+ Adicionar Registro</button>`;
+
+  const rows = window._cargosHistorico.map((h,i) => `
+    <tr>
+      <td><strong>${h.cargo}</strong></td>
+      <td style="font-weight:600">${h.salario}</td>
+      <td>${h.revisao}</td>
+      <td>${h.motivo}</td>
+      <td>
+        <button class="action-btn" onclick="editHistoricoCargo(${i})">✎</button>
+        <button class="action-btn btn-danger" onclick="deleteHistoricoCargo(${i})">✕</button>
+      </td>
+    </tr>`).join('');
+
   return `
+  <div id="historico-cargo-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;padding:32px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="hcargo-modal-title">Adicionar Registro</div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">Cargo</label>
+        <select class="form-select" id="hcargo-cargo">
+          <option value="">— Selecione —</option>
+          ${(window._cargos||[]).map(([c])=>`<option value="${c}">${c}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">Salário Base</label>
+        <input class="form-input" id="hcargo-salario" placeholder="Ex: R$ 2.500,00">
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">Última Revisão</label>
+        <input class="form-input" type="date" id="hcargo-revisao">
+      </div>
+      <div class="form-group" style="margin-bottom:20px">
+        <label class="form-label">Motivo</label>
+        <input class="form-input" id="hcargo-motivo" placeholder="Ex: Dissídio, Promoção...">
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn" onclick="document.getElementById('historico-cargo-modal').style.display='none'">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveHistoricoCargo()">Salvar</button>
+      </div>
+    </div>
+  </div>
   <div class="table-card">
-    <div class="table-header"><span class="table-title">Histórico de Alterações Salariais</span></div>
+    <div class="table-header">
+      <span class="table-title">Histórico de Cargos e Salários</span>
+      <div class="table-actions">
+        <button class="btn btn-sm btn-print">🖨 Imprimir</button>
+      </div>
+    </div>
     <table>
-      <thead><tr><th>Data</th><th>Cargo</th><th>Salário Anterior</th><th>Novo Salário</th><th>Variação</th><th>Motivo</th><th>Resp.</th></tr></thead>
-      <tbody>
-        ${[
-        ].map(([dt,c,sa,sn,v,m,r])=>`
-          <tr><td>${dt}</td><td>${c}</td><td>${sa}</td><td style="font-weight:600">${sn}</td>
-          <td style="color:var(--success);font-weight:600">${v}</td><td>${m}</td><td>${r}</td></tr>`).join('')}
-      </tbody>
+      <thead><tr><th>Cargo</th><th>Salário Base</th><th>Última Revisão</th><th>Motivo</th><th>Ações</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro</td></tr>'}</tbody>
     </table>
+    <div class="table-pagination"><span>${window._cargosHistorico.length} registros</span></div>
   </div>`;
 }
+
+window.openHistoricoCargoModal = function(idx=null) {
+  window._editingHCargoIdx = idx;
+  if (idx !== null) {
+    const h = window._cargosHistorico[idx];
+    document.getElementById('hcargo-cargo').value   = h.cargo;
+    document.getElementById('hcargo-salario').value = h.salario;
+    document.getElementById('hcargo-revisao').value = h.revisao.split('/').reverse().join('-');
+    document.getElementById('hcargo-motivo').value  = h.motivo;
+    document.getElementById('hcargo-modal-title').textContent = 'Editar Registro';
+  } else {
+    ['hcargo-cargo','hcargo-salario','hcargo-revisao','hcargo-motivo'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('hcargo-modal-title').textContent = 'Adicionar Registro';
+  }
+  document.getElementById('historico-cargo-modal').style.display = 'flex';
+};
+
+window.editHistoricoCargo = function(i) { openHistoricoCargoModal(i); };
+
+window.deleteHistoricoCargo = function(i) {
+  if (!confirm('Excluir este registro?')) return;
+  window._cargosHistorico.splice(i, 1);
+  navigate('dep-historico', 'Cargos e Salários Histórico', 'Departamentos');
+};
+
+window.saveHistoricoCargo = function() {
+  const cargo   = document.getElementById('hcargo-cargo').value;
+  const salario = document.getElementById('hcargo-salario').value.trim();
+  const revisao = document.getElementById('hcargo-revisao').value;
+  const motivo  = document.getElementById('hcargo-motivo').value.trim();
+  if (!cargo)   return showToast('Selecione um cargo.');
+  if (!salario) return showToast('Informe o salário.');
+  const registro = {
+    cargo,
+    salario,
+    revisao: revisao ? revisao.split('-').reverse().join('/') : '—',
+    motivo: motivo || '—'
+  };
+  const idx = window._editingHCargoIdx;
+  if (idx !== null) window._cargosHistorico[idx] = registro;
+  else window._cargosHistorico.push(registro);
+  document.getElementById('historico-cargo-modal').style.display = 'none';
+  showToast('Registro salvo!');
+  navigate('dep-historico', 'Cargos e Salários Histórico', 'Departamentos');
+};
 
 // ------------------------------------------------------------
 // ALTERAÇÃO DE CARGO/SALÁRIO
 // ------------------------------------------------------------
 function pageAlteracao() {
+  const emp = window._statusEmployees;
+
+  const colabOptions = emp.map((e,i) =>
+    `<option value="${i}">${e[0]}</option>`).join('');
+
   return `
   <div class="form-card">
     <div class="form-section-title">Alteração de Cargo e/ou Salário</div>
-    <form>
+    <form onsubmit="event.preventDefault();showToast('Alteração salva com sucesso!')">
       <div class="form-grid">
-        <div class="form-group"><label class="form-label">Colaborador</label>
-          <select class="form-select"></select></div>
-        <div class="form-group"><label class="form-label">Data da Alteração</label><input class="form-input" type="date"></div>
-        <div class="form-group"><label class="form-label">Cargo Atual</label><input class="form-input" value="Analista de Sistemas" readonly></div>
-        <div class="form-group"><label class="form-label">Novo Cargo</label>
-          <select class="form-select"><option>— Mesmo Cargo —</option><option>Analista SR</option><option>Coordenador de Sistemas</option></select></div>
-        <div class="form-group"><label class="form-label">Salário Atual (R$)</label><input class="form-input" type="number" value="4800"></div>
-        <div class="form-group"><label class="form-label">Novo Salário (R$)</label><input class="form-input" type="number" placeholder="0.00"></div>
-        <div class="form-group form-full"><label class="form-label">Motivo</label>
-          <select class="form-select"><option>Promoção</option><option>Mérito</option><option>Dissídio</option><option>Equiparação Salarial</option><option>Acordo Sindical</option></select></div>
-        <div class="form-group form-full"><label class="form-label">Observações</label><textarea class="form-textarea" placeholder="Detalhes adicionais..."></textarea></div>
+        <div class="form-group">
+          <label class="form-label">Colaborador</label>
+          <select class="form-select" id="alt-colab" onchange="preencherCargoAtual(this.value)">
+            <option value="">— Selecione —</option>
+            ${colabOptions}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Data da Alteração</label>
+          <input class="form-input" type="date" id="alt-data">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cargo Atual</label>
+          <input class="form-input" id="alt-cargo-atual" readonly placeholder="Selecione um colaborador">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Novo Cargo</label>
+          <select class="form-select" id="alt-novo-cargo">
+            <option value="">— Mesmo Cargo —</option>
+            ${cargoOptions}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Salário Atual (R$)</label>
+          <input class="form-input" id="alt-salario-atual" readonly placeholder="—">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Novo Salário (R$)</label>
+          <input class="form-input" type="text" id="alt-novo-salario" placeholder="Ex: R$ 2.500,00">
+        </div>
+        <div class="form-group form-full">
+          <label class="form-label">Motivo</label>
+          <select class="form-select">
+            <option>Promoção</option>
+            <option>Mérito</option>
+            <option>Dissídio</option>
+            <option>Equiparação Salarial</option>
+            <option>Acordo Sindical</option>
+          </select>
+        </div>
+        <div class="form-group form-full">
+          <label class="form-label">Observações</label>
+          <textarea class="form-textarea" placeholder="Detalhes adicionais..."></textarea>
+        </div>
       </div>
-      <div class="form-footer"><button type="submit" class="btn btn-primary">Salvar Alteração</button></div>
+      <div class="form-footer">
+        <button type="submit" class="btn btn-primary">Salvar Alteração</button>
+      </div>
     </form>
   </div>`;
 }
 
+window.preencherCargoAtual = function(idx) {
+  if (idx === '') {
+    document.getElementById('alt-cargo-atual').value = '';
+    document.getElementById('alt-salario-atual').value = '';
+    return;
+  }
+  const emp = window._statusEmployees[parseInt(idx)];
+  // emp = [nome, cargo, status, desde, salario(opcional)]
+  document.getElementById('alt-cargo-atual').value   = emp[1] || '—';
+  document.getElementById('alt-salario-atual').value = emp[4] || '—';
+};
 // ------------------------------------------------------------
 // PERFIL / MINART
 // ------------------------------------------------------------
 function pagePerfil() {
+  const emp = window._statusEmployees || [];
+  if (!window._perfisPorColab) window._perfisPorColab = {};
+
   return `
   <div class="form-card" style="margin-bottom:16px">
-    <div class="form-group"><label class="form-label">Selecionar Colaborador</label>
-      <select class="form-select">
+    <div class="form-group">
+      <label class="form-label">Selecionar Colaborador</label>
+      <select class="form-select" id="perfil-select" onchange="carregarPerfil(this.value)">
+        <option value="">— Selecione um colaborador —</option>
+        ${emp.map((e,i) => `<option value="${i}">${e[0]}</option>`).join('')}
+      </select>
     </div>
   </div>
-  <div class="profile-header">
-    <div class="profile-avatar">CS</div>
-    <div>
-      <div class="profile-name"></div>
-      <div class="profile-role"> Admissão:</div>
-      <div class="profile-meta">
-        <div class="profile-meta-item"><strong>Nível:</strong> </div>
-        <div class="profile-meta-item"><strong>Salário:</strong> </div>
-        <div class="profile-meta-item"><strong>Status:</strong> <span class="badge badge-active">Ativo</span></div>
+  <div id="perfil-form-wrap" style="display:none">
+    <div class="profile-header">
+      <div class="profile-avatar" id="perfil-avatar">?</div>
+      <div>
+        <div class="profile-name" id="perfil-nome"></div>
+        <div class="profile-role" id="perfil-cargo"></div>
+        <div class="profile-meta">
+          <div class="profile-meta-item"><strong>Status:</strong> <span class="badge badge-active">Ativo</span></div>
+        </div>
       </div>
     </div>
-  </div>
-  <div class="form-card">
-    <div class="form-section-title">Perfil e Hobbies — Metodologia Minart</div>
-    <form>
+    <div class="form-card">
+      <div class="form-section-title">Perfil e Hobbies — Metodologia Minart</div>
       <div class="form-grid">
-        <div class="form-group"><label class="form-label">Animal de Identificação</label>
-          <select class="form-select"><option>Águia (Visionário)</option><option>Gato (Analítico)</option><option>Cão (Colaborativo)</option><option>Leão (Dominante)</option></select></div>
-        <div class="form-group"><label class="form-label">Cor de Personalidade</label>
-          <select class="form-select"><option>Azul (Analítico)</option><option>Vermelho (Dominante)</option><option>Verde (Estável)</option><option>Amarelo (Influente)</option></select></div>
-        <div class="form-group form-full"><label class="form-label">Hobbies e Interesses</label>
-          <input class="form-input" placeholder="Ex: Fotografia, Ciclismo, Leitura..."></div>
-        <div class="form-group form-full"><label class="form-label">Pontos Fortes (autopercebidos)</label>
-          <textarea class="form-textarea" placeholder="O que o colaborador acredita que faz bem..."></textarea></div>
-        <div class="form-group form-full"><label class="form-label">Aspirações de Carreira</label>
-          <textarea class="form-textarea" placeholder="Onde o colaborador quer chegar..."></textarea></div>
-        <div class="form-group"><label class="form-label">Estilo de Aprendizagem</label>
-          <select class="form-select"><option>Visual</option><option>Auditivo</option><option>Cinestésico</option><option>Leitura/Escrita</option></select></div>
-        <div class="form-group"><label class="form-label">Preferência de Feedback</label>
-          <select class="form-select"><option>Público</option><option>Privado</option><option>Escrito</option></select></div>
+        <div class="form-group">
+          <label class="form-label">Animal de Identificação</label>
+          <select class="form-select" id="perfil-animal">
+            <option value="">— Selecione —</option>
+            <option value="Águia (Visionário)">🦅 Águia (Visionário)</option>
+            <option value="Gato (Analítico)">🐱 Gato (Analítico)</option>
+            <option value="Cão (Colaborativo)">🐶 Cão (Colaborativo)</option>
+            <option value="Leão (Dominante)">🦁 Leão (Dominante)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cor de Personalidade</label>
+          <select class="form-select" id="perfil-cor">
+            <option value="">— Selecione —</option>
+            <option value="Azul (Analítico)">🔵 Azul (Analítico)</option>
+            <option value="Vermelho (Dominante)">🔴 Vermelho (Dominante)</option>
+            <option value="Verde (Estável)">🟢 Verde (Estável)</option>
+            <option value="Amarelo (Influente)">🟡 Amarelo (Influente)</option>
+          </select>
+        </div>
+        <div class="form-group form-full">
+          <label class="form-label">Hobbies e Interesses</label>
+          <input class="form-input" id="perfil-hobbies" placeholder="Ex: Fotografia, Ciclismo, Leitura...">
+        </div>
+        <div class="form-group form-full">
+          <label class="form-label">Pontos Fortes (autopercebidos)</label>
+          <textarea class="form-textarea" id="perfil-pontos" placeholder="O que o colaborador acredita que faz bem..."></textarea>
+        </div>
+        <div class="form-group form-full">
+          <label class="form-label">Aspirações de Carreira</label>
+          <textarea class="form-textarea" id="perfil-aspiracoes" placeholder="Onde o colaborador quer chegar..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Estilo de Aprendizagem</label>
+          <select class="form-select" id="perfil-aprendizagem">
+            <option value="Visual">Visual</option>
+            <option value="Auditivo">Auditivo</option>
+            <option value="Cinestésico">Cinestésico</option>
+            <option value="Leitura/Escrita">Leitura/Escrita</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Preferência de Feedback</label>
+          <select class="form-select" id="perfil-feedback">
+            <option value="Público">Público</option>
+            <option value="Privado">Privado</option>
+            <option value="Escrito">Escrito</option>
+          </select>
+        </div>
       </div>
-      <div class="form-footer"><button type="submit" class="btn btn-primary">Salvar Perfil</button></div>
-    </form>
+      <div class="form-footer">
+        <button class="btn btn-primary" onclick="salvarPerfil()">Salvar Perfil</button>
+      </div>
+    </div>
   </div>`;
 }
 
+window.carregarPerfil = function(idx) {
+  const wrap = document.getElementById('perfil-form-wrap');
+  if (idx === '') { wrap.style.display = 'none'; return; }
+  const emp = window._statusEmployees[parseInt(idx)];
+  document.getElementById('perfil-avatar').textContent = emp[0][0].toUpperCase();
+  document.getElementById('perfil-nome').textContent   = emp[0];
+  document.getElementById('perfil-cargo').textContent  = emp[1];
+  const p = window._perfisPorColab[idx] || {};
+  document.getElementById('perfil-animal').value        = p.animal        || '';
+  document.getElementById('perfil-cor').value           = p.cor           || '';
+  document.getElementById('perfil-hobbies').value       = p.hobbies       || '';
+  document.getElementById('perfil-pontos').value        = p.pontos        || '';
+  document.getElementById('perfil-aspiracoes').value    = p.aspiracoes    || '';
+  document.getElementById('perfil-aprendizagem').value  = p.aprendizagem  || 'Visual';
+  document.getElementById('perfil-feedback').value      = p.feedback      || 'Público';
+  wrap.style.display = '';
+};
+
+window.salvarPerfil = function() {
+  const idx = document.getElementById('perfil-select').value;
+  if (!idx) return showToast('Selecione um colaborador.');
+  window._perfisPorColab[idx] = {
+    animal:       document.getElementById('perfil-animal').value,
+    cor:          document.getElementById('perfil-cor').value,
+    hobbies:      document.getElementById('perfil-hobbies').value,
+    pontos:       document.getElementById('perfil-pontos').value,
+    aspiracoes:   document.getElementById('perfil-aspiracoes').value,
+    aprendizagem: document.getElementById('perfil-aprendizagem').value,
+    feedback:     document.getElementById('perfil-feedback').value,
+  };
+  showToast('Perfil salvo com sucesso!');
+};
 // ------------------------------------------------------------
 // DADOS PESSOAIS
 // ------------------------------------------------------------
 function pageDadosPessoais() {
+  const emp = window._statusEmployees || [];
+  if (!window._dadosPessoais) window._dadosPessoais = {};
+
   return `
-  <div class="form-card">
-    <div class="form-section-title">Dados Pessoais</div>
-    <form>
+  <div class="form-card" style="margin-bottom:16px">
+    <div class="form-group">
+      <label class="form-label">Selecionar Colaborador</label>
+      <select class="form-select" id="dados-select" onchange="carregarDadosPessoais(this.value)">
+        <option value="">— Selecione um colaborador —</option>
+        ${emp.map((e,i) => {
+          const preenchido = window._dadosPessoais[i] && window._dadosPessoais[i].cpf;
+          return `<option value="${i}">${e[0]} ${preenchido ? '✅' : '⬜'}</option>`;
+        }).join('')}
+      </select>
+    </div>
+  </div>
+  <div id="dados-form-wrap" style="display:none">
+    <div class="form-card">
+      <div class="form-section-title">Dados Pessoais</div>
       <div class="form-grid">
-        ${[['Nome Completo','text','Carlos Eduardo Souza'],['Nome Social','text',''],['Data de Nascimento','date','1990-05-15'],['CPF','text','123.456.789-00'],['RG','text','MG-12.345.678'],['Estado Civil','select',''],['Escolaridade','select',''],['Telefone','tel','(11) 91234-5678'],['E-mail Pessoal','email','carlos@email.com'],['CEP','text','01310-100'],['Endereço','text','Rua Paulista, 100'],['Bairro','text','Centro'],['Cidade','text','São Paulo'],['UF','text','SP'],].map(([l,t,v])=>`
-          <div class="form-group">
-            <label class="form-label">${l}</label>
-            ${t==='select'?`<select class="form-select"><option>${v||'Selecionar'}</option></select>`:`<input class="form-input" type="${t}" value="${v}">`}
-          </div>`).join('')}
-        <div class="form-group form-full"><label class="form-label">Observações</label><textarea class="form-textarea"></textarea></div>
+        <div class="form-group"><label class="form-label">Nome Completo</label><input class="form-input" id="dp-nome"></div>
+        <div class="form-group"><label class="form-label">Nome Social</label><input class="form-input" id="dp-social"></div>
+        <div class="form-group"><label class="form-label">Data de Nascimento</label><input class="form-input" type="date" id="dp-nascimento"></div>
+        <div class="form-group"><label class="form-label">CPF</label><input class="form-input" id="dp-cpf" placeholder="000.000.000-00"></div>
+        <div class="form-group"><label class="form-label">RG</label><input class="form-input" id="dp-rg"></div>
+        <div class="form-group"><label class="form-label">Estado Civil</label>
+          <select class="form-select" id="dp-estado-civil">
+            <option value="">— Selecione —</option>
+            <option>Solteiro(a)</option><option>Casado(a)</option><option>Divorciado(a)</option><option>Viúvo(a)</option><option>União Estável</option>
+          </select>
+        </div>
+        <div class="form-group"><label class="form-label">Escolaridade</label>
+          <select class="form-select" id="dp-escolaridade">
+            <option value="">— Selecione —</option>
+            <option>Fundamental</option><option>Médio</option><option>Superior</option><option>Pós-Graduação</option>
+          </select>
+        </div>
+        <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" id="dp-telefone" placeholder="(00) 00000-0000"></div>
+        <div class="form-group"><label class="form-label">E-mail Pessoal</label><input class="form-input" type="email" id="dp-email"></div>
+        <div class="form-group"><label class="form-label">CEP</label><input class="form-input" id="dp-cep"></div>
+        <div class="form-group"><label class="form-label">Endereço</label><input class="form-input" id="dp-endereco"></div>
+        <div class="form-group"><label class="form-label">Bairro</label><input class="form-input" id="dp-bairro"></div>
+        <div class="form-group"><label class="form-label">Cidade</label><input class="form-input" id="dp-cidade"></div>
+        <div class="form-group"><label class="form-label">UF</label><input class="form-input" id="dp-uf" maxlength="2"></div>
+        <div class="form-group form-full"><label class="form-label">Observações</label><textarea class="form-textarea" id="dp-obs"></textarea></div>
       </div>
-      <div class="form-footer"><button type="submit" class="btn btn-primary">Salvar Dados</button></div>
-    </form>
+      <div class="form-footer">
+        <button class="btn btn-primary" onclick="salvarDadosPessoais()">Salvar Dados</button>
+        <span id="dp-status-label" style="font-size:12px;color:var(--text3);margin-left:8px;align-self:center"></span>
+      </div>
+    </div>
   </div>`;
 }
 
+window.carregarDadosPessoais = function(idx) {
+  const wrap = document.getElementById('dados-form-wrap');
+  if (idx === '') { wrap.style.display = 'none'; return; }
+  const d = window._dadosPessoais[idx] || {};
+  const campos = ['nome','social','nascimento','cpf','rg','estado-civil','escolaridade','telefone','email','cep','endereco','bairro','cidade','uf','obs'];
+  campos.forEach(c => {
+    const el = document.getElementById(`dp-${c}`);
+    if (el) el.value = d[c] || '';
+  });
+  const preenchido = d.cpf;
+  document.getElementById('dp-status-label').textContent = preenchido ? '✅ Preenchido' : '⬜ Não preenchido';
+  wrap.style.display = '';
+};
+
+window.salvarDadosPessoais = function() {
+  const idx = document.getElementById('dados-select').value;
+  if (!idx) return showToast('Selecione um colaborador.');
+  const campos = ['nome','social','nascimento','cpf','rg','estado-civil','escolaridade','telefone','email','cep','endereco','bairro','cidade','uf','obs'];
+  const dados = {};
+  campos.forEach(c => {
+    const el = document.getElementById(`dp-${c}`);
+    if (el) dados[c] = el.value;
+  });
+  window._dadosPessoais[idx] = dados;
+  const preenchido = dados.cpf;
+  document.getElementById('dp-status-label').textContent = preenchido ? '✅ Preenchido' : '⬜ Não preenchido';
+  // Atualiza o select para mostrar o ícone correto
+  const opt = document.querySelector(`#dados-select option[value="${idx}"]`);
+  if (opt) opt.textContent = `${window._statusEmployees[idx][0]} ${preenchido ? '✅' : '⬜'}`;
+  showToast('Dados salvos com sucesso!');
+};
 // ------------------------------------------------------------
 // HISTÓRICO DE CARREIRA
 // ------------------------------------------------------------
 function pageCarreira() {
-  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" data-toast="Adicionando registro de carreira">+ Adicionar Registro</button>`;
+  if (!window._historicoCarreira) window._historicoCarreira = [];
+  const emp = window._statusEmployees || [];
+  const cargos = window._cargos || [];
+
+  document.getElementById('topbar-actions').innerHTML =
+    `<button class="btn btn-primary" onclick="openCarreiraModal()">+ Adicionar Registro</button>`;
+
+  const renderCarreiraTabela = () => {
+    const tbody = document.getElementById('carreira-tbody');
+    if (!tbody) return;
+
+    const registrosAgrupados = {};
+    window._historicoCarreira.forEach(reg => {
+      if (!registrosAgrupados[reg.colabIdx]) {
+        registrosAgrupados[reg.colabIdx] = [];
+      }
+      registrosAgrupados[reg.colabIdx].push(reg);
+    });
+
+    let htmlContent = '';
+    if (Object.keys(registrosAgrupados).length === 0) {
+      htmlContent = `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro de carreira.</td></tr>`;
+    } else {
+      for (const colabIdx in registrosAgrupados) {
+        const nomeColab = emp[colabIdx] ? emp[colabIdx][0] : 'Colaborador Desconhecido';
+        const registros = registrosAgrupados[colabIdx].sort((a, b) => new Date(b.periodoInicio) - new Date(a.periodoInicio)); // Ordena por data mais recente
+
+        htmlContent += `
+          <tr style="background:var(--bg2);font-weight:600;">
+            <td colspan="7" style="padding: 10px 16px; border-bottom: 1px solid var(--border);">${nomeColab}</td>
+          </tr>`;
+
+        registros.forEach((reg, i) => {
+          htmlContent += `
+            <tr>
+              <td>${reg.periodoInicio}</td>
+              <td>${reg.periodoFim || 'Atual'}</td>
+              <td>${reg.cargo}</td>
+              <td>${reg.salario}</td>
+              <td>${reg.motivo || '—'}</td>
+              <td>
+                <button class="action-btn" title="Editar" onclick="editarCarreira(${colabIdx}, ${i})">✎</button>
+                <button class="action-btn" title="Excluir" style="color:var(--danger)" onclick="deletarCarreira(${colabIdx}, ${i})">✕</button>
+              </td>
+            </tr>`;
+        });
+      }
+    }
+    tbody.innerHTML = htmlContent;
+  };
+
+  window.renderCarreiraTabela = renderCarreiraTabela; // Torna a função global
+  setTimeout(renderCarreiraTabela, 0); // Renderiza a tabela após o HTML ser inserido
+
   return `
-  <div class="table-card" style="margin-bottom:16px">
-    <div class="table-header"><span class="table-title">Histórico Profissional — Carlos Eduardo Souza</span></div>
-    <table>
-      <thead><tr><th>Data</th><th>Cargo</th><th>Departamento</th><th>Salário</th><th>Motivo</th><th>Ações</th></tr></thead>
-      <tbody>
-        ${[
-          ['01/03/2023','Analista de Sistemas Jr','TI','R$ 3.800','Admissão'],
-          ['01/09/2023','Analista de Sistemas Pleno','TI','R$ 4.500','Promoção por mérito'],
-          ['01/01/2024','Analista de Sistemas Pleno','TI','R$ 4.800','Dissídio coletivo'],
-        ].map(([d,c,dep,s,m])=>`
-          <tr><td>${d}</td><td>${c}</td><td>${dep}</td><td style="font-weight:600">${s}</td><td>${m}</td>
-          <td><button class="action-btn" data-toast="Editando registro">✎</button>
-              <button class="action-btn" data-toast="Alterando salário — abrindo formulário">💰 Alterar Salário</button></td></tr>`).join('')}
+  <div id="carreira-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;padding:32px;width:560px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="carreira-modal-title">Adicionar Registro de Carreira</div>
+      <div class="form-grid">
+        <div class="form-group form-full">
+          <label class="form-label">Colaborador</label>
+          <select class="form-select" id="carreira-colab">
+            <option value="">— Selecione —</option>
+            ${emp.map((e,i) => `<option value="${i}">${e[0]}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Período Início</label>
+          <input class="form-input" type="date" id="carreira-inicio">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Período Fim (opcional)</label>
+          <input class="form-input" type="date" id="carreira-fim">
+        </div>
+        <div class="form-group form-full">
+          <label class="form-label">Cargo</label>
+          <select class="form-select" id="carreira-cargo">
+            <option value="">— Selecione o Cargo —</option>
+            ${cargos.map(([c]) => `<option value="${c}">${c}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group form-full">
+          <label class="form-label">Salário</label>
+          <input class="form-input" id="carreira-salario" placeholder="R$ 0.000,00">
+        </div>
+        <div class="form-group form-full">
+          <label class="form-label">Motivo (opcional)</label>
+          <textarea class="form-textarea" id="carreira-motivo" placeholder="Ex: Promoção, Transferência, Aumento Salarial..."></textarea>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button class="btn" onclick="document.getElementById('carreira-modal').style.display='none'">Cancelar</button>
+        <button class="btn btn-primary" onclick="salvarCarreira()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">Histórico de Carreira</span>
+    </div>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Período Início</th>
+          <th>Período Fim</th>
+          <th>Cargo</th>
+          <th>Salário</th>
+          <th>Motivo</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="carreira-tbody">
+        <!-- Registros serão inseridos aqui pelo JavaScript -->
       </tbody>
     </table>
   </div>`;
 }
 
+// Funções globais para o modal e ações
+window.openCarreiraModal = function(colabIdx = null, originalIndex = null) {
+  window._editingCarreiraColabIdx = colabIdx;
+  window._editingCarreiraRegOriginalIndex = originalIndex; // Usamos originalIndex para identificar o registro
+  const modal = document.getElementById('carreira-modal');
+  if (!modal) return;
+
+  const hoje = new Date().toISOString().split('T')[0];
+
+  // Se estamos editando, preenche os campos
+  if (colabIdx !== null && originalIndex !== null) {
+    const registro = window._historicoCarreira.find(r => r.colabIdx == colabIdx && r.originalIndex == originalIndex);
+    if (registro) {
+      document.getElementById('carreira-colab').value = registro.colabIdx;
+      document.getElementById('carreira-inicio').value = registro.periodoInicio;
+      document.getElementById('carreira-fim').value = registro.periodoFim;
+      document.getElementById('carreira-cargo').value = registro.cargo;
+      document.getElementById('carreira-salario').value = registro.salario;
+      document.getElementById('carreira-motivo').value = registro.motivo;
+      document.getElementById('carreira-modal-title').textContent = `Editar Registro de Carreira para ${window._statusEmployees[colabIdx][0]}`;
+      // Desabilita o campo de seleção de colaborador na edição
+      document.getElementById('carreira-colab').disabled = true;
+    }
+  } else {
+    // Novo registro
+    document.getElementById('carreira-colab').value = colabIdx !== null ? colabIdx : ''; // Pré-seleciona se veio de uma página de detalhes
+    document.getElementById('carreira-inicio').value = hoje;
+    document.getElementById('carreira-fim').value = '';
+    document.getElementById('carreira-cargo').value = '';
+    document.getElementById('carreira-salario').value = '';
+    document.getElementById('carreira-motivo').value = '';
+    document.getElementById('carreira-modal-title').textContent = 'Adicionar Registro de Carreira';
+    // Habilita/desabilita o campo de seleção de colaborador
+    document.getElementById('carreira-colab').disabled = (colabIdx !== null);
+  }
+  modal.style.display = 'flex';
+};
+
+window.salvarCarreira = function() {
+  const colabSelect = document.getElementById('carreira-colab');
+  const colabIdx = colabSelect.value; // Pega o valor do select, que pode estar desabilitado
+  const periodoInicio = document.getElementById('carreira-inicio').value;
+  const periodoFim = document.getElementById('carreira-fim').value;
+  const cargo = document.getElementById('carreira-cargo').value;
+  const salario = document.getElementById('carreira-salario').value.trim();
+  const motivo = document.getElementById('carreira-motivo').value.trim();
+
+  if (!colabIdx) return showToast('Selecione um colaborador.');
+  if (!periodoInicio) return showToast('Informe a data de início.');
+  if (!cargo) return showToast('Selecione o cargo.');
+  if (!salario) return showToast('Informe o salário.');
+
+  const novoRegistro = {
+    colabIdx: parseInt(colabIdx), // Garante que seja um número
+    periodoInicio: periodoInicio,
+    periodoFim: periodoFim,
+    cargo: cargo,
+    salario: salario,
+    motivo: motivo,
+  };
+
+  if (window._editingCarreiraColabIdx !== null && window._editingCarreiraRegOriginalIndex !== null) {
+    // Edição de um registro existente
+    const originalIndex = window._editingCarreiraRegOriginalIndex;
+    const existingRecord = window._historicoCarreira.find(r => r.colabIdx == window._editingCarreiraColabIdx && r.originalIndex == originalIndex);
+    if (existingRecord) {
+      Object.assign(existingRecord, novoRegistro); // Atualiza o registro
+    }
+  } else {
+    // Novo registro
+    // Atribui um originalIndex único para o novo registro
+    novoRegistro.originalIndex = window._historicoCarreira.length > 0 ? Math.max(...window._historicoCarreira.map(r => r.originalIndex)) + 1 : 0;
+    window._historicoCarreira.push(novoRegistro);
+  }
+
+  window._salvarStorage();
+  document.getElementById('carreira-modal').style.display = 'none';
+  showToast('Registro de carreira salvo!');
+
+  // Chama a função de renderização apropriada
+  if (document.getElementById('carreira-tbody-detalhe')) { // Se estiver na página de detalhes
+    window.renderCarreiraTabelaDetalhe();
+  } else if (document.getElementById('colaboradores-historico-tbody')) { // Se estiver na lista geral de colaboradores
+    window.renderColaboradoresHistorico();
+  }
+};
+  
+window.editarCarreira = function(colabIdx, regIdx) {
+  openCarreiraModal(colabIdx, regIdx);
+};
+
+window.deletarCarreira = function(colabIdx, originalIndex) {
+  if (!confirm('Excluir este registro de carreira?')) return;
+
+  // Encontra o índice real do registro no array _historicoCarreira
+  const indexToDelete = window._historicoCarreira.findIndex(r => r.colabIdx == colabIdx && r.originalIndex == originalIndex);
+
+  if (indexToDelete !== -1) {
+    window._historicoCarreira.splice(indexToDelete, 1);
+    window._salvarStorage();
+    showToast('Registro de carreira removido.');
+// Chama a função de renderização apropriada
+if (document.getElementById('carreira-tbody-detalhe')) { // Se estiver na página de detalhes
+  window.renderCarreiraTabelaDetalhe();
+} else if (document.getElementById('colaboradores-historico-tbody')) { // Se estiver na lista geral de colaboradores
+  window.renderColaboradoresHistorico();
+}
+    }
+};
+  
 // ------------------------------------------------------------
 // TREINAMENTOS DO COLABORADOR
 // ------------------------------------------------------------
@@ -1694,48 +2821,284 @@ function pageTreinamentosCol() {
 // CONTRATOS E ALINHAMENTO
 // ------------------------------------------------------------
 function pageContratos() {
+  const emp = window._statusEmployees || [];
+  if (!window._contratosPorColab) window._contratosPorColab = {};
+
   return `
-  <div class="table-card">
-    <div class="table-header"><span class="table-title">Contratos e Termos — Carlos Souza</span></div>
-    <table>
-      <thead><tr><th>Documento</th><th>Tipo</th><th>Assinatura</th><th>Vigência</th><th>Status</th><th>Ações</th></tr></thead>
-      <tbody>
-        ${[
-          ['Contrato de Trabalho CLT','Contrato','01/03/2023','Indeterminado','Vigente'],
-          ['Termo de Confidencialidade','NDA','01/03/2023','5 anos','Vigente'],
-          ['Termo de Uso de TI','Política','01/03/2023','Anual','Vigente'],
-          ['Plano de Metas 1S/2024','Alinhamento','02/01/2024','30/06/2024','Concluído'],
-        ].map(([d,t,a,v,st])=>`
-          <tr><td>${d}</td><td><span class="badge badge-gray">${t}</span></td><td>${a}</td><td>${v}</td>
-          <td><span class="badge ${st==='Vigente'?'badge-active':'badge-inactive'}">${st}</span></td>
-          <td><button class="action-btn" data-toast="Download">⬇</button><button class="action-btn" data-toast="Visualizando">👁</button></td></tr>`).join('')}
-      </tbody>
-    </table>
+  <div class="form-card" style="margin-bottom:16px">
+    <div class="form-group">
+      <label class="form-label">Selecionar Colaborador</label>
+      <select class="form-select" id="contratos-select" onchange="carregarContratos(this.value)">
+        <option value="">— Selecione um colaborador —</option>
+        ${emp.map((e,i) => `<option value="${i}">${e[0]}</option>`).join('')}
+      </select>
+    </div>
+  </div>
+  <div id="contratos-wrap" style="display:none">
+    <div class="table-card" style="margin-bottom:16px">
+      <div class="table-header">
+        <span class="table-title" id="contratos-title">Contratos</span>
+        <div class="table-actions">
+          <button class="btn btn-primary btn-sm" onclick="openAnexoContrato()">+ Anexar Arquivo</button>
+        </div>
+      </div>
+      <table>
+        <thead><tr><th>Documento</th><th>Tipo</th><th>Arquivo</th><th>Data</th><th>Ações</th></tr></thead>
+        <tbody id="contratos-tbody"></tbody>
+      </table>
+    </div>
+    <div id="anexo-contrato-form" style="display:none" class="form-card">
+      <div class="form-section-title">Anexar Documento</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Nome do Documento</label>
+          <input class="form-input" id="ct-nome" placeholder="Ex: Contrato CLT">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tipo</label>
+          <select class="form-select" id="ct-tipo">
+            <option value="Contrato">Contrato</option>
+            <option value="NDA">NDA</option>
+            <option value="Política">Política</option>
+            <option value="Alinhamento">Alinhamento</option>
+            <option value="Outro">Outro</option>
+          </select>
+        </div>
+        <div class="form-group form-full">
+          <label class="form-label">Arquivo</label>
+          <input class="form-input" type="file" id="ct-arquivo" accept=".pdf,.doc,.docx,.jpg,.png">
+        </div>
+      </div>
+      <div class="form-footer">
+        <button class="btn" onclick="document.getElementById('anexo-contrato-form').style.display='none'">Cancelar</button>
+        <button class="btn btn-primary" onclick="salvarAnexoContrato()">Salvar</button>
+      </div>
+    </div>
   </div>`;
 }
+
+window.carregarContratos = function(idx) {
+  const wrap = document.getElementById('contratos-wrap');
+  if (idx === '') { wrap.style.display = 'none'; return; }
+  const emp = window._statusEmployees[parseInt(idx)];
+  document.getElementById('contratos-title').textContent = `Contratos — ${emp[0]}`;
+  wrap.style.display = '';
+  renderContratosTabela(idx);
+};
+
+window.renderContratosTabela = function(idx) {
+  idx = idx || document.getElementById('contratos-select').value;
+  const docs = window._contratosPorColab[idx] || [];
+  const tbody = document.getElementById('contratos-tbody');
+  tbody.innerHTML = docs.length === 0
+    ? '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum documento anexado</td></tr>'
+    : docs.map((d,i) => `
+        <tr>
+          <td>${d.nome}</td>
+          <td><span class="badge badge-gray">${d.tipo}</span></td>
+          <td style="font-size:12px">${d.arquivo}</td>
+          <td style="font-size:12px;color:var(--text3)">${d.data}</td>
+          <td>
+            <button class="action-btn" onclick="showToast('Download: ${d.arquivo}')">⬇</button>
+            <button class="action-btn" style="color:var(--danger)" onclick="deletarContrato(${i})">✕</button>
+          </td>
+        </tr>`).join('');
+};
+
+window.openAnexoContrato = function() {
+  document.getElementById('ct-nome').value = '';
+  document.getElementById('ct-tipo').value = 'Contrato';
+  document.getElementById('ct-arquivo').value = '';
+  document.getElementById('anexo-contrato-form').style.display = '';
+};
+
+window.salvarAnexoContrato = function() {
+  const idx    = document.getElementById('contratos-select').value;
+  const nome   = document.getElementById('ct-nome').value.trim();
+  const tipo   = document.getElementById('ct-tipo').value;
+  const arq    = document.getElementById('ct-arquivo').files[0];
+  if (!nome) return showToast('Informe o nome do documento.');
+  if (!arq)  return showToast('Selecione um arquivo.');
+  if (!window._contratosPorColab[idx]) window._contratosPorColab[idx] = [];
+  window._contratosPorColab[idx].push({
+    nome, tipo,
+    arquivo: arq.name,
+    data: new Date().toLocaleDateString('pt-BR')
+  });
+  document.getElementById('anexo-contrato-form').style.display = 'none';
+  showToast('Documento anexado!');
+  renderContratosTabela(idx);
+};
+
+window.deletarContrato = function(i) {
+  const idx = document.getElementById('contratos-select').value;
+  if (!confirm('Excluir este documento?')) return;
+  window._contratosPorColab[idx].splice(i, 1);
+  renderContratosTabela(idx);
+  showToast('Documento removido.');
+};
 
 // ------------------------------------------------------------
 // OCORRÊNCIAS
 // ------------------------------------------------------------
 function pageOcorrencias() {
-  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" data-toast="Registrando ocorrência">+ Registrar Ocorrência</button>`;
+  if (!window._ocorrencias) window._ocorrencias = [];
+  const emp = window._statusEmployees || [];
+
+  document.getElementById('topbar-actions').innerHTML =
+    `<button class="btn btn-primary" onclick="openOcorrenciaModal()">+ Registrar Ocorrência</button>`;
+
   return `
+  <div id="ocorrencia-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;padding:32px;width:520px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="oc-modal-title">Registrar Ocorrência</div>
+      <div class="form-grid">
+        <div class="form-group form-full">
+          <label class="form-label">Colaborador</label>
+          <select class="form-select" id="oc-colab">
+            <option value="">— Selecione —</option>
+            ${emp.map((e,i) => `<option value="${i}">${e[0]}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tipo</label>
+          <select class="form-select" id="oc-tipo">
+            <option value="Elogio">Elogio</option>
+            <option value="Observação">Observação</option>
+            <option value="Advertência">Advertência</option>
+            <option value="Suspensão">Suspensão</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Data</label>
+          <input class="form-input" type="date" id="oc-data">
+        </div>
+        <div class="form-group form-full">
+          <label class="form-label">Descrição</label>
+          <textarea class="form-textarea" id="oc-descricao" placeholder="Descreva a ocorrência..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Registrado por</label>
+          <input class="form-input" id="oc-registrado" placeholder="Nome do responsável">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Gravidade</label>
+          <select class="form-select" id="oc-gravidade">
+            <option value="—">—</option>
+            <option value="Baixa">Baixa</option>
+            <option value="Média">Média</option>
+            <option value="Alta">Alta</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button class="btn" onclick="document.getElementById('ocorrencia-modal').style.display='none'">Cancelar</button>
+        <button class="btn btn-primary" onclick="salvarOcorrencia()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
   <div class="table-card">
-    <div class="table-header"><span class="table-title">Ocorrências e Observações — Carlos Souza</span></div>
+    <div class="table-header"><span class="table-title">Ocorrências e Observações</span></div>
     <table>
-      <thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Registrado por</th><th>Gravidade</th></tr></thead>
-      <tbody>
-        ${[
-          ['10/04/2024','Elogio','Excelente atendimento ao cliente interno','Ana Lima','—'],
-          ['20/02/2024','Observação','Atraso recorrente às terças','Gestor','Baixa'],
-        ].map(([d,t,desc,r,g])=>`
-          <tr><td>${d}</td><td><span class="badge ${t==='Elogio'?'badge-active':t==='Observação'?'badge-pending':'badge-inactive'}">${t}</span></td>
-          <td>${desc}</td><td>${r}</td><td>${g}</td></tr>`).join('')}
-      </tbody>
+      <thead>
+        <tr>
+          <th>Colaborador</th>
+          <th>Data</th>
+          <th>Tipo</th>
+          <th>Descrição</th>
+          <th>Registrado por</th>
+          <th>Gravidade</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="ocorrencias-tbody"></tbody>
     </table>
   </div>`;
 }
 
+window.renderOcorrenciasTabela = function() {
+  const tbody = document.getElementById('ocorrencias-tbody');
+  if (!tbody) return;
+  const emp = window._statusEmployees || [];
+  tbody.innerHTML = (window._ocorrencias||[]).length === 0
+    ? '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma ocorrência registrada</td></tr>'
+    : window._ocorrencias.map((o,i) => {
+        const nomeColab = emp[o.colab] ? emp[o.colab][0] : '—';
+        return `
+        <tr>
+          <td><strong>${nomeColab}</strong></td>
+          <td>${o.data}</td>
+          <td><span class="badge ${o.tipo==='Elogio'?'badge-active':o.tipo==='Observação'?'badge-pending':'badge-inactive'}">${o.tipo}</span></td>
+          <td style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${o.descricao}</td>
+          <td>${o.registrado}</td>
+          <td>${o.gravidade}</td>
+          <td>
+            <button class="action-btn" onclick="editarOcorrencia(${i})">✎</button>
+            <button class="action-btn" style="color:var(--danger)" onclick="deletarOcorrencia(${i})">✕</button>
+          </td>
+        </tr>`;
+      }).join('');
+};
+
+window.openOcorrenciaModal = function(idx=null) {
+  window._editingOcorrenciaIdx = idx;
+  const hoje = new Date().toISOString().split('T')[0];
+  if (idx !== null) {
+    const o = window._ocorrencias[idx];
+    document.getElementById('oc-colab').value      = o.colab;
+    document.getElementById('oc-tipo').value       = o.tipo;
+    document.getElementById('oc-data').value       = o.data.split('/').reverse().join('-');
+    document.getElementById('oc-descricao').value  = o.descricao;
+    document.getElementById('oc-registrado').value = o.registrado;
+    document.getElementById('oc-gravidade').value  = o.gravidade;
+    document.getElementById('oc-modal-title').textContent = 'Editar Ocorrência';
+  } else {
+    document.getElementById('oc-colab').value      = '';
+    document.getElementById('oc-tipo').value       = 'Elogio';
+    document.getElementById('oc-data').value       = hoje;
+    document.getElementById('oc-descricao').value  = '';
+    document.getElementById('oc-registrado').value = '';
+    document.getElementById('oc-gravidade').value  = '—';
+    document.getElementById('oc-modal-title').textContent = 'Registrar Ocorrência';
+  }
+  document.getElementById('ocorrencia-modal').style.display = 'flex';
+};
+
+window.editarOcorrencia = function(i) { openOcorrenciaModal(i); };
+
+window.salvarOcorrencia = function() {
+  const colab     = document.getElementById('oc-colab').value;
+  const tipo      = document.getElementById('oc-tipo').value;
+  const data      = document.getElementById('oc-data').value;
+  const descricao = document.getElementById('oc-descricao').value.trim();
+  const registrado= document.getElementById('oc-registrado').value.trim();
+  const gravidade = document.getElementById('oc-gravidade').value;
+  if (colab === '') return showToast('Selecione um colaborador.');
+  if (!descricao)  return showToast('Informe a descrição.');
+  const registro = {
+    colab,
+    tipo,
+    data: data ? data.split('-').reverse().join('/') : new Date().toLocaleDateString('pt-BR'),
+    descricao,
+    registrado: registrado || '—',
+    gravidade
+  };
+  const idx = window._editingOcorrenciaIdx;
+  if (idx !== null) window._ocorrencias[idx] = registro;
+  else window._ocorrencias.push(registro);
+  window._salvarStorage();
+  document.getElementById('ocorrencia-modal').style.display = 'none';
+  showToast('Ocorrência salva!');
+  renderOcorrenciasTabela();
+};
+
+window.deletarOcorrencia = function(i) {
+  if (!confirm('Excluir esta ocorrência?')) return;
+  window._ocorrencias.splice(i, 1);
+  renderOcorrenciasTabela();
+  showToast('Ocorrência removida.');
+};
 // ------------------------------------------------------------
 // COMPETÊNCIAS & DISC
 // ------------------------------------------------------------
@@ -2120,14 +3483,157 @@ function pageGeneric(id) {
   </div>`;
 }
 
+  // ============================================================
+// FORMULÁRIO PÚBLICO DE CANDIDATURA (sem autenticação)
 // ============================================================
-// INIT — restore config
-// ============================================================
-document.addEventListener('DOMContentLoaded', () => {
-  const url = localStorage.getItem('supa_url');
-  const key = localStorage.getItem('supa_key');
-  if (url) document.getElementById('sb-url').value = url;
-  if (key) document.getElementById('sb-key').value = key;
+function checkCandidaturaLink() {
+  const params = new URLSearchParams(location.search);
+  const token  = params.get('candidatura');
+  if (!token) return; // não é link de candidatura, carrega normalmente
+
+  // Esconde tudo e mostra o formulário público
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'none';
+
+  if (!window._vagas) window._vagas = [];
+
+  // Renderiza o formulário público no body
+  const vaga = window._vagas.find(v => v.token === token);
+
+  document.body.innerHTML = `
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .pub-box { background: #fff; border-radius: 6px; padding: 40px; width: 480px; max-width: 100%; border: 1px solid #ddd; }
+    .pub-logo { font-size: 18px; font-weight: 700; color: #111; margin-bottom: 4px; }
+    .pub-sub { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 28px; }
+    .pub-cargo { font-size: 20px; font-weight: 700; color: #111; margin-bottom: 4px; }
+    .pub-depto { font-size: 13px; color: #888; margin-bottom: 28px; }
+    .pub-label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #555; margin-bottom: 6px; margin-top: 16px; }
+    .pub-input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 3px; font-size: 14px; outline: none; background: #fafafa; }
+    .pub-input:focus { border-color: #111; background: #fff; }
+    .pub-btn { width: 100%; padding: 12px; background: #111; color: #fff; border: none; border-radius: 3px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 24px; }
+    .pub-btn:hover { background: #333; }
+    .pub-msg { text-align: center; margin-top: 16px; font-size: 13px; min-height: 20px; }
+    .pub-success { color: #1a7a3c; }
+    .pub-error { color: #c0392b; }
+    .pub-not-found { text-align: center; padding: 48px 0; color: #888; }
+  </style>
+  <div class="pub-box" id="pub-box">
+    ${!vaga
+      ? `<div class="pub-not-found">
+          <div style="font-size:32px;margin-bottom:12px">🔒</div>
+          <div style="font-size:16px;font-weight:600;color:#333;margin-bottom:8px">Vaga não encontrada</div>
+          <div style="font-size:13px">Este link pode estar incorreto ou a vaga foi encerrada.</div>
+        </div>`
+      : vaga.status !== 'Aberta'
+        ? `<div class="pub-not-found">
+            <div style="font-size:32px;margin-bottom:12px">🔒</div>
+            <div style="font-size:16px;font-weight:600;color:#333;margin-bottom:8px">Vaga encerrada</div>
+            <div style="font-size:13px">Esta vaga não está mais recebendo candidaturas.</div>
+          </div>`
+        : `<div class="pub-logo">MINART MÓVEIS</div>
+           <div class="pub-sub">Candidatura Online</div>
+           <div class="pub-cargo">${vaga.cargo}</div>
+           <div class="pub-depto">${vaga.depto || 'Minart Móveis'}</div>
+           <label class="pub-label">Nome Completo *</label>
+           <input class="pub-input" id="pub-nome" placeholder="Seu nome completo">
+           <label class="pub-label">E-mail *</label>
+           <input class="pub-input" id="pub-email" type="email" placeholder="seu@email.com">
+           <label class="pub-label">Currículo (PDF ou Word)</label>
+           <input class="pub-input" id="pub-curriculo" type="file" accept=".pdf,.doc,.docx" style="padding:8px">
+           <button class="pub-btn" onclick="enviarCandidatura('${token}')">Enviar Candidatura</button>
+           <div class="pub-msg" id="pub-msg"></div>`}
+  </div>`;
+}
+
+window.enviarCandidatura = function(token) {
+  const nome     = (document.getElementById('pub-nome')?.value || '').trim();
+  const email    = (document.getElementById('pub-email')?.value || '').trim();
+  const currFile = document.getElementById('pub-curriculo')?.files[0];
+  const msgEl    = document.getElementById('pub-msg');
+
+  if (!nome)  { msgEl.textContent = 'Informe seu nome.'; msgEl.className = 'pub-msg pub-error'; return; }
+  if (!email) { msgEl.textContent = 'Informe seu e-mail.'; msgEl.className = 'pub-msg pub-error'; return; }
+
+  if (!window._candidaturas) window._candidaturas = [];
+  if (!window._vagas) window._vagas = [];
+
+  const vaga = window._vagas.find(v => v.token === token);
+
+  window._candidaturas.push({
+    vagaToken: token,
+    vagaCargo: vaga ? vaga.cargo : '—',
+    nome,
+    email,
+    curriculo: currFile ? currFile.name : null,
+    dataEnvio: new Date().toLocaleString('pt-BR')
+  });
+
+  // Incrementa contador da vaga
+  if (vaga) vaga.candidatos = (vaga.candidatos || 0) + 1;
+salvarCandidaturasLocal(); // ← adicionar
+salvarVagasLocal();        // ← adicionar (atualiza contador)
+  
+  // Feedback visual
+  document.getElementById('pub-box').innerHTML = `
+    <div style="text-align:center;padding:32px 0">
+      <div style="font-size:40px;margin-bottom:16px">✅</div>
+      <div style="font-size:18px;font-weight:700;color:#111;margin-bottom:8px">Candidatura enviada!</div>
+      <div style="font-size:14px;color:#666">Obrigado, <strong>${nome}</strong>. Entraremos em contato em breve.</div>
+    </div>`;
+};
+
+// Executa ao carregar a página
+document.addEventListener('DOMContentLoaded', async () => {
+  const sbUrlEl = document.getElementById('sb-url');
+  const sbKeyEl = document.getElementById('sb-key');
+
+  // Carrega SUPA_URL e SUPA_KEY aqui, após o DOM estar pronto
+  SUPA_URL = localStorage.getItem('supa_url') || (sbUrlEl ? sbUrlEl.value : '');
+  SUPA_KEY = localStorage.getItem('supa_key') || (sbKeyEl ? sbKeyEl.value : '');
+
+  // Preenche os inputs ocultos com os valores carregados (útil para debug ou para o saveConfig)
+  if (sbUrlEl) sbUrlEl.value = SUPA_URL;
+  if (sbKeyEl) sbKeyEl.value = SUPA_KEY;
+
+  // Agora que SUPA_URL e SUPA_KEY estão definidos, podemos inicializar supaClient
+  supaClient = initSupabase();
+    await loadCargosForApp(); // <-- Carrega os cargos antes de tentar logar ou renderizar qualquer coisa que dependa deles
+  // FIM DA LINHA ADICIONADA
+
+  // Se houver uma sessão Supabase ativa, entra no app
+ // Verifica sessão ativa (Supabase Auth v2)
+if (supaClient) {
+  const { data: { session } } = await supaClient.auth.getSession();
+  if (session?.user) {
+    currentUser = {
+      email: session.user.email,
+      name: session.user.user_metadata?.nome || session.user.email,
+      role: session.user.user_metadata?.perfil || 'user'
+    };
+    enterApp();
+  }
+}
+
+  carregarVagasLocal();
+  carregarCandidaturasLocal();
+// Carrega os cargos do Supabase antes de qualquer página que os utilize
+  await loadCargosForApp();
+
+  // Inicializa arrays vazios para as variáveis que ainda não foram migradas para o Supabase
+  // Isso evita erros de "undefined" se alguma página tentar acessá-las antes de serem preenchidas
+  if (!window._cargosDescricao) window._cargosDescricao = [];
+  if (!window._historicoCarreira) window._historicoCarreira = [];
+  if (!window._documentosPorColab) window._documentosPorColab = {};
+  if (!window._perfisPorColab) window._perfisPorColab = {};
+  if (!window._dadosPessoais) window._dadosPessoais = {};
+  if (!window._contratosPorColab) window._contratosPorColab = {};
+  if (!window._ocorrencias) window._ocorrencias = [];
+  if (!window._vagas) window._vagas = [];
+  if (!window._candidaturas) window._candidaturas = []; // Já existe, mas bom reforçar
+  
+  checkCandidaturaLink();
 });
 </script>
 </body>
