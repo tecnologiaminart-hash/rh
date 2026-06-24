@@ -1118,8 +1118,7 @@ function renderStatusTable() {
 
   _colaboradoresSupabase.forEach(colab => {
     const cargoNome = colab.cargos ? colab.cargos.nome_cargo : 'N/A';
-    // Puxa o salário base diretamente da coluna salario_base da tabela colaboradores
-    const salarioBase = colab.salario_base ?
+    const salarioBase = colab.salario_base !== null && colab.salario_base !== undefined ?
                         new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(colab.salario_base)) : 'N/A';
     const statusBadgeClass = colab.status_colaborador === 'Ativo' ? 'badge-active' : 'badge-inactive';
 
@@ -1146,6 +1145,59 @@ function pageStatus() {
   // Isso garante que os dados sejam carregados sempre que a aba for acessada.
   loadColaboradoresFromSupabase();
 
+  function closeStatusModal() {
+  document.getElementById('status-modal').style.display = 'none';
+}
+
+function openStatusModal(colabId = null) {
+  _editingStatusColabId = colabId;
+  const modal = document.getElementById('status-modal');
+  const modalTitle = document.getElementById('status-modal-title');
+  const smNome = document.getElementById('sm-nome');
+  const smCargo = document.getElementById('sm-cargo');
+  const smDesde = document.getElementById('sm-desde');
+  const smStatus = document.getElementById('sm-status');
+  const smSalarioBase = document.getElementById('sm-salario-base');
+
+  // Popula o select de cargos
+  smCargo.innerHTML = '<option value="">— Selecione o Cargo —</option>';
+  window._cargos.forEach(cargo => {
+    smCargo.innerHTML += `<option value="${cargo.id_cargo}">${cargo.nome_cargo}</option>`;
+  });
+
+  // Event listener para atualizar o salário base ao mudar o cargo
+  smCargo.onchange = () => {
+    const selectedCargoId = smCargo.value;
+    const selectedCargo = window._cargos.find(c => c.id_cargo === selectedCargoId);
+    if (selectedCargo && selectedCargo.salario_base !== null && selectedCargo.salario_base !== undefined) {
+      // Preenche o campo, mas permite edição
+      smSalarioBase.value = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(selectedCargo.salario_base);
+    } else {
+      smSalarioBase.value = '';
+    }
+  };
+
+  if (colabId) {
+    modalTitle.textContent = 'Editar Colaborador';
+    const colab = _colaboradoresSupabase.find(c => c.id_colaborador === colabId);
+    if (colab) {
+      smNome.value = colab.nome_colaborador;
+      smCargo.value = colab.id_cargos; // O ID do cargo deve ser o valor da option
+      smDesde.value = colab.desde;
+      smStatus.value = colab.status_colaborador;
+      smSalarioBase.value = colab.salario_base !== null && colab.salario_base !== undefined ? new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(parseFloat(colab.salario_base)) : '';
+    }
+  } else {
+    modalTitle.textContent = 'Novo Colaborador';
+    smNome.value = '';
+    smCargo.value = '';
+    smDesde.value = '';
+    smStatus.value = 'Ativo';
+    smSalarioBase.value = '';
+  }
+  modal.style.display = 'flex';
+}
+  
   // O HTML da página, incluindo o modal e a tabela vazia que será preenchida
   return `
   <!-- Modal: Adicionar/Editar Colaborador -->
@@ -1202,7 +1254,6 @@ function pageStatus() {
         <tr>
           <th>Nome</th>
           <th>Cargo</th>
-          <th>Departamento</th>
           <th>Desde</th>
           <th>Salário Base</th>
           <th>Status</th>
@@ -1221,10 +1272,10 @@ async function saveStatusEmployee() {
   const smCargoId = document.getElementById('sm-cargo').value;
   const smDesde = document.getElementById('sm-desde').value;
   const smStatus = document.getElementById('sm-status').value;
-  const smSalarioBase = document.getElementById('sm-salario-base').value; // Pega o valor editável
-  const smDepartamento = document.getElementById('sm-departamento').value; // <-- ESTA LINHA SERÁ REMOVIDA
+  const smSalarioBase = document.getElementById('sm-salario-base').value;
 
   // Converte o salário para um formato numérico antes de salvar no Supabase
+  // Remove R$, espaços, pontos de milhar e substitui vírgula por ponto decimal
   const salarioNumerico = parseFloat(smSalarioBase.replace(/[R$\s.]/g, '').replace(',', '.'));
 
   if (!smNome || !smCargoId || !smDesde || !smStatus || isNaN(salarioNumerico)) {
@@ -1234,11 +1285,10 @@ async function saveStatusEmployee() {
 
   const newColabData = {
     nome_colaborador: smNome,
-    id_cargos: smCargoId,
+    id_cargos: smCargoId, // Salva o ID do cargo
     desde: smDesde,
     status_colaborador: smStatus,
-    departamento: smDepartamento, // <-- ESTA LINHA SERÁ REMOVIDA
-    salario_base: salarioNumerico, // Salva o salário base editável
+    salario_base: salarioNumerico,
   };
 
   if (_editingStatusColabId) {
@@ -1256,6 +1306,22 @@ async function saveStatusEmployee() {
       closeStatusModal();
       loadColaboradoresFromSupabase(); // Recarrega a lista
     }
+  } else {
+    // Adicionar novo colaborador
+    const { error } = await supaClient
+      .from('colaboradores')
+      .insert([newColabData]);
+
+    if (error) {
+      console.error('Erro ao adicionar colaborador:', error.message);
+      showToast('Erro ao adicionar colaborador.', 'danger');
+    } else {
+      showToast('Colaborador adicionado com sucesso!', 'success');
+      closeStatusModal();
+      loadColaboradoresFromSupabase(); // Recarrega a lista
+    }
+  }
+}
   } else {
     // Adicionar novo colaborador
     const { error } = await supaClient
@@ -1382,13 +1448,11 @@ function filterStatusTable(searchTerm) {
   for (let i = 0; i < tr.length; i++) {
     let tdNome = tr[i].getElementsByTagName('td')[0]; // Colaborador
     let tdCargo = tr[i].getElementsByTagName('td')[1]; // Cargo
-    // let tdDepartamento = tr[i].getElementsByTagName('td')[2]; // Departamento REMOVIDO
-    let tdStatus = tr[i].getElementsByTagName('td')[4]; // Status (índice ajustado)
+    let tdStatus = tr[i].getElementsByTagName('td')[4]; // Status
 
-    if (tdNome || tdCargo || tdStatus) { // tdDepartamento removido da condição
+    if (tdNome || tdCargo || tdStatus) {
       const textValue = (tdNome ? tdNome.textContent : '') +
                         (tdCargo ? tdCargo.textContent : '') +
-                        // (tdDepartamento ? tdDepartamento.textContent : '') + // REMOVIDO
                         (tdStatus ? tdStatus.textContent : '');
       if (textValue.toUpperCase().indexOf(filter) > -1) {
         tr[i].style.display = '';
@@ -1901,10 +1965,7 @@ function pageVagas() {
           ${(window._cargos||[]).map(([c]) => `<option value="${c}">${c}</option>`).join('')}
         </select>
       </div>
-      <div class="form-group" style="margin-bottom:14px">
-        <label class="form-label">Departamento</label>
-        <input class="form-input" id="vaga-depto" placeholder="Ex: Produção, Administrativo...">
-      </div>
+     
       <div class="form-group" style="margin-bottom:14px">
         <label class="form-label">Prazo</label>
         <input class="form-input" type="date" id="vaga-prazo">
