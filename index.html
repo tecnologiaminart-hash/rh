@@ -1091,7 +1091,7 @@ async function loadColaboradoresFromSupabase() {
   showToast('Carregando colaboradores...', 'info');
   const { data, error } = await supaClient
     .from('colaboradores')
-    .select('*, cargos(nome_cargo, salario_base)') // Seleciona o nome do cargo e salário base
+    .select('*, cargos(nome_cargo), salario_base') // Seleciona o nome do cargo; salario_base vem da própria tabela colaboradores
     .order('nome_colaborador', { ascending: true });
 
   if (error) {
@@ -1118,8 +1118,12 @@ function renderStatusTable() {
 
   _colaboradoresSupabase.forEach(colab => {
     const cargoNome = colab.cargos ? colab.cargos.nome_cargo : 'N/A';
-    const salarioBase = colab.cargos && colab.cargos.salario_base ?
-                        new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(colab.cargos.salario_base)) : 'N/A';
+    const salarioRaw = (colab.salario_base !== undefined && colab.salario_base !== null && colab.salario_base !== '')
+              ? colab.salario_base
+              : (colab.cargos && colab.cargos.salario_base ? colab.cargos.salario_base : null);
+    const salarioBase = salarioRaw !== null && salarioRaw !== undefined && String(salarioRaw) !== ''
+              ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(salarioRaw))
+              : 'N/A';
     const statusBadgeClass = colab.status_colaborador === 'Ativo' ? 'badge-active' : 'badge-inactive';
 
     tbody.innerHTML += `
@@ -1229,15 +1233,10 @@ function openStatusModal(colabId = null) {
     smCargo.innerHTML += `<option value="${cargo.id_cargo}">${cargo.nome_cargo}</option>`;
   });
 
-  // Event listener para atualizar o salário base ao mudar o cargo
+  // Não preencher automaticamente o salário a partir dos cargos.
+  // O salário base deve vir da coluna `salario_base` da tabela `colaboradores`.
   smCargo.onchange = () => {
-    const selectedCargoId = smCargo.value;
-    const selectedCargo = window._cargos.find(c => c.id_cargo === selectedCargoId);
-    if (selectedCargo && selectedCargo.salario_base) {
-      smSalarioBase.value = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(selectedCargo.salario_base);
-    } else {
-      smSalarioBase.value = '';
-    }
+    // Mantém o campo salário como está (poderá ser preenchido/alterado manualmente se desejado).
   };
 
   if (colabId) {
@@ -1248,8 +1247,14 @@ function openStatusModal(colabId = null) {
       smCargo.value = colab.id_cargos;
       smDesde.value = colab.desde;
       smStatus.value = colab.status_colaborador;
-      // Dispara o evento change para atualizar o salário base ao carregar o modal
-      smCargo.dispatchEvent(new Event('change'));
+      // Preenche o salário base a partir da coluna `salario_base` de colaboradores (ou fallback para cargos)
+      if (colab.salario_base !== undefined && colab.salario_base !== null && String(colab.salario_base) !== '') {
+        smSalarioBase.value = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(colab.salario_base);
+      } else if (colab.cargos && colab.cargos.salario_base) {
+        smSalarioBase.value = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(colab.cargos.salario_base);
+      } else {
+        smSalarioBase.value = '';
+      }
     }
   } else {
     modalTitle.textContent = 'Novo Colaborador';
@@ -1271,6 +1276,9 @@ async function saveStatusEmployee() {
   const smCargoId = document.getElementById('sm-cargo').value;
   const smDesde = document.getElementById('sm-desde').value;
   const smStatus = document.getElementById('sm-status').value;
+  const smSalarioRaw = document.getElementById('sm-salario-base').value;
+  // Converte formato BRL (ex: 1.234,56) para número (1234.56)
+  const smSalarioNum = smSalarioRaw ? parseFloat(String(smSalarioRaw).replace(/\./g,'').replace(/,/g,'.').replace(/[^0-9.\-]/g,'')) : null;
 
   if (!smNome || !smCargoId || !smDesde || !smStatus) {
     showToast('Preencha todos os campos obrigatórios.', 'danger');
@@ -1283,6 +1291,7 @@ async function saveStatusEmployee() {
     desde: smDesde,
     status_colaborador: smStatus,
   };
+  if (smSalarioNum !== null && !isNaN(smSalarioNum)) newColabData.salario_base = smSalarioNum;
 
   if (_editingStatusColabId) {
     // Editar colaborador existente
@@ -1323,8 +1332,12 @@ function viewStatusEmployee(colabId) {
     return;
   }
   const cargoNome = colab.cargos ? colab.cargos.nome_cargo : 'N/A';
-  const salarioBase = colab.cargos && colab.cargos.salario_base ?
-                      new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(colab.cargos.salario_base)) : 'N/A';
+  const salarioRaw = (colab.salario_base !== undefined && colab.salario_base !== null && colab.salario_base !== '')
+                    ? colab.salario_base
+                    : (colab.cargos && colab.cargos.salario_base ? colab.cargos.salario_base : null);
+  const salarioBase = salarioRaw !== null && salarioRaw !== undefined && String(salarioRaw) !== ''
+                      ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(salarioRaw))
+                      : 'N/A';
 
   showToast(`
     Nome: ${colab.nome_colaborador}
@@ -1342,8 +1355,12 @@ function printStatusRow(colabId) {
     return;
   }
   const cargoNome = colab.cargos ? colab.cargos.nome_cargo : 'N/A';
-  const salarioBase = colab.cargos && colab.cargos.salario_base ?
-                      new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(colab.cargos.salario_base)) : 'N/A';
+  const salarioRaw = (colab.salario_base !== undefined && colab.salario_base !== null && colab.salario_base !== '')
+                    ? colab.salario_base
+                    : (colab.cargos && colab.cargos.salario_base ? colab.cargos.salario_base : null);
+  const salarioBase = salarioRaw !== null && salarioRaw !== undefined && String(salarioRaw) !== ''
+                      ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(salarioRaw))
+                      : 'N/A';
 
   const w = window.open('', '_blank');
   w.document.write(`<html><head><title>Colaborador</title><style>body{font-family:sans-serif;padding:40px}h2{margin-bottom:20px}p{margin:6px 0;font-size:14px}</style></head><body>
