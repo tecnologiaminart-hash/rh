@@ -378,6 +378,24 @@ function carregarVagasLocal() {
   }
 }
 
+function carregarDescricoesLocal() {
+  try {
+    const salvo = localStorage.getItem('rh_cargos_descricao');
+    window._cargosDescricao = salvo ? JSON.parse(salvo) : [];
+  } catch(e) {
+    window._cargosDescricao = [];
+    console.warn('Erro ao carregar descrições do localStorage:', e);
+  }
+}
+
+window._salvarStorage = function() {
+  try {
+    localStorage.setItem('rh_cargos_descricao', JSON.stringify(window._cargosDescricao || []));
+  } catch(e) {
+    console.error('Erro ao salvar descrições no localStorage:', e);
+  }
+};
+
 function salvarCandidaturasLocal() {
   localStorage.setItem('rh_candidaturas', JSON.stringify(window._candidaturas || []));
 }
@@ -3721,6 +3739,7 @@ if (supaClient) {
 
   // Inicializa arrays vazios para as variáveis que ainda não foram migradas para o Supabase
   // Isso evita erros de "undefined" se alguma página tentar acessá-las antes de serem preenchidas
+  carregarDescricoesLocal();
   if (!window._cargosDescricao) window._cargosDescricao = [];
   if (!window._historicoCarreira) window._historicoCarreira = [];
   if (!window._documentosPorColab) window._documentosPorColab = {};
