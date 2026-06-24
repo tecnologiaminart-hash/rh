@@ -363,6 +363,8 @@ let supaClient = null;
 let currentUser = null;
 let _colaboradoresSupabase = [];
 let _editingStatusColabId = null;
+let _historicoColaboradoresSupabase = [];
+let _editingHistoricoColabId = null;
   
 function salvarVagasLocal() {
   localStorage.setItem('rh_vagas', JSON.stringify(window._vagas || []));
@@ -1049,55 +1051,6 @@ function pageHistoricoCarreiraDetalhe(colabIdx) {
     </table>
   </div>`;
 }
-// ------------------------------------------------------------
-// COLABORADORES — ADMISSÃO
-// ------------------------------------------------------------
-function pageAdmissao() {
-  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" onclick="showToast('Abrindo formulário...')">+ Nova Admissão</button>`;
-  return `
-  <div class="table-card">
-    <div class="table-header">
-      <span class="table-title">Colaboradores — Admissões</span>
-      <input class="search-input" placeholder="Buscar colaborador...">
-      <div class="table-actions">
-        <button class="btn btn-sm btn-print">🖨 Imprimir</button>
-        <button class="btn btn-sm" data-toast="Exportado!">📥 Excel</button>
-      </div>
-    </div>
-    <table>
-      <thead><tr><th>Nome</th><th>Cargo</th><th>Departamento</th><th>Admissão</th><th>Salário</th><th>Status</th><th>Ações</th></tr></thead>
-      <tbody>
-        ${[
-          ['AMANDA SOUSA LIMA','Encarregado de Setor - Nível 1','—','01/01/2024','R$ 2.355,00','Ativo'],
-          ['LUCIANA DA SILVA','Auxiliar Administrativo - Nível 1','—','01/01/2024','R$ 1.960,00','Ativo'],
-          ['JUCICLÉIA DE CARVALHO','Gerente Geral - Nível 2','—','01/01/2024','R$ 3.070,00','Ativo'],
-          ['KAROL SILVA JARDIM','Auxiliar Administrativo - Nível 1','—','01/01/2024','R$ 1.960,00','Ativo'],
-          ['LEANDRO ALMEIDA','Encarregado de Setor - Nível 1','—','01/01/2024','R$ 2.355,00','Ativo'],
-          ['MAXSUEL DA SILVA SANTOS','Soldador - Nível 1','—','01/01/2024','R$ 2.352,00','Ativo'],
-          ['LEANDRO FELIX DA SILVA','Soldador - Nível 1','—','01/01/2024','R$ 2.352,00','Ativo'],
-          ['JOÃO ALVES MORAIS','Soldador - Nível 1','—','01/01/2024','R$ 2.352,00','Ativo'],
-          ['JACSON MARTINS','Soldador - Nível 1','—','01/01/2024','R$ 2.352,00','Ativo'],
-          ['MARCOS VINICIUS LIMA DA SILVA','Operador de Máquinas - Nível 1','—','01/01/2024','R$ 1.956,00','Ativo'],
-          ['JOSIELTON DIAS REIS','Operador de Máquinas - Nível 1','—','01/01/2024','R$ 1.956,00','Ativo'],
-          ['RAILON DE SOUSA OLIVEIRA','Encarregado Geral','—','01/01/2024','R$ 2.611,00','Ativo'],
-          ['JOSIAS CARDOSO BONINA','Encarregado Geral','—','01/01/2024','R$ 2.611,00','Ativo'],
-          ['DARTO TIAGO DE ARAUJO','Entregador e Montador - Nível 3','—','01/01/2024','R$ 2.304,00','Ativo'],
-          ['CRISTIANO DOS SANTOS','Auxiliar Administrativo - Nível 1','—','01/01/2024','R$ 1.960,00','Ativo'],
-        ].map(([n,c,d,a,s,st]) => `
-          <tr>
-            <td><strong>${n}</strong></td>
-            <td>${c}</td>
-            <td>${d}</td>
-            <td>${a}</td>
-            <td>${s}</td>
-            <td><span class="badge ${st==='Ativo'?'badge-active':st==='Férias'?'badge-info':'badge-inactive'}">${st}</span></td>
-            <td><button class="action-btn" data-toast="Abrindo ficha de ${n}">✎</button><button class="action-btn" data-toast="Visualizando ${n}">👁</button></td>
-          </tr>`).join('')}
-      </tbody>
-    </table>
-    <div class="table-pagination"><span>Mostrando 15 de 34 colaboradores</span><div style="display:flex;gap:6px"><button class="btn btn-sm">‹</button><button class="btn btn-sm" style="background:#111;color:#fff">1</button><button class="btn btn-sm">2</button><button class="btn btn-sm">›</button></div></div>
-  </div>`;
-}
 
 // ------------------------------------------------------------
 // DOCUMENTOS
@@ -1322,228 +1275,10 @@ function pageAtestados() {
 // ------------------------------------------------------------
 // Informações Contratuais
 // ------------------------------------------------------------
-
-// Variável global para armazenar os colaboradores carregados do Supabase
 let _colaboradoresSupabase = [];
+// Variável global para saber qual colaborador está sendo editado no modal
+let _editingStatusColabId = null;
 
-async function pageStatus() {
-  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" onclick="openStatusModal()">+ Novo Colaborador</button>`;
-
-  // Carregar colaboradores do Supabase
-  await loadColaboradoresFromSupabase();
-
-  setTimeout(() => {
-    const search = document.getElementById('status-search');
-    if (search) {
-      search.oninput = function() { // Use oninput diretamente
-        const q = this.value.toLowerCase();
-        const tbody = document.getElementById('status-tbody');
-        if (tbody) {
-          Array.from(tbody.children).forEach(tr => { // Itera sobre os filhos do tbody
-            tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
-          });
-        }
-      };
-    }
-  }, 100); // Um pequeno delay para garantir que o DOM esteja pronto
-
-  return `
-  <div id="status-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:6px;padding:32px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
-      <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="status-modal-title">Novo Colaborador</div>
-      <div class="form-grid" style="margin-bottom:16px">
-        <div class="form-group form-full">
-          <label class="form-label">Nome</label>
-          <input class="form-input" id="sm-nome">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Cargo</label>
-          <select class="form-select" id="sm-cargo">
-            <option value="">— Selecione o Cargo —</option>
-            <!-- Opções de cargo serão preenchidas via JS em openStatusModal -->
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Status</label>
-          <select class="form-select" id="sm-status">
-            <option>Ativo</option>
-            <option>Afastado</option>
-            <option>Desligado</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Desde</label>
-          <input class="form-input" id="sm-desde" type="date">
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button class="btn" onclick="document.getElementById('status-modal').style.display='none'">Cancelar</button>
-        <button class="btn btn-primary" onclick="saveStatusEmployee()">Salvar</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="status-view-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:6px;padding:32px;width:420px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
-      <div style="font-size:15px;font-weight:700;margin-bottom:20px">Ficha do Colaborador</div>
-      <div id="status-view-body" style="font-size:13px;line-height:2;color:var(--text)"></div>
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">
-        <button class="btn" onclick="document.getElementById('status-view-modal').style.display='none'">Fechar</button>
-        <button class="btn btn-primary" onclick="printStatusCard()">🖨 Imprimir</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="table-card">
-    <div class="table-header">
-      <span class="table-title">Status dos Colaboradores</span>
-      <input class="search-input" id="status-search" placeholder="Buscar por nome…" style="margin-left:12px">
-    </div>
-    <table id="status-table">
-      <thead>
-        <tr>
-          <th>Colaborador</th>
-          <th>Cargo</th>
-          <th>Status Atual</th>
-          <th>Desde</th>
-          <th>Ações</th>
-        </tr>
-      </thead>
-      <tbody id="status-tbody">
-        <!-- Conteúdo será preenchido por renderStatusTable() -->
-      </tbody>
-    </table>
-    <div class="table-pagination"><span id="status-count">${_colaboradoresSupabase.length} colaboradores</span></div>
-  </div>`;
-}
-  window.openStatusModal = async function(colabId = null) {
-  const m = document.getElementById('status-modal');
-  _editingStatusColabId = colabId; // Armazena o ID do colaborador para edição
-
-  // Carregar cargos para o select do modal
-  const { data: cargosData, error: cargosError } = await supaClient.from('cargos').select('id_cargo, nome_cargo');
-  if (cargosError) {
-    console.error('Erro ao carregar cargos:', cargosError.message);
-    showToast('Erro ao carregar cargos para o formulário.', 'error');
-    return;
-  }
-  const cargoOptions = cargosData.map(c => `<option value="${c.id_cargo}">${c.nome_cargo}</option>`).join('');
-  document.getElementById('sm-cargo').innerHTML = `<option value="">— Selecione o Cargo —</option>${cargoOptions}`;
-
-  if (colabId !== null) {
-    const colab = _colaboradoresSupabase.find(c => c.id_colaborador === colabId);
-    if (colab) {
-      document.getElementById('sm-nome').value = colab.nome_colaborador;
-      document.getElementById('sm-cargo').value = colab.cargos ? colab.cargos.id_cargo : ''; // Preenche com o ID do cargo
-      document.getElementById('sm-status').value = colab.status_colaborador;
-      document.getElementById('sm-desde').value = colab.desde; // Assume que 'desde' já está no formato 'YYYY-MM-DD'
-      document.getElementById('status-modal-title').textContent = 'Editar Colaborador';
-    }
-  } else {
-    // Novo registro
-    document.getElementById('sm-nome').value = '';
-    document.getElementById('sm-cargo').value = '';
-    document.getElementById('sm-status').value = 'Ativo';
-    document.getElementById('sm-desde').value = new Date().toISOString().split('T')[0]; // Data atual no formato YYYY-MM-DD
-    document.getElementById('status-modal-title').textContent = 'Novo Colaborador';
-  }
-  m.style.display = 'flex';
-};
-
-window.editStatusEmployee = function(colabId) {
-  openStatusModal(colabId);
-};
-
-window.saveStatusEmployee = async function() {
-  const nome = document.getElementById('sm-nome').value.trim();
-  const idCargo = document.getElementById('sm-cargo').value; // Pega o ID do cargo
-  const status = document.getElementById('sm-status').value;
-  const rawDesde = document.getElementById('sm-desde').value;
-
-  if (!nome || !idCargo || !rawDesde) {
-    showToast('Preencha todos os campos obrigatórios.', 'error');
-    return;
-  }
-
-  const dataParaSalvar = {
-    nome_colaborador: nome,
-    id_cargos: idCargo, // Salva o ID do cargo
-    status_colaborador: status,
-    desde: rawDesde // Já deve estar no formato 'YYYY-MM-DD'
-  };
-
-  let error = null;
-  if (_editingStatusColabId) {
-    // Atualizar colaborador existente
-    const { error: updateError } = await supaClient
-      .from('colaboradores')
-      .update(dataParaSalvar)
-      .eq('id_colaborador', _editingStatusColabId);
-    error = updateError;
-  } else {
-    // Inserir novo colaborador
-    const { error: insertError } = await supaClient
-      .from('colaboradores')
-      .insert([dataParaSalvar]);
-    error = insertError;
-  }
-
-  if (error) {
-    console.error('Erro ao salvar colaborador:', error.message);
-    showToast(`Erro ao salvar colaborador: ${error.message}`, 'error');
-  } else {
-    document.getElementById('status-modal').style.display = 'none';
-    showToast('Colaborador salvo com sucesso!');
-    // Recarrega os dados e renderiza a tabela
-    await loadColaboradoresFromSupabase();
-    // Navega para a página para garantir que o conteúdo seja atualizado
-    navigate('col-status', 'Informações Contratuais', 'Colaboradores');
-  }
-};
-
-window.viewStatusEmployee = function(colabId) {
-  const colab = _colaboradoresSupabase.find(c => c.id_colaborador === colabId);
-  if (!colab) {
-    showToast('Colaborador não encontrado.', 'error');
-    return;
-  }
-  document.getElementById('status-view-body').innerHTML = `
-    <div><strong>Nome:</strong> ${colab.nome_colaborador}</div>
-    <div><strong>Cargo:</strong> ${colab.cargos ? colab.cargos.nome_cargo : 'N/A'}</div>
-    <div><strong>Status:</strong> ${colab.status_colaborador}</div>
-    <div><strong>Desde:</strong> ${colab.desde}</div>`;
-  document.getElementById('status-view-modal').style.display = 'flex';
-};
-
-window.printStatusRow = function(colabId) {
-  const colab = _colaboradoresSupabase.find(c => c.id_colaborador === colabId);
-  if (!colab) {
-    showToast('Colaborador não encontrado para impressão.', 'error');
-    return;
-  }
-  const w = window.open('', '_blank');
-  w.document.write(`<html><head><title>Colaborador</title><style>body{font-family:sans-serif;padding:40px}h2{margin-bottom:20px}p{margin:6px 0;font-size:14px}</style></head><body>
-    <h2>Minart Móveis — Ficha de Status</h2>
-    <p><strong>Nome:</strong> ${colab.nome_colaborador}</p>
-    <p><strong>Cargo:</strong> ${colab.cargos ? colab.cargos.nome_cargo : 'N/A'}</p>
-    <p><strong>Status:</strong> ${colab.status_colaborador}</p>
-    <p><strong>Desde:</strong> ${colab.desde}</p>
-    <p style="margin-top:30px;color:#888;font-size:12px">Impresso em: ${new Date().toLocaleDateString('pt-BR')}</p>
-  </body></html>`);
-  w.print();
-};
-
-window.printStatusCard = function() {
-  const body = document.getElementById('status-view-body').innerHTML;
-  const w = window.open('', '_blank');
-  w.document.write(`<html><head><title>Colaborador</title><style>body{font-family:sans-serif;padding:40px}h2{margin-bottom:20px}div{margin:6px 0;font-size:14px}</style></head><body>
-    <h2>Minart Móveis — Ficha de Status</h2>${body}
-    <p style="margin-top:30px;color:#888;font-size:12px">Impresso em: ${new Date().toLocaleDateString('pt-BR')}</p>
-  </body></html>`);
-  w.print();
-};
-  
-// Função para carregar os colaboradores do Supabase
 async function loadColaboradoresFromSupabase() {
   if (!supaClient) {
     console.error('Supabase client not initialized.');
@@ -1555,66 +1290,327 @@ async function loadColaboradoresFromSupabase() {
     .select(`
       id_colaborador,
       nome_colaborador,
+      departamento, // Incluindo o departamento
       desde,
       status_colaborador,
       cargos (
         id_cargo,
-        nome_cargo
+        nome_cargo,
+        salario_base // Incluindo o salário base do cargo
       )
-    `);
+    `)
+    .order('nome_colaborador', { ascending: true });
 
   if (error) {
-    console.error('Erro ao carregar colaboradores do Supabase:', error.message);
+    console.error('Erro ao carregar colaboradores:', error.message);
     showToast('Erro ao carregar colaboradores.', 'error');
     _colaboradoresSupabase = [];
   } else {
     _colaboradoresSupabase = data;
-    // Se a tabela já estiver renderizada, atualiza-a
-    if (document.getElementById('status-tbody')) {
-      renderStatusTable();
-    }
   }
+  renderStatusTable();
 }
 
-// Função para renderizar a tabela de status dos colaboradores
 function renderStatusTable() {
   const tbody = document.getElementById('status-tbody');
-  const countSpan = document.getElementById('status-count');
-  if (!tbody || !countSpan) return;
+  if (!tbody) return;
 
-  tbody.innerHTML = _colaboradoresSupabase.map(colab => `
-    <tr data-id="${colab.id_colaborador}">
-      <td><strong>${colab.nome_colaborador}</strong></td>
-      <td>${colab.cargos ? colab.cargos.nome_cargo : 'N/A'}</td>
-      <td><span class="badge ${colab.status_colaborador === 'Ativo' ? 'badge-active' : colab.status_colaborador === 'Afastado' ? 'badge-pending' : 'badge-inactive'}">${colab.status_colaborador}</span></td>
-      <td>${colab.desde}</td>
-      <td>
-        <button class="action-btn" title="Visualizar" onclick="viewStatusEmployee('${colab.id_colaborador}')">👁</button>
-        <button class="action-btn" title="Editar" onclick="editStatusEmployee('${colab.id_colaborador}')">✎</button>
-        <button class="action-btn" title="Imprimir" onclick="printStatusRow('${colab.id_colaborador}')">🖨</button>
-      </td>
-    </tr>`).join('');
-  countSpan.textContent = `${_colaboradoresSupabase.length} colaboradores`;
+  let rows = '';
+  _colaboradoresSupabase.forEach(colab => {
+    const cargoNome = colab.cargos ? colab.cargos.nome_cargo : 'N/A';
+    const salarioBase = colab.cargos && colab.cargos.salario_base ?
+                        new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(colab.cargos.salario_base)) : 'N/A';
+    const statusBadgeClass = colab.status_colaborador === 'Ativo' ? 'badge-active' :
+                             colab.status_colaborador === 'Afastado' ? 'badge-pending' : 'badge-inactive';
+
+    rows += `
+      <tr>
+        <td>${colab.nome_colaborador}</td>
+        <td>${cargoNome}</td>
+        <td>${colab.departamento || 'N/A'}</td>
+        <td>${colab.desde}</td>
+        <td>${salarioBase}</td>
+        <td><span class="badge ${statusBadgeClass}">${colab.status_colaborador}</span></td>
+        <td>
+          <button class="action-btn" onclick="openStatusModal('${colab.id_colaborador}')" title="Editar">✏️</button>
+          <button class="action-btn" onclick="deleteStatusEmployee('${colab.id_colaborador}')" title="Excluir">🗑️</button>
+          <button class="action-btn" onclick="viewStatusEmployee('${colab.id_colaborador}')" title="Visualizar">👁️</button>
+          <button class="action-btn" onclick="printStatusRow('${colab.id_colaborador}')" title="Imprimir">🖨️</button>
+        </td>
+      </tr>
+    `;
+  });
+  tbody.innerHTML = rows;
 }
 
-// Adicione esta função para carregar os cargos do Supabase no início
-async function loadCargosForApp() {
-  if (!supaClient) {
-    console.warn('Supabase client not initialized. Cannot load cargos.');
+window.openStatusModal = function(colabId = null) {
+  _editingStatusColabId = colabId;
+  const modalTitle = document.getElementById('status-modal-title');
+  const smNome = document.getElementById('sm-nome');
+  const smCargo = document.getElementById('sm-cargo');
+  const smDepartamento = document.getElementById('sm-departamento'); // Novo campo
+  const smSalarioBase = document.getElementById('sm-salario-base'); // Novo campo
+  const smDesde = document.getElementById('sm-desde');
+  const smStatus = document.getElementById('sm-status');
+  const cargoOptions = window._cargos.map(c => `<option value="${c.id_cargo}" data-salario="${c.salario_base}">${c.nome_cargo}</option>`).join('');
+  smCargo.innerHTML = `<option value="">— Selecione o Cargo —</option>` + cargoOptions;
+
+  // Adiciona listener para atualizar o salário ao mudar o cargo
+  smCargo.onchange = () => {
+    const selectedOption = smCargo.options[smCargo.selectedIndex];
+    smSalarioBase.value = selectedOption.dataset.salario ?
+                          new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(selectedOption.dataset.salario)) : '';
+  };
+
+  if (colabId) {
+    modalTitle.textContent = 'Editar Colaborador';
+    const colab = _colaboradoresSupabase.find(c => c.id_colaborador === colabId);
+    if (colab) {
+      smNome.value = colab.nome_colaborador;
+      smCargo.value = colab.cargos ? colab.cargos.id_cargo : '';
+      smDepartamento.value = colab.departamento || ''; // Preenche departamento
+      smDesde.value = colab.desde;
+      smStatus.value = colab.status_colaborador;
+      // Dispara o evento change para atualizar o salário base
+      smCargo.dispatchEvent(new Event('change'));
+    }
+  } else {
+    modalTitle.textContent = 'Novo Colaborador';
+    smNome.value = '';
+    smCargo.value = '';
+    smDepartamento.value = ''; // Limpa departamento
+    smSalarioBase.value = ''; // Limpa salário
+    smDesde.value = '';
+    smStatus.value = 'Ativo';
+  }
+  document.getElementById('status-modal').style.display = 'flex';
+};
+
+window.closeStatusModal = function() {
+  document.getElementById('status-modal').style.display = 'none';
+};
+
+window.saveStatusEmployee = async function() {
+  const nome = document.getElementById('sm-nome').value.trim();
+  const idCargo = document.getElementById('sm-cargo').value;
+  const departamento = document.getElementById('sm-departamento').value.trim(); // Pega o departamento
+  const desde = document.getElementById('sm-desde').value;
+  const status = document.getElementById('sm-status').value;
+
+  if (!nome || !idCargo || !departamento || !desde || !status) {
+    showToast('Preencha todos os campos obrigatórios.', 'error');
     return;
   }
-  const { data, error } = await supaClient.from('cargos').select('id_cargo, nome_cargo');
-  if (error) {
-    console.error('Erro ao carregar cargos:', error.message);
-    showToast('Erro ao carregar cargos para o sistema.', 'error');
-    window._cargos = []; // Garante que _cargos seja um array vazio em caso de erro
+
+  const employeeData = {
+    nome_colaborador: nome,
+    id_cargos: idCargo,
+    departamento: departamento,
+    desde: desde,
+    status_colaborador: status
+  };
+
+  if (_editingStatusColabId) {
+    // Atualizar
+    const { error } = await supaClient
+      .from('colaboradores')
+      .update(employeeData)
+      .eq('id_colaborador', _editingStatusColabId);
+
+    if (error) {
+      console.error('Erro ao atualizar colaborador:', error.message);
+      showToast('Erro ao atualizar colaborador.', 'error');
+    } else {
+      showToast('Colaborador atualizado com sucesso!');
+    }
   } else {
-    // Transforma o formato para o que o seu código espera: [['Nome Cargo', 'Salário']]
-    // Se a tabela 'cargos' no Supabase tiver 'salario_base', você pode incluí-lo aqui.
-    // Por enquanto, vamos usar apenas o nome do cargo e um salário vazio.
-    window._cargos = data.map(c => [c.nome_cargo, '']); // Salário vazio por enquanto
+    // Inserir
+    const { error } = await supaClient
+      .from('colaboradores')
+      .insert([employeeData]);
+
+    if (error) {
+      console.error('Erro ao adicionar colaborador:', error.message);
+      showToast('Erro ao adicionar colaborador.', 'error');
+    } else {
+      showToast('Colaborador adicionado com sucesso!');
+    }
   }
+  closeStatusModal();
+  loadColaboradoresFromSupabase(); // Recarrega a tabela
+};
+
+window.deleteStatusEmployee = async function(colabId) {
+  if (!confirm('Tem certeza que deseja excluir este colaborador?')) return;
+
+  const { error } = await supaClient
+    .from('colaboradores')
+    .delete()
+    .eq('id_colaborador', colabId);
+
+  if (error) {
+    console.error('Erro ao excluir colaborador:', error.message);
+    showToast('Erro ao excluir colaborador.', 'error');
+  } else {
+    showToast('Colaborador excluído com sucesso!');
+    loadColaboradoresFromSupabase(); // Recarrega a tabela
+  }
+};
+
+window.viewStatusEmployee = function(colabId) {
+  const colab = _colaboradoresSupabase.find(c => c.id_colaborador === colabId);
+  if (!colab) {
+    showToast('Colaborador não encontrado.', 'error');
+    return;
+  }
+  const cargoNome = colab.cargos ? colab.cargos.nome_cargo : 'N/A';
+  const salarioBase = colab.cargos && colab.cargos.salario_base ?
+                      new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(colab.cargos.salario_base)) : 'N/A';
+
+  document.getElementById('status-view-body').innerHTML = `
+    <div><strong>Nome:</strong> ${colab.nome_colaborador}</div>
+    <div><strong>Cargo:</strong> ${cargoNome}</div>
+    <div><strong>Departamento:</strong> ${colab.departamento || 'N/A'}</div>
+    <div><strong>Salário Base:</strong> ${salarioBase}</div>
+    <div><strong>Status:</strong> ${colab.status_colaborador}</div>
+    <div><strong>Desde:</strong> ${colab.desde}</div>`;
+  document.getElementById('status-view-modal').style.display = 'flex';
+};
+
+window.printStatusRow = function(colabId) {
+  const colab = _colaboradoresSupabase.find(c => c.id_colaborador === colabId);
+  if (!colab) {
+    showToast('Colaborador não encontrado para impressão.', 'error');
+    return;
+  }
+  const cargoNome = colab.cargos ? colab.cargos.nome_cargo : 'N/A';
+  const salarioBase = colab.cargos && colab.cargos.salario_base ?
+                      new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(colab.cargos.salario_base)) : 'N/A';
+
+  const w = window.open('', '_blank');
+  w.document.write(`<html><head><title>Colaborador</title><style>body{font-family:sans-serif;padding:40px}h2{margin-bottom:20px}p{margin:6px 0;font-size:14px}</style></head><body>
+    <h2>Minart Móveis — Ficha de Admissão</h2>
+    <p><strong>Nome:</strong> ${colab.nome_colaborador}</p>
+    <p><strong>Cargo:</strong> ${cargoNome}</p>
+    <p><strong>Departamento:</strong> ${colab.departamento || 'N/A'}</p>
+    <p><strong>Salário Base:</strong> ${salarioBase}</p>
+    <p><strong>Status:</strong> ${colab.status_colaborador}</p>
+    <p><strong>Desde:</strong> ${colab.desde}</p>
+    <p style="margin-top:30px;color:#888;font-size:12px">Impresso em: ${new Date().toLocaleDateString('pt-BR')}</p>
+  </body></html>`);
+  w.print();
+};
+
+// HTML da página de Status (agora com foco em Admissões)
+function pageStatus() {
+  document.getElementById('topbar-actions').innerHTML = `
+    <button class="btn btn-primary" onclick="openStatusModal()">+ Novo Colaborador</button>
+  `;
+  return `
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">Informações Contratuais</span>
+      <input class="search-input" placeholder="Buscar..." onkeyup="filterStatusTable(this.value)">
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Colaborador</th>
+          <th>Cargo</th>
+          <th>Departamento</th>
+          <th>Desde</th>
+          <th>Salário Base</th>
+          <th>Status</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="status-tbody">
+        <!-- Dados carregados via JavaScript -->
+      </tbody>
+    </table>
+    <div class="table-pagination">
+      <span>Mostrando 1-10 de 100</span>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm">‹</button>
+        <button class="btn btn-sm" style="background:#111;color:#fff">1</button>
+        <button class="btn btn-sm">2</button>
+        <button class="btn btn-sm">›</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Adicionar/Editar Colaborador -->
+  <div id="status-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;padding:32px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="status-modal-title">Novo Colaborador</div>
+      <div class="form-grid" style="margin-bottom:16px">
+        <div class="form-group form-full">
+          <label class="form-label">Nome</label>
+          <input class="form-input" id="sm-nome">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cargo</label>
+          <select class="form-select" id="sm-cargo">
+            <!-- Opções carregadas via JS -->
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Departamento</label>
+          <input class="form-input" id="sm-departamento">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Salário Base</label>
+          <input class="form-input" id="sm-salario-base" readonly>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <select class="form-select" id="sm-status">
+            <option>Ativo</option>
+            <option>Afastado</option>
+            <option>Desligado</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Desde</label>
+          <input class="form-input" type="date" id="sm-desde">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn" onclick="closeStatusModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveStatusEmployee()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Visualização de Colaborador -->
+  <div id="status-view-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;padding:32px;width:400px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:20px">Detalhes do Colaborador</div>
+      <div id="status-view-body" style="margin-bottom:20px;line-height:1.8">
+        <!-- Conteúdo carregado via JS -->
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn" onclick="document.getElementById('status-view-modal').style.display='none'">Fechar</button>
+      </div>
+    </div>
+  </div>
+  `;
 }
+
+// Garante que a tabela seja carregada ao entrar na página
+document.addEventListener('DOMContentLoaded', () => {
+  // Observa mudanças na URL para recarregar a tabela quando a página de status for acessada
+  window.addEventListener('hashchange', () => {
+    if (window.location.hash === '#col-status') {
+      loadColaboradoresFromSupabase();
+    }
+  });
+  // Carrega a tabela se a página de status for a inicial
+  if (window.location.hash === '#col-status') {
+    loadColaboradoresFromSupabase();
+  }
+});
+
 
 // ------------------------------------------------------------
 // EXAMES
