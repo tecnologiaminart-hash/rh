@@ -431,13 +431,7 @@ async function loadCargosForApp() {
     console.error('[DEBUG] Erro detalhado:', error);
     _cargos = [];
     window._cargos = [];
-    showToast('❌ Erro ao carregar cargos: ' + error.message);
   } else {
-    console.log('[DEBUG] Cargos recebidos (data.length):', data ? data.length : 0);
-    if (data && data.length > 0) {
-      console.log('[DEBUG] Primeiro cargo (campos):', Object.keys(data[0]));
-      console.log('[DEBUG] Primeiro cargo (valores):', data[0]);
-    }
     _cargos = data;
     window._cargos = data;
     // Detecta o campo de id e o campo de nome utilizado na tabela cargos
@@ -462,7 +456,6 @@ async function loadCargosForApp() {
       window._cargoNameField = 'nome_cargo';
     }
     console.log('Cargos carregados:', _cargos, 'idField=', window._cargoIdField, 'nameField=', window._cargoNameField);
-    showToast('✅ Cargos carregados: ' + (window._cargos ? window._cargos.length : 0) + ' encontrados');
   }
 }
 
@@ -1121,7 +1114,6 @@ async function loadColaboradoresFromSupabase() {
     console.error('Supabase client não inicializado.');
     return;
   }
-  showToast('Carregando colaboradores...', 'info');
   const { data, error } = await supaClient
     .from('colaboradores')
     .select('*, cargos(nome_cargo), salario_base') // Seleciona o nome do cargo; salario_base vem da própria tabela colaboradores
@@ -1133,7 +1125,6 @@ async function loadColaboradoresFromSupabase() {
     _colaboradoresSupabase = [];
   } else {
     _colaboradoresSupabase = data;
-    showToast('Colaboradores carregados!', 'success');
   }
   renderStatusTable();
 }
@@ -1251,7 +1242,6 @@ function pageStatus() {
   </div>`;
 }
 async function openStatusModal(colabId = null) {
-  showToast('🔍 Abrindo modal... cargos: ' + (window._cargos ? window._cargos.length : 0));
   _editingStatusColabId = colabId;
   const modal = document.getElementById('status-modal');
   const modalTitle = document.getElementById('status-modal-title');
@@ -1263,7 +1253,6 @@ async function openStatusModal(colabId = null) {
 
   // Garante que cargos estejam carregados e popula o select de cargos
   if (!window._cargos || window._cargos.length === 0) {
-    showToast('⏳ Carregando cargos...');
     await loadCargosForApp();
   }
   smCargo.innerHTML = '<option value="">— Selecione o Cargo —</option>';
