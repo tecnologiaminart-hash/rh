@@ -537,34 +537,6 @@ async function doLogin() {
   };
   enterApp();
 }
-      return;
-    } else if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found (não é um erro real, só não encontrou)
-      console.warn('Login: Erro na autenticação via tabela "usuarios":', error.message);
-    }
-  } catch(e) {
-    console.error('Login: Exceção ao autenticar via tabela "usuarios":', e);
-  }
-
-  // Tentativa 2: (se a primeira falhou ou não encontrou)
-  try {
-    const { data, error } = await supaClient.auth.signInWithPassword({ email, password: pass });
-    if (data?.user && !error) {
-      currentUser = { email, name: data.user.email, role: 'user' };
-      console.log('Login: Autenticação via Supabase Auth nativo bem-sucedida.', currentUser);
-      enterApp();
-      return;
-    } else if (error) {
-      console.warn('Login: Erro na autenticação Supabase Auth nativo:', error.message);
-    }
-  } catch(e) {
-    console.error('Login: Exceção ao autenticar via Supabase Auth nativo:', e);
-  }
-
-  // Se chegou aqui, nenhuma das tentativas de login Supabase funcionou
-  errEl.textContent = 'E-mail ou senha incorretos.';
-  console.log('Login: Todas as tentativas de login Supabase falharam.');
-}
-
 
 document.getElementById('l-pass').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
 
