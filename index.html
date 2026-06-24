@@ -1568,7 +1568,6 @@ function postRender(id) {
 
 
   function pageDepDescricao() {
-  if (!window._cargosDescricao) window._cargosDescricao = [];
   document.getElementById('topbar-actions').innerHTML = '';
   loadCargosForApp();
 
@@ -1594,12 +1593,13 @@ function postRender(id) {
           }
           return cargosArr.map((cargo, i) => {
             const nome = cargo[window._cargoNameField] || cargo.nome_cargo || cargo.nome || '';
-            const descricao = (window._cargosDescricao||[]).find(d => d.cargo === nome)?.texto || '';
-            return `<tr data-cargo-row="${i}">
+            const descricao = cargo.descricao_cargo || '';
+            const cid = cargo[window._cargoIdField] || cargo.id || cargo.id_cargo || cargo.id_cargos || '';
+            return `<tr data-cargo-row="${i}" data-cargo-id="${cid}">
               <td><strong>${nome}</strong></td>
               <td><textarea id="desc-text-${i}" class="form-input" style="width:100%;min-height:80px;box-sizing:border-box">${descricao}</textarea></td>
               <td style="white-space:nowrap">
-                <button class="action-btn" title="Salvar descrição" onclick="salvarDescricaoLinha(${i})">💾</button>
+                <button class="action-btn" title="Salvar descrição" onclick="salvarDescricaoLinha('${cid}', ${i})">💾</button>
               </td>
             </tr>`;
           }).join('');
@@ -1631,23 +1631,26 @@ window.editarDescricao = function(i) {
   openDescricaoModal(i);
 };
 
-window.salvarDescricaoLinha = function(i) {
+window.salvarDescricaoLinha = async function(cargoId, i) {
   const textarea = document.getElementById(`desc-text-${i}`);
   if (!textarea) return;
   const valor = textarea.value.trim();
   const cargosArr = Array.isArray(window._cargos) ? window._cargos : (window._cargos ? Object.values(window._cargos) : []);
   const cargo = cargosArr[i];
-  const nome = cargo ? (cargo[window._cargoNameField] || cargo.nome_cargo || cargo.nome || '') : '';
-  if (!nome) return showToast('Cargo não encontrado para salvar.');
-  if (!window._cargosDescricao) window._cargosDescricao = [];
-  const existente = window._cargosDescricao.find(d => d.cargo === nome);
-  if (existente) {
-    existente.texto = valor;
-  } else {
-    window._cargosDescricao.push({ cargo: nome, texto: valor });
+  const cid = cargoId || (cargo ? (cargo[window._cargoIdField] || cargo.id || cargo.id_cargo || cargo.id_cargos || '') : '');
+  if (!cid) return showToast('Falha ao identificar o cargo.');
+  try {
+    const payload = { descricao_cargo: valor };
+    const { error } = await supaClient.from('cargos').update(payload).eq(window._cargoIdField, cid);
+    if (error) throw error;
+    await loadCargosForApp();
+    // Atualiza a descrição na linha com o valor salvo
+    textarea.value = valor;
+    showToast('Descrição salva no banco de dados!');
+  } catch (e) {
+    console.error('Erro ao salvar descrição de cargo:', e);
+    showToast('Erro ao salvar descrição no banco.');
   }
-  window._salvarStorage?.();
-  showToast('Descrição salva com sucesso!');
 };
 
 window.filtrarCargosTabela = function(query) {
