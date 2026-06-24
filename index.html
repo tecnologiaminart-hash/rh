@@ -2183,19 +2183,22 @@ function pageCargosTabela() {
     <table>
       <thead><tr><th>Cargo</th><th>Salário Base</th><th>Última Revisão</th><th>Ações</th></tr></thead>
       <tbody id="cargos-tbody">
-          ${ (window._cargos || []).map((cargo)=>{
-            const cid = cargo[window._cargoIdField] || cargo.id || cargo.id_cargo || '';
-            const nome = cargo[window._cargoNameField] || cargo.nome_cargo || cargo.nome || '';
-            const salario = cargo.salario_base !== undefined && cargo.salario_base !== null ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(cargo.salario_base)) : '';
-            return `<tr data-cargo-id="${cid}"><td><strong>${nome}</strong></td><td style="font-weight:600">${salario}</td><td>${revisao}</td>
-              <td>
-                <button class="action-btn" title="Editar" onclick="editCargo('${cid}')">✎</button>
-                <button class="action-btn btn-danger" title="Excluir" onclick="deleteCargo('${cid}')">✕</button>
-              </td></tr>`;
-          }).join('') }
+          ${ (()=>{
+            const cargosArr = Array.isArray(window._cargos) ? window._cargos : (window._cargos ? Object.values(window._cargos) : []);
+            return cargosArr.map((cargo)=>{
+              const cid = cargo[window._cargoIdField] || cargo.id || cargo.id_cargo || '';
+              const nome = cargo[window._cargoNameField] || cargo.nome_cargo || cargo.nome || '';
+              const salario = cargo.salario_base !== undefined && cargo.salario_base !== null ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(cargo.salario_base)) : '';
+              return `<tr data-cargo-id="${cid}"><td><strong>${nome}</strong></td><td style="font-weight:600">${salario}</td><td>${revisao}</td>
+                <td>
+                  <button class="action-btn" title="Editar" onclick="editCargo('${cid}')">✎</button>
+                  <button class="action-btn btn-danger" title="Excluir" onclick="deleteCargo('${cid}')">✕</button>
+                </td></tr>`;
+            }).join('');
+          })() }
         </tbody>
     </table>
-    <div class="table-pagination"><span>${window._cargos.length} cargos cadastrados</span></div>
+    <div class="table-pagination"><span>${ Array.isArray(window._cargos) ? window._cargos.length : (window._cargos ? Object.keys(window._cargos).length : 0) } cargos cadastrados</span></div>
   </div>`;
 }
 window.openCargoModal = async function(id=null){
