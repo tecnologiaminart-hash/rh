@@ -1346,7 +1346,6 @@ function closeStatusModal() {
 async function saveStatusEmployee() {
   const smNome = document.getElementById('sm-nome').value.trim();
   const smCargoId = document.getElementById('sm-cargo').value;
-  const smDepartamento = document.getElementById('sm-departamento').value.trim(); // Novo campo
   const smDesde = document.getElementById('sm-desde').value;
   const smStatus = document.getElementById('sm-status').value;
 
@@ -1358,7 +1357,6 @@ async function saveStatusEmployee() {
   const newColabData = {
     nome_colaborador: smNome,
     id_cargos: smCargoId,
-    departamento: smDepartamento, // Salva o departamento
     desde: smDesde,
     status_colaborador: smStatus,
   };
@@ -1408,7 +1406,6 @@ function viewStatusEmployee(colabId) {
   showToast(`
     Nome: ${colab.nome_colaborador}
     Cargo: ${cargoNome}
-    Departamento: ${colab.departamento || 'N/A'}
     Salário Base: ${salarioBase}
     Desde: ${colab.desde ? new Date(colab.desde).toLocaleDateString('pt-BR') : 'N/A'}
     Status: ${colab.status_colaborador}
