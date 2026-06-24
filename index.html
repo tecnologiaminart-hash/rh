@@ -1242,6 +1242,15 @@ function pageStatus() {
   </div>`;
 }
 async function openStatusModal(colabId = null) {
+  console.log('[EDIT] Abrindo modal, colabId:', colabId);
+  
+  // Garante que colaboradores estejam carregados ANTES de tudo
+  if (!_colaboradoresSupabase || _colaboradoresSupabase.length === 0) {
+    console.log('[EDIT] Colaboradores vazios, carregando...');
+    await loadColaboradoresFromSupabase();
+  }
+  console.log('[EDIT] Após loadColaboradores, temos:', _colaboradoresSupabase.length, 'colaboradores');
+  
   _editingStatusColabId = colabId;
   const modal = document.getElementById('status-modal');
   const modalTitle = document.getElementById('status-modal-title');
@@ -1276,12 +1285,16 @@ async function openStatusModal(colabId = null) {
   };
 
   if (colabId) {
-    console.log('[EDIT] colabId recebido:', colabId);
+    console.log('[EDIT] colabId recebido:', colabId, 'tipo:', typeof colabId);
     console.log('[EDIT] _colaboradoresSupabase.length:', _colaboradoresSupabase.length);
+    if (_colaboradoresSupabase.length > 0) {
+      console.log('[EDIT] Primeiro colaborador id:', _colaboradoresSupabase[0].id_colaborador, 'tipo:', typeof _colaboradoresSupabase[0].id_colaborador);
+    }
     modalTitle.textContent = 'Editar Colaborador';
     const colab = _colaboradoresSupabase.find(c => {
-      console.log('[EDIT] Comparando:', c.id_colaborador, '===', colabId, '?', c.id_colaborador === colabId);
-      return c.id_colaborador === colabId;
+      const match = String(c.id_colaborador) === String(colabId);
+      if (!match) console.log('[EDIT] Não encontrado:', c.id_colaborador, '!==', colabId);
+      return match;
     });
     console.log('[EDIT] Colaborador encontrado:', colab);
     if (colab) {
@@ -1290,6 +1303,7 @@ async function openStatusModal(colabId = null) {
       smCargo.value = colab.id_cargos;
       smDesde.value = colab.desde;
       smStatus.value = colab.status_colaborador;
+      console.log('[EDIT] Dados preenchidos. Salário base:', colab.salario_base);
       // Preenche o salário base a partir da coluna `salario_base` de colaboradores (ou fallback para cargos)
       if (colab.salario_base !== undefined && colab.salario_base !== null && String(colab.salario_base) !== '') {
         smSalarioBase.value = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(colab.salario_base);
@@ -1302,6 +1316,7 @@ async function openStatusModal(colabId = null) {
       if (colab.salario_base === undefined || colab.salario_base === null || String(colab.salario_base) === '') {
         smCargo.dispatchEvent(new Event('change'));
       }
+      showToast('Editando: ' + colab.nome_colaborador);
     } else {
       console.error('[EDIT] Colaborador NÃO encontrado! Ids no array:', _colaboradoresSupabase.map(c => c.id_colaborador));
     }
