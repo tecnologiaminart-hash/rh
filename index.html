@@ -1091,7 +1091,7 @@ async function loadColaboradoresFromSupabase() {
   showToast('Carregando colaboradores...', 'info');
   const { data, error } = await supaClient
     .from('colaboradores')
-    .select('*, cargos(nome_cargo, salario_base)') // Seleciona o nome do cargo e salário base
+    .select('*, cargos(nome_cargo)') // Seleciona o nome do cargo, mas o salario_base virá de colaboradores
     .order('nome_colaborador', { ascending: true });
 
   if (error) {
@@ -1112,21 +1112,21 @@ function renderStatusTable() {
   tbody.innerHTML = ''; // Limpa a tabela
 
   if (_colaboradoresSupabase.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text3);">Nenhum colaborador encontrado.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text3);">Nenhum colaborador encontrado.</td></tr>`;
     return;
   }
 
   _colaboradoresSupabase.forEach(colab => {
     const cargoNome = colab.cargos ? colab.cargos.nome_cargo : 'N/A';
-    const salarioBase = colab.cargos && colab.cargos.salario_base ?
-                        new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(colab.cargos.salario_base)) : 'N/A';
+    // Puxa o salário base diretamente da coluna salario_base da tabela colaboradores
+    const salarioBase = colab.salario_base ?
+                        new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(colab.salario_base)) : 'N/A';
     const statusBadgeClass = colab.status_colaborador === 'Ativo' ? 'badge-active' : 'badge-inactive';
 
     tbody.innerHTML += `
       <tr>
         <td>${colab.nome_colaborador}</td>
         <td>${cargoNome}</td>
-        <td>${colab.departamento || 'N/A'}</td>
         <td>${colab.desde ? new Date(colab.desde).toLocaleDateString('pt-BR') : 'N/A'}</td>
         <td>${salarioBase}</td>
         <td><span class="badge ${statusBadgeClass}">${colab.status_colaborador}</span></td>
@@ -1139,6 +1139,7 @@ function renderStatusTable() {
     `;
   });
 }
+  
 function pageStatus() {
   // Chama a função para carregar os dados do Supabase
   // e renderizar a tabela assim que a página for exibida.
@@ -1161,10 +1162,6 @@ function pageStatus() {
           <select class="form-select" id="sm-cargo">
             <!-- Opções de cargo serão preenchidas via JS -->
           </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Departamento</label>
-          <input class="form-input" id="sm-departamento" placeholder="Ex: Produção, RH">
         </div>
         <div class="form-group">
           <label class="form-label">Data de Admissão</label>
@@ -1219,56 +1216,61 @@ function pageStatus() {
     </table>
   </div>`;
 }
-function openStatusModal(colabId = null) {
-  _editingStatusColabId = colabId;
-  const modal = document.getElementById('status-modal');
-  const modalTitle = document.getElementById('status-modal-title');
-  const smNome = document.getElementById('sm-nome');
-  const smCargo = document.getElementById('sm-cargo');
-  const smDepartamento = document.getElementById('sm-departamento'); // Novo campo
-  const smDesde = document.getElementById('sm-desde');
-  const smStatus = document.getElementById('sm-status');
-  const smSalarioBase = document.getElementById('sm-salario-base'); // Novo campo
+async function saveStatusEmployee() {
+  const smNome = document.getElementById('sm-nome').value.trim();
+  const smCargoId = document.getElementById('sm-cargo').value;
+  const smDesde = document.getElementById('sm-desde').value;
+  const smStatus = document.getElementById('sm-status').value;
+  const smSalarioBase = document.getElementById('sm-salario-base').value; // Pega o valor editável
+  const smDepartamento = document.getElementById('sm-departamento').value; // <-- ESTA LINHA SERÁ REMOVIDA
 
-  // Popula o select de cargos
-  smCargo.innerHTML = '<option value="">— Selecione o Cargo —</option>';
-  window._cargos.forEach(cargo => {
-    smCargo.innerHTML += `<option value="${cargo.id_cargo}">${cargo.nome_cargo}</option>`;
-  });
+  // Converte o salário para um formato numérico antes de salvar no Supabase
+  const salarioNumerico = parseFloat(smSalarioBase.replace(/[R$\s.]/g, '').replace(',', '.'));
 
-  // Event listener para atualizar o salário base ao mudar o cargo
-  smCargo.onchange = () => {
-    const selectedCargoId = smCargo.value;
-    const selectedCargo = window._cargos.find(c => c.id_cargo === selectedCargoId);
-    if (selectedCargo && selectedCargo.salario_base) {
-      smSalarioBase.value = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(selectedCargo.salario_base);
-    } else {
-      smSalarioBase.value = '';
-    }
+  if (!smNome || !smCargoId || !smDesde || !smStatus || isNaN(salarioNumerico)) {
+    showToast('Preencha todos os campos obrigatórios e o salário deve ser um número válido.', 'danger');
+    return;
+  }
+
+  const newColabData = {
+    nome_colaborador: smNome,
+    id_cargos: smCargoId,
+    desde: smDesde,
+    status_colaborador: smStatus,
+    departamento: smDepartamento, // <-- ESTA LINHA SERÁ REMOVIDA
+    salario_base: salarioNumerico, // Salva o salário base editável
   };
 
-  if (colabId) {
-    modalTitle.textContent = 'Editar Colaborador';
-    const colab = _colaboradoresSupabase.find(c => c.id_colaborador === colabId);
-    if (colab) {
-      smNome.value = colab.nome_colaborador;
-      smCargo.value = colab.id_cargos;
-      smDepartamento.value = colab.departamento || ''; // Preenche o departamento
-      smDesde.value = colab.desde;
-      smStatus.value = colab.status_colaborador;
-      // Dispara o evento change para atualizar o salário base ao carregar o modal
-      smCargo.dispatchEvent(new Event('change'));
+  if (_editingStatusColabId) {
+    // Editar colaborador existente
+    const { error } = await supaClient
+      .from('colaboradores')
+      .update(newColabData)
+      .eq('id_colaborador', _editingStatusColabId);
+
+    if (error) {
+      console.error('Erro ao atualizar colaborador:', error.message);
+      showToast('Erro ao atualizar colaborador.', 'danger');
+    } else {
+      showToast('Colaborador atualizado com sucesso!', 'success');
+      closeStatusModal();
+      loadColaboradoresFromSupabase(); // Recarrega a lista
     }
   } else {
-    modalTitle.textContent = 'Novo Colaborador';
-    smNome.value = '';
-    smCargo.value = '';
-    smDepartamento.value = ''; // Limpa o departamento
-    smDesde.value = '';
-    smStatus.value = 'Ativo';
-    smSalarioBase.value = ''; // Limpa o salário base
+    // Adicionar novo colaborador
+    const { error } = await supaClient
+      .from('colaboradores')
+      .insert([newColabData]);
+
+    if (error) {
+      console.error('Erro ao adicionar colaborador:', error.message);
+      showToast('Erro ao adicionar colaborador.', 'danger');
+    } else {
+      showToast('Colaborador adicionado com sucesso!', 'success');
+      closeStatusModal();
+      loadColaboradoresFromSupabase(); // Recarrega a lista
+    }
   }
-  modal.style.display = 'flex';
 }
 
 function closeStatusModal() {
@@ -1346,7 +1348,6 @@ function viewStatusEmployee(colabId) {
     Status: ${colab.status_colaborador}
   `, 'info', 5000); // Exibe por 5 segundos
 }
-
 function printStatusRow(colabId) {
   const colab = _colaboradoresSupabase.find(c => c.id_colaborador === colabId);
   if (!colab) {
@@ -1354,15 +1355,14 @@ function printStatusRow(colabId) {
     return;
   }
   const cargoNome = colab.cargos ? colab.cargos.nome_cargo : 'N/A';
-  const salarioBase = colab.cargos && colab.cargos.salario_base ?
-                      new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(colab.cargos.salario_base)) : 'N/A';
+  const salarioBase = colab.salario_base ?
+                      new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(colab.salario_base)) : 'N/A';
 
   const w = window.open('', '_blank');
   w.document.write(`<html><head><title>Colaborador</title><style>body{font-family:sans-serif;padding:40px}h2{margin-bottom:20px}p{margin:6px 0;font-size:14px}</style></head><body>
     <h2>Minart Móveis — Ficha de Admissão</h2>
     <p><strong>Nome:</strong> ${colab.nome_colaborador}</p>
     <p><strong>Cargo:</strong> ${cargoNome}</p>
-    <p><strong>Departamento:</strong> ${colab.departamento || 'N/A'}</p>
     <p><strong>Salário Base:</strong> ${salarioBase}</p>
     <p><strong>Status:</strong> ${colab.status_colaborador}</p>
     <p><strong>Desde:</strong> ${colab.desde ? new Date(colab.desde).toLocaleDateString('pt-BR') : 'N/A'}</p>
@@ -1370,6 +1370,7 @@ function printStatusRow(colabId) {
   </body></html>`);
   w.print();
 };
+
 
 // Função de filtro para a tabela (opcional, mas útil)
 function filterStatusTable(searchTerm) {
@@ -1381,13 +1382,13 @@ function filterStatusTable(searchTerm) {
   for (let i = 0; i < tr.length; i++) {
     let tdNome = tr[i].getElementsByTagName('td')[0]; // Colaborador
     let tdCargo = tr[i].getElementsByTagName('td')[1]; // Cargo
-    let tdDepartamento = tr[i].getElementsByTagName('td')[2]; // Departamento
-    let tdStatus = tr[i].getElementsByTagName('td')[5]; // Status
+    // let tdDepartamento = tr[i].getElementsByTagName('td')[2]; // Departamento REMOVIDO
+    let tdStatus = tr[i].getElementsByTagName('td')[4]; // Status (índice ajustado)
 
-    if (tdNome || tdCargo || tdDepartamento || tdStatus) {
+    if (tdNome || tdCargo || tdStatus) { // tdDepartamento removido da condição
       const textValue = (tdNome ? tdNome.textContent : '') +
                         (tdCargo ? tdCargo.textContent : '') +
-                        (tdDepartamento ? tdDepartamento.textContent : '') +
+                        // (tdDepartamento ? tdDepartamento.textContent : '') + // REMOVIDO
                         (tdStatus ? tdStatus.textContent : '');
       if (textValue.toUpperCase().indexOf(filter) > -1) {
         tr[i].style.display = '';
