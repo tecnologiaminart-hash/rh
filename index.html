@@ -515,32 +515,28 @@ async function doLogin() {
 
   if (!email || !pass) {
     errEl.textContent = 'Preencha e-mail e senha.';
-    console.log('Login: E-mail ou senha vazios.');
     return;
   }
 
   if (!supaClient) {
-    errEl.textContent = 'Erro de configuração: Supabase não inicializado. Verifique as chaves.';
-    console.error('Login: Supabase não configurado ou falhou ao inicializar.');
+    errEl.textContent = 'Erro de configuração: Supabase não inicializado.';
     return;
   }
 
-  console.log('Login: Tentando autenticar');
+  const { data, error } = await supaClient.auth.signInWithPassword({ email, password: pass });
 
-  // Tentativa 1: tabela custom "usuarios"
-  try {
-    const { data, error } = await supaClient
-      .from('usuarios')
-      .select('*')
-      .eq('email', email)
-      .eq('senha', pass) // Idealmente, 'senha' deveria ser um hash
-      .eq('ativo', true)
-      .single();
+  if (error || !data?.user) {
+    errEl.textContent = 'E-mail ou senha incorretos.';
+    return;
+  }
 
-    if (data && !error) {
-      currentUser = { email, name: data.nome || data.name || email, role: data.perfil || 'user' };
-      console.log('Login: Autenticação via tabela "usuarios" bem-sucedida.', currentUser);
-      enterApp();
+  currentUser = {
+    email,
+    name: data.user.user_metadata?.nome || data.user.email,
+    role: data.user.user_metadata?.perfil || 'user'
+  };
+  enterApp();
+}
       return;
     } else if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found (não é um erro real, só não encontrou)
       console.warn('Login: Erro na autenticação via tabela "usuarios":', error.message);
@@ -3627,11 +3623,18 @@ document.addEventListener('DOMContentLoaded', () => {
   supaClient = initSupabase();
 
   // Se houver uma sessão Supabase ativa, entra no app
-  if (supaClient && supaClient.auth && supaClient.auth.session && supaClient.auth.session()) {
-    const session = supaClient.auth.session();
-    currentUser = { email: session.user.email, name: session.user.email, role: 'user' }; // Ajuste conforme seu objeto de usuário
+ // Verifica sessão ativa (Supabase Auth v2)
+if (supaClient) {
+  const { data: { session } } = await supaClient.auth.getSession();
+  if (session?.user) {
+    currentUser = {
+      email: session.user.email,
+      name: session.user.user_metadata?.nome || session.user.email,
+      role: session.user.user_metadata?.perfil || 'user'
+    };
     enterApp();
   }
+}
 
   carregarVagasLocal();
   carregarCandidaturasLocal();
