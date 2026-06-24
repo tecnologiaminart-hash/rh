@@ -1551,35 +1551,10 @@ function postRender(id) {
 
   function pageDepDescricao() {
   if (!window._cargosDescricao) window._cargosDescricao = [];
-
-  document.getElementById('topbar-actions').innerHTML =
-    `<button class="btn btn-primary" onclick="openDescricaoModal()">+ Adicionar Descrição</button>`;
+  document.getElementById('topbar-actions').innerHTML = '';
+  loadCargosForApp();
 
   return `
-  <div id="descricao-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:6px;padding:32px;width:520px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
-      <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="descricao-modal-title">Adicionar Descrição de Cargo</div>
-      <div class="form-group" style="margin-bottom:16px">
-        <label class="form-label">Nome do Cargo</label>
-        <select class="form-select" id="desc-cargo">
-          <option value="">— Selecione o Cargo —</option>
-          ${(window._cargos||[]).map(cargo => {
-            const nome = cargo[window._cargoNameField] || cargo.nome_cargo || cargo.nome || '';
-            return `<option value="${nome}">${nome}</option>`;
-          }).join('')}
-        </select>
-      </div>
-      <div class="form-group" style="margin-bottom:20px">
-        <label class="form-label">Descrição do Cargo</label>
-        <textarea class="form-textarea" id="desc-texto" style="min-height:160px" placeholder="Descreva as responsabilidades, requisitos e atribuições do cargo..."></textarea>
-      </div>
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button class="btn" onclick="document.getElementById('descricao-modal').style.display='none'">Cancelar</button>
-        <button class="btn btn-primary" onclick="salvarDescricao()">Salvar</button>
-      </div>
-    </div>
-  </div>
-
   <div class="table-card">
     <div class="table-header">
       <span class="table-title">Cargos e Descrições</span>
@@ -1594,22 +1569,26 @@ function postRender(id) {
         </tr>
       </thead>
       <tbody id="descricao-tbody">
-        ${window._cargosDescricao.length === 0
-          ? '<tr><td colspan="3" style="text-align:center;padding:32px;color:var(--text3)">Nenhuma descrição cadastrada. Clique em "+ Adicionar Descrição" para começar.</td></tr>'
-          : window._cargosDescricao.map((d, i) => `
-              <tr>
-                <td><strong>${d.cargo}</strong></td>
-                <td style="max-width:480px;color:var(--text2);font-size:13px;white-space:pre-wrap">${d.texto}</td>
-                <td style="white-space:nowrap">
-                  <button class="action-btn" title="Editar" onclick="editarDescricao(${i})">✎</button>
-                  <button class="action-btn" title="Excluir" style="color:var(--danger)" onclick="deletarDescricao(${i})">✕</button>
-                </td>
-              </tr>`).join('')}
+        ${(() => {
+          const cargosArr = Array.isArray(window._cargos) ? window._cargos : (window._cargos ? Object.values(window._cargos) : []);
+          if (cargosArr.length === 0) {
+            return '<tr><td colspan="3" style="text-align:center;padding:32px;color:var(--text3)">Nenhum cargo encontrado.</td></tr>';
+          }
+          return cargosArr.map((cargo, i) => {
+            const nome = cargo[window._cargoNameField] || cargo.nome_cargo || cargo.nome || '';
+            const descricao = (window._cargosDescricao||[]).find(d => d.cargo === nome)?.texto || '';
+            return `<tr data-cargo-row="${i}">
+              <td><strong>${nome}</strong></td>
+              <td><textarea id="desc-text-${i}" class="form-input" style="width:100%;min-height:80px;box-sizing:border-box">${descricao}</textarea></td>
+              <td style="white-space:nowrap">
+                <button class="action-btn" title="Salvar descrição" onclick="salvarDescricaoLinha(${i})">💾</button>
+              </td>
+            </tr>`;
+          }).join('');
+        })()}
       </tbody>
     </table>
-    <div class="table-pagination" id="descricao-pagination">
-      <span>${window._cargosDescricao.length} descrição${window._cargosDescricao.length !== 1 ? 'ões' : ''} cadastrada${window._cargosDescricao.length !== 1 ? 's' : ''}</span>
-    </div>
+    <div class="table-pagination" id="descricao-pagination"><span>${ Array.isArray(window._cargos) ? window._cargos.length : (window._cargos ? Object.keys(window._cargos).length : 0) } cargos</span></div>
   </div>`;
 }
 
@@ -1634,56 +1613,52 @@ window.editarDescricao = function(i) {
   openDescricaoModal(i);
 };
 
-window.salvarDescricao = function() {
-  const cargo = document.getElementById('desc-cargo').value;
-  const texto = document.getElementById('desc-texto').value.trim();
-  if (!cargo) return showToast('Selecione um cargo.');
-  if (!texto) return showToast('Digite a descrição do cargo.');
+window.salvarDescricaoLinha = function(i) {
+  const textarea = document.getElementById(`desc-text-${i}`);
+  if (!textarea) return;
+  const valor = textarea.value.trim();
+  const cargosArr = Array.isArray(window._cargos) ? window._cargos : (window._cargos ? Object.values(window._cargos) : []);
+  const cargo = cargosArr[i];
+  const nome = cargo ? (cargo[window._cargoNameField] || cargo.nome_cargo || cargo.nome || '') : '';
+  if (!nome) return showToast('Cargo não encontrado para salvar.');
   if (!window._cargosDescricao) window._cargosDescricao = [];
-  const registro = { cargo, texto };
-  const idx = window._editingDescricaoIdx;
-  if (idx !== null && idx !== undefined) {
-    window._cargosDescricao[idx] = registro;
+  const existente = window._cargosDescricao.find(d => d.cargo === nome);
+  if (existente) {
+    existente.texto = valor;
   } else {
-    const existente = window._cargosDescricao.findIndex(d => d.cargo === cargo);
-    if (existente !== -1) {
-      if (!confirm(`Já existe uma descrição para "${cargo}". Deseja substituir?`)) return;
-      window._cargosDescricao[existente] = registro;
-    } else {
-      window._cargosDescricao.push(registro);
-      window._salvarStorage();
-    }
+    window._cargosDescricao.push({ cargo: nome, texto: valor });
   }
-  document.getElementById('descricao-modal').style.display = 'none';
+  window._salvarStorage?.();
   showToast('Descrição salva com sucesso!');
-  renderDescricaoTabela();
 };
 
-window.deletarDescricao = function(i) {
-  if (!confirm('Excluir esta descrição?')) return;
-  window._cargosDescricao.splice(i, 1);
-  window._salvarStorage();
-  showToast('Descrição removida.');
-  renderDescricaoTabela();
+window.filtrarCargosTabela = function(query) {
+  const q = String(query || '').trim().toLowerCase();
+  const rows = document.querySelectorAll('#cargos-tbody tr');
+  let count = 0;
+  rows.forEach(row => {
+    const cargo = row.querySelector('td:first-child')?.textContent?.toLowerCase() || '';
+    const visible = !q || cargo.includes(q);
+    row.style.display = visible ? '' : 'none';
+    if (visible) count++;
+  });
+  const pag = document.querySelector('#cargos-pagination span');
+  if (pag) pag.textContent = `${count} cargos cadastrados`;
 };
 
-window.renderDescricaoTabela = function() {
-  const tbody = document.getElementById('descricao-tbody');
-  const pag   = document.getElementById('descricao-pagination');
-  if (!tbody) return;
-  const lista = window._cargosDescricao || [];
-  tbody.innerHTML = lista.length === 0
-    ? '<tr><td colspan="3" style="text-align:center;padding:32px;color:var(--text3)">Nenhuma descrição cadastrada.</td></tr>'
-    : lista.map((d, i) => `
-        <tr>
-          <td><strong>${d.cargo}</strong></td>
-          <td style="max-width:480px;color:var(--text2);font-size:13px;white-space:pre-wrap">${d.texto}</td>
-          <td style="white-space:nowrap">
-            <button class="action-btn" title="Editar" onclick="editarDescricao(${i})">✎</button>
-            <button class="action-btn" title="Excluir" style="color:var(--danger)" onclick="deletarDescricao(${i})">✕</button>
-          </td>
-        </tr>`).join('');
-  if (pag) pag.innerHTML = `<span>${lista.length} descrição${lista.length !== 1 ? 'ões' : ''} cadastrada${lista.length !== 1 ? 's' : ''}</span>`;
+window.filtrarDescricoes = function(query) {
+  const q = String(query || '').trim().toLowerCase();
+  const rows = document.querySelectorAll('#descricao-tbody tr');
+  let count = 0;
+  rows.forEach(row => {
+    const cargo = row.querySelector('td:first-child')?.textContent?.toLowerCase() || '';
+    const desc = row.querySelector('textarea')?.value.toLowerCase() || '';
+    const visible = !q || cargo.includes(q) || desc.includes(q);
+    row.style.display = visible ? '' : 'none';
+    if (visible) count++;
+  });
+  const pag = document.querySelector('#descricao-pagination span');
+  if (pag) pag.textContent = `${count} cargo${count !== 1 ? 's' : ''}`;
 };
   
 // ------------------------------------------------------------
@@ -2176,6 +2151,7 @@ function pageCargosTabela() {
   <div class="table-card">
     <div class="table-header">
       <span class="table-title">Tabela Salarial Atual</span>
+      <input class="search-input" placeholder="Buscar cargo..." oninput="filtrarCargosTabela(this.value)" style="margin-left:12px">
       <div class="table-actions">
         <button class="btn btn-sm btn-print" onclick="printCargosTabela()">🖨 Imprimir</button>
       </div>
