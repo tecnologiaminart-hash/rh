@@ -421,7 +421,7 @@ async function loadCargosForApp() {
   }
   const { data, error } = await supaClient
     .from('cargos')
-    .select('id_cargo, nome_cargo, salario_base')
+    .select('*')
     .order('nome_cargo', { ascending: true });
 
   if (error) {
@@ -431,7 +431,15 @@ async function loadCargosForApp() {
   } else {
     _cargos = data;
     window._cargos = data;
-    console.log('Cargos carregados:', _cargos);
+    // Detecta o campo de id utilizado na tabela cargos (p.ex. 'id' ou 'id_cargo')
+    if (data && data.length > 0) {
+      const sample = data[0];
+      const idField = ['id', 'id_cargo', 'id_cargos', 'codigo'].find(k => k in sample) || Object.keys(sample)[0];
+      window._cargoIdField = idField;
+    } else {
+      window._cargoIdField = 'id';
+    }
+    console.log('Cargos carregados:', _cargos, 'idField=', window._cargoIdField);
   }
 }
 
@@ -1235,14 +1243,16 @@ async function openStatusModal(colabId = null) {
   }
   smCargo.innerHTML = '<option value="">— Selecione o Cargo —</option>';
   window._cargos.forEach(cargo => {
-    smCargo.innerHTML += `<option value="${cargo.id_cargo}">${cargo.nome_cargo}</option>`;
+    const cid = cargo[window._cargoIdField] !== undefined ? cargo[window._cargoIdField] : (cargo.id_cargo || cargo.id || cargo.id_cargos || '');
+    const nome = cargo.nome_cargo || cargo.nome || cargo.cargo || cid;
+    smCargo.innerHTML += `<option value="${cid}">${nome}</option>`;
   });
 
   // Não preencher automaticamente o salário a partir dos cargos.
   // O salário base deve vir da coluna `salario_base` da tabela `colaboradores`.
   smCargo.onchange = () => {
     const selectedCargoId = smCargo.value;
-    const selectedCargo = window._cargos.find(c => String(c.id_cargo) === String(selectedCargoId));
+    const selectedCargo = window._cargos.find(c => String(c[window._cargoIdField] || c.id_cargo || c.id || c.id_cargos) === String(selectedCargoId));
     if (selectedCargo && selectedCargo.salario_base !== undefined && selectedCargo.salario_base !== null && String(selectedCargo.salario_base) !== '') {
       smSalarioBase.value = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(selectedCargo.salario_base);
     } else {
