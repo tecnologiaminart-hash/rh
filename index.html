@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" contPreciso de mais uma aba no Departamentos
+<meta name="viewport" 
 
 Departamentos > 
 <title>Minart Móveis - RH</title>
@@ -362,6 +362,8 @@ let _colaboradoresSupabase = [];
 let _editingStatusColabId = null;
 let _historicoColaboradoresSupabase = [];
 let _editingHistoricoColabId = null;
+let _cargos = []; // Para armazenar os cargos do Supabase
+let _statusEmployees = []; Para armazenar os colaboradores
   
 function salvarVagasLocal() {
   localStorage.setItem('rh_vagas', JSON.stringify(window._vagas || []));
@@ -412,6 +414,26 @@ function initSupabase() {
     return null;
   }
 }
+async function loadCargosForApp() {
+  if (!supaClient) {
+    console.error('Supabase client não inicializado para cargos.');
+    return;
+  }
+  const { data, error } = await supaClient
+    .from('cargos')
+    .select('id_cargo, nome_cargo, salario_base')
+    .order('nome_cargo', { ascending: true });
+
+  if (error) {
+    console.error('Erro ao carregar cargos:', error.message);
+    _cargos = [];
+  } else {
+    _cargos = data;
+    console.log('Cargos carregados:', _cargos);
+  }
+}
+
+  
 // ============================================================
 // AUTH — login
 // ============================================================
@@ -652,6 +674,12 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
   const fn = pages[id];
   el.innerHTML = fn ? fn(param) : pageGeneric(id);
   postRender(id);
+  if (id === 'col-status') {
+    // Garante que os cargos estejam carregados antes de tentar preencher o modal
+    loadCargosForApp().then(() => {
+      loadColaboradoresFromSupabase();
+    });
+  }
 }
 
 function postRender(id) {
@@ -1329,7 +1357,86 @@ function renderStatusTable() {
     `;
   });
 }
+function pageStatus() {
+  // Chama a função para carregar os dados do Supabase
+  // e renderizar a tabela assim que a página for exibida.
+  // Isso garante que os dados sejam carregados sempre que a aba for acessada.
+  loadColaboradoresFromSupabase();
 
+  // O HTML da página, incluindo o modal e a tabela vazia que será preenchida
+  return `
+  <!-- Modal: Adicionar/Editar Colaborador -->
+  <div id="status-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;padding:32px;width:560px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="status-modal-title">Novo Colaborador</div>
+      <div class="form-grid">
+        <div class="form-group form-full">
+          <label class="form-label">Nome Completo</label>
+          <input class="form-input" id="sm-nome" placeholder="Nome do Colaborador">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cargo</label>
+          <select class="form-select" id="sm-cargo">
+            <!-- Opções de cargo serão preenchidas via JS -->
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Departamento</label>
+          <input class="form-input" id="sm-departamento" placeholder="Ex: Produção, RH">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Data de Admissão</label>
+          <input class="form-input" type="date" id="sm-desde">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Salário Base</label>
+          <input class="form-input" type="text" id="sm-salario-base" placeholder="R$ 0.000,00" readonly>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <select class="form-select" id="sm-status">
+            <option value="Ativo">Ativo</option>
+            <option value="Inativo">Inativo</option>
+            <option value="Férias">Férias</option>
+            <option value="Afastado">Afastado</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button class="btn" onclick="closeStatusModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveStatusEmployee()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabela principal de Colaboradores -->
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">Informações Contratuais</span>
+      <input class="search-input" placeholder="Buscar colaborador..." oninput="filterStatusTable(this.value)">
+      <div class="table-actions">
+        <button class="btn btn-primary" onclick="openStatusModal()">+ Adicionar Colaborador</button>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Cargo</th>
+          <th>Departamento</th>
+          <th>Desde</th>
+          <th>Salário Base</th>
+          <th>Status</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="status-table-body">
+        <!-- Dados serão carregados aqui pelo JavaScript -->
+        <tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text3);">Carregando colaboradores...</td></tr>
+      </tbody>
+    </table>
+  </div>`;
+}
 function openStatusModal(colabId = null) {
   _editingStatusColabId = colabId;
   const modal = document.getElementById('status-modal');
@@ -3495,6 +3602,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Agora que SUPA_URL e SUPA_KEY estão definidos, podemos inicializar supaClient
   supaClient = initSupabase();
+    await loadCargosForApp(); // <-- Carrega os cargos antes de tentar logar ou renderizar qualquer coisa que dependa deles
+  // FIM DA LINHA ADICIONADA
 
   // Se houver uma sessão Supabase ativa, entra no app
  // Verifica sessão ativa (Supabase Auth v2)
