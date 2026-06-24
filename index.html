@@ -347,80 +347,8 @@ Departamentos >
 
 <script>
   // Inicializa cargos globalmente para estar disponível em qualquer página
-if (!window._cargos) window._cargos = [
-  ['Serviços Gerais','R$ 1.628,00'],
-  ['Recepcionista','R$ 1.628,00'],
-  ['Auxiliar de Cozinha','R$ 1.628,00'],
-  ['Auxiliar de Produção','R$ 1.765,00'],
-  ['Auxiliar de Montador','R$ 1.765,00'],
-  ['Auxiliar de Vidraceiro','R$ 1.765,00'],
-  ['Desenhista','R$ 1.765,00'],
-  ['Vendedor','R$ 1.765,00'],
-  ['Orçamentista','R$ 1.765,00'],
-  ['Cozinheira(o)','R$ 1.765,00'],
-  ['Entregador e Montador - Nível 1','R$ 1.956,00'],
-  ['Entregador e Montador - Nível 2','R$ 2.138,00'],
-  ['Entregador e Montador - Nível 3','R$ 2.304,00'],
-  ['Operador de Máquinas - Nível 1','R$ 1.956,00'],
-  ['Operador de Máquinas - Nível 2','R$ 2.138,00'],
-  ['Operador de Máquinas - Nível 3','R$ 2.300,00'],
-  ['Auxiliar Administrativo - Nível 1','R$ 1.960,00'],
-  ['Auxiliar Administrativo - Nível 2','R$ 2.142,00'],
-  ['Auxiliar Administrativo - Nível 3','R$ 2.308,00'],
-  ['Desenhista, Orçamentista e Vendedor','R$ 2.351,00'],
-  ['Marceneiro - Nível 1','R$ 2.352,00'],
-  ['Marceneiro - Nível 2','R$ 2.569,00'],
-  ['Marceneiro - Nível 3','R$ 2.765,00'],
-  ['Pintor','R$ 2.352,00'],
-  ['Soldador - Nível 1','R$ 2.352,00'],
-  ['Soldador - Nível 2','R$ 2.569,00'],
-  ['Soldador - Nível 3','R$ 2.765,00'],
-  ['Tapeceiro','R$ 2.352,00'],
-  ['Vidraceiro','R$ 2.352,00'],
-  ['Encarregado de Setor - Nível 1','R$ 2.355,00'],
-  ['Encarregado de Setor - Nível 2','R$ 2.482,00'],
-  ['Encarregado de Setor - Nível 3','R$ 2.610,00'],
-  ['Encarregado Geral','R$ 2.611,00'],
-  ['Designer de Interiores','R$ 2.611,00'],
-  ['Gerente Geral - Nível 1','R$ 2.852,00'],
-  ['Gerente Geral - Nível 2','R$ 3.070,00'],
-];
-  if (!window._statusEmployees) window._statusEmployees = [
-  ['AMANDA SOUSA LIMA','Encarregado de Setor - Nível 1','Ativo','01/01/2024'],
-  ['LUCIANA DA SILVA','Auxiliar Administrativo - Nível 1','Ativo','01/01/2024'],
-  ['JUCICLÉIA DE CARVALHO','Gerente Geral - Nível 2','Ativo','01/01/2024'],
-  ['KAROL SILVA JARDIM','Auxiliar Administrativo - Nível 1','Ativo','01/01/2024'],
-  ['LEANDRO ALMEIDA','Encarregado de Setor - Nível 1','Ativo','01/01/2024'],
-  ['MAXSUEL DA SILVA SANTOS','Soldador - Nível 1','Ativo','01/01/2024'],
-  ['LEANDRO FELIX DA SILVA','Soldador - Nível 1','Ativo','01/01/2024'],
-  ['JOÃO ALVES MORAIS','Soldador - Nível 1','Ativo','01/01/2024'],
-  ['JACSON MARTINS','Soldador - Nível 1','Ativo','01/01/2024'],
-  ['MARCOS VINICIUS LIMA DA SILVA','Operador de Máquinas - Nível 1','Ativo','01/01/2024'],
-  ['JOSIELTON DIAS REIS','Operador de Máquinas - Nível 1','Ativo','01/01/2024'],
-  ['EDNELTON BORGES ANDRADE','Auxiliar de Produção','Ativo','01/01/2024'],
-  ['CLAUDIA CRISTINA DE HOLANDA DA SILVA','Auxiliar de Produção','Ativo','01/01/2024'],
-  ['JEIEL SILVA NUNES','Auxiliar de Produção','Ativo','01/01/2024'],
-  ['MARCOS ANTONIO DOS SANTOS','Auxiliar de Produção','Ativo','01/01/2024'],
-  ['JOAO PAULO FERNANDES','Auxiliar de Produção','Ativo','01/01/2024'],
-  ['LEU FRANCISCO DE SOUSA','Auxiliar de Produção','Ativo','01/01/2024'],
-  ['HELMETH FERREIRA','Auxiliar de Produção','Ativo','01/01/2024'],
-  ['CICERO RYAN TIMOTEO','Auxiliar de Produção','Ativo','01/01/2024'],
-  ['MARCOS DIONES CARVALHO','Auxiliar de Produção','Ativo','01/01/2024'],
-  ['PEDRO EYDSON','Auxiliar de Produção','Ativo','01/01/2024'],
-  ['MICAEL DA SILVA','Auxiliar de Produção','Ativo','01/01/2024'],
-  ['ANDREY THALYS RODRIGUES','Auxiliar de Produção','Ativo','01/01/2024'],
-  ['RAFAEL CAILO','Auxiliar de Produção','Ativo','01/01/2024'],
-  ['LUCAS MARTINS','Auxiliar de Produção','Ativo','01/01/2024'],
-  ['DANILLO MENDES','Auxiliar de Produção','Ativo','01/01/2024'],
-  ['RAILON DE SOUSA OLIVEIRA','Encarregado Geral','Ativo','01/01/2024'],
-  ['JOSIAS CARDOSO BONINA','Encarregado Geral','Ativo','01/01/2024'],
-  ['DARTO TIAGO DE ARAUJO','Entregador e Montador - Nível 3','Ativo','01/01/2024'],
-  ['JACIRA DE ARAÚJO GONÇALVES','Cozinheira','Ativo','01/01/2024'],
-  ['IVONETE DE ARAUJO','Serviços Gerais','Ativo','01/01/2024'],
-  ['MEIRILENE COSTA','Serviços Gerais','Ativo','01/01/2024'],
-  ['MARINETE DOS SANTOS','Serviços Gerais','Ativo','01/01/2024'],
-  ['CRISTIANO DOS SANTOS','Auxiliar Administrativo - Nível 1','Ativo','01/01/2024'],
-];
+if (!window._cargos) window._cargos = [ ];
+  if (!window._statusEmployees) window._statusEmployees = [ ];
   
 // ============================================================
 // CONFIG & SUPABASE
@@ -433,28 +361,9 @@ let SUPA_KEY = null;
 
 let supaClient = null;
 let currentUser = null;
-
-window._salvarStorage = function() {
-  const campos = [
-    '_cargosDescricao',
-    '_cargosHistorico',
-    '_statusEmployees',
-    '_documentosPorColab',
-    '_perfisPorColab',
-    '_dadosPessoais',
-    '_contratosPorColab',
-    '_ocorrencias',
-    '_vagas',
-    '_candidatosPorVaga',
-    '_historicoCarreira',
-  ];
-  campos.forEach(chave => {
-    try {
-      localStorage.setItem(chave, JSON.stringify(window[chave] || []));
-    } catch(e) {}
-  });
-};
-
+let _colaboradoresSupabase = [];
+let _editingStatusColabId = null;
+  
 function salvarVagasLocal() {
   localStorage.setItem('rh_vagas', JSON.stringify(window._vagas || []));
 }
@@ -1413,19 +1322,25 @@ function pageAtestados() {
 // ------------------------------------------------------------
 // Informações Contratuais
 // ------------------------------------------------------------
-function pageStatus() {
-  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" onclick="openStatusModal()">+ Novo Colaborador</button>`;
-  const employees = window._statusEmployees;
 
-  setTimeout(()=>{
+// Variável global para armazenar os colaboradores carregados do Supabase
+let _colaboradoresSupabase = [];
+
+async function pageStatus() {
+  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" onclick="openStatusModal()">+ Novo Colaborador</button>`;
+
+  // Carregar colaboradores do Supabase
+  await loadColaboradoresFromSupabase();
+
+  setTimeout(() => {
     const search = document.getElementById('status-search');
-    if(search) search.addEventListener('input', function(){
+    if (search) search.addEventListener('input', function() {
       const q = this.value.toLowerCase();
-      document.querySelectorAll('#status-tbody tr').forEach(tr=>{
-        tr.style.display = tr.children[0].textContent.toLowerCase().includes(q) ? '' : 'none';
+      document.querySelectorAll('#status-tbody tr').forEach(tr => {
+        tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
       });
     });
-  },50);
+  }, 50);
 
   return `
   <div id="status-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
@@ -1440,7 +1355,7 @@ function pageStatus() {
           <label class="form-label">Cargo</label>
           <select class="form-select" id="sm-cargo">
             <option value="">— Selecione o Cargo —</option>
-            ${(window._cargos||[]).map(([c])=>`<option value="${c}">${c}</option>`).join('')}
+            <!-- Opções de cargo serão preenchidas via JS em openStatusModal -->
           </select>
         </div>
         <div class="form-group">
@@ -1479,7 +1394,7 @@ function pageStatus() {
       <span class="table-title">Status dos Colaboradores</span>
       <input class="search-input" id="status-search" placeholder="Buscar por nome…" style="margin-left:12px">
     </div>
-    <table>
+    <table id="status-table">
       <thead>
         <tr>
           <th>Colaborador</th>
@@ -1490,86 +1405,211 @@ function pageStatus() {
         </tr>
       </thead>
       <tbody id="status-tbody">
-        ${employees.map(([n,c,st,desde],i)=>`
-          <tr data-i="${i}">
-            <td><strong>${n}</strong></td>
-            <td>${c}</td>
-            <td><span class="badge ${st==='Ativo'?'badge-active':st==='Afastado'?'badge-pending':'badge-inactive'}">${st}</span></td>
-            <td>${desde}</td>
-            <td>
-              <button class="action-btn" title="Visualizar" onclick="viewStatusEmployee(${i})">👁</button>
-              <button class="action-btn" title="Editar" onclick="editStatusEmployee(${i})">✎</button>
-              <button class="action-btn" title="Imprimir" onclick="printStatusRow(${i})">🖨</button>
-            </td>
-          </tr>`).join('')}
+        <!-- Conteúdo será preenchido por renderStatusTable() -->
       </tbody>
     </table>
-    <div class="table-pagination"><span>${employees.length} colaboradores</span></div>
+    <div class="table-pagination"><span id="status-count">${_colaboradoresSupabase.length} colaboradores</span></div>
   </div>`;
 }
-
-window.openStatusModal = function(idx=null){
+  window.openStatusModal = async function(colabId = null) {
   const m = document.getElementById('status-modal');
-  const emp = window._statusEmployees;
-  window._editingStatusIdx = idx;
-  if(idx!==null){
-    const [n,c,st,desde] = emp[idx];
-    document.getElementById('sm-nome').value=n;
-    document.getElementById('sm-cargo').value=c;
-    document.getElementById('sm-status').value=st;
-    const parts = desde.split('/');
-    document.getElementById('sm-desde').value = parts.length===3?`${parts[2]}-${parts[1]}-${parts[0]}`:'';
-    document.getElementById('status-modal-title').textContent='Editar Colaborador';
-  } else {
-    ['sm-nome','sm-cargo','sm-desde'].forEach(id=>document.getElementById(id).value='');
-    document.getElementById('sm-status').value='Ativo';
-    document.getElementById('status-modal-title').textContent='Novo Colaborador';
+  _editingStatusColabId = colabId; // Armazena o ID do colaborador para edição
+
+  // Carregar cargos para o select do modal
+  const { data: cargosData, error: cargosError } = await supaClient.from('cargos').select('id_cargo, nome_cargo');
+  if (cargosError) {
+    console.error('Erro ao carregar cargos:', cargosError.message);
+    showToast('Erro ao carregar cargos para o formulário.', 'error');
+    return;
   }
-  m.style.display='flex';
+  const cargoOptions = cargosData.map(c => `<option value="${c.id_cargo}">${c.nome_cargo}</option>`).join('');
+  document.getElementById('sm-cargo').innerHTML = `<option value="">— Selecione o Cargo —</option>${cargoOptions}`;
+
+  if (colabId !== null) {
+    const colab = _colaboradoresSupabase.find(c => c.id_colaborador === colabId);
+    if (colab) {
+      document.getElementById('sm-nome').value = colab.nome_colaborador;
+      document.getElementById('sm-cargo').value = colab.cargos ? colab.cargos.id_cargo : ''; // Preenche com o ID do cargo
+      document.getElementById('sm-status').value = colab.status_colaborador;
+      document.getElementById('sm-desde').value = colab.desde; // Assume que 'desde' já está no formato 'YYYY-MM-DD'
+      document.getElementById('status-modal-title').textContent = 'Editar Colaborador';
+    }
+  } else {
+    // Novo registro
+    document.getElementById('sm-nome').value = '';
+    document.getElementById('sm-cargo').value = '';
+    document.getElementById('sm-status').value = 'Ativo';
+    document.getElementById('sm-desde').value = new Date().toISOString().split('T')[0]; // Data atual no formato YYYY-MM-DD
+    document.getElementById('status-modal-title').textContent = 'Novo Colaborador';
+  }
+  m.style.display = 'flex';
 };
-window.editStatusEmployee = function(i){ openStatusModal(i); };
-window.saveStatusEmployee = function(){
-  const emp = window._statusEmployees;
-  const n=document.getElementById('sm-nome').value.trim();
-  const c=document.getElementById('sm-cargo').value.trim();
-  const st=document.getElementById('sm-status').value;
-  const rawDate=document.getElementById('sm-desde').value;
-  const desde = rawDate ? rawDate.split('-').reverse().join('/') : '';
-  const idx=window._editingStatusIdx;
-  if(idx!==null) emp[idx]=[n,c,st,desde]; else emp.push([n,c,st,desde]);
-  window._salvarStorage();
-  document.getElementById('status-modal').style.display='none';
-  navigate('col-status','Informações Contratuais', 'Colaboradores');
+
+window.editStatusEmployee = function(colabId) {
+  openStatusModal(colabId);
 };
-window.viewStatusEmployee = function(i){
-  const [n,c,st,desde]=window._statusEmployees[i];
-  document.getElementById('status-view-body').innerHTML=`
-    <div><strong>Nome:</strong> ${n}</div>
-    <div><strong>Cargo:</strong> ${c}</div>
-    <div><strong>Status:</strong> ${st}</div>
-    <div><strong>Desde:</strong> ${desde}</div>`;
-  document.getElementById('status-view-modal').style.display='flex';
+
+window.saveStatusEmployee = async function() {
+  const nome = document.getElementById('sm-nome').value.trim();
+  const idCargo = document.getElementById('sm-cargo').value; // Pega o ID do cargo
+  const status = document.getElementById('sm-status').value;
+  const rawDesde = document.getElementById('sm-desde').value;
+
+  if (!nome || !idCargo || !rawDesde) {
+    showToast('Preencha todos os campos obrigatórios.', 'error');
+    return;
+  }
+
+  const dataParaSalvar = {
+    nome_colaborador: nome,
+    id_cargos: idCargo, // Salva o ID do cargo
+    status_colaborador: status,
+    desde: rawDesde // Já deve estar no formato 'YYYY-MM-DD'
+  };
+
+  let error = null;
+  if (_editingStatusColabId) {
+    // Atualizar colaborador existente
+    const { error: updateError } = await supaClient
+      .from('colaboradores')
+      .update(dataParaSalvar)
+      .eq('id_colaborador', _editingStatusColabId);
+    error = updateError;
+  } else {
+    // Inserir novo colaborador
+    const { error: insertError } = await supaClient
+      .from('colaboradores')
+      .insert([dataParaSalvar]);
+    error = insertError;
+  }
+
+  if (error) {
+    console.error('Erro ao salvar colaborador:', error.message);
+    showToast(`Erro ao salvar colaborador: ${error.message}`, 'error');
+  } else {
+    document.getElementById('status-modal').style.display = 'none';
+    showToast('Colaborador salvo com sucesso!');
+    // Recarrega os dados e renderiza a tabela
+    await loadColaboradoresFromSupabase();
+    // Navega para a página para garantir que o conteúdo seja atualizado
+    navigate('col-status', 'Informações Contratuais', 'Colaboradores');
+  }
 };
-window.printStatusRow = function(i){
-  const [n,c,st,desde]=window._statusEmployees[i];
-  const w=window.open('','_blank');
+
+window.viewStatusEmployee = function(colabId) {
+  const colab = _colaboradoresSupabase.find(c => c.id_colaborador === colabId);
+  if (!colab) {
+    showToast('Colaborador não encontrado.', 'error');
+    return;
+  }
+  document.getElementById('status-view-body').innerHTML = `
+    <div><strong>Nome:</strong> ${colab.nome_colaborador}</div>
+    <div><strong>Cargo:</strong> ${colab.cargos ? colab.cargos.nome_cargo : 'N/A'}</div>
+    <div><strong>Status:</strong> ${colab.status_colaborador}</div>
+    <div><strong>Desde:</strong> ${colab.desde}</div>`;
+  document.getElementById('status-view-modal').style.display = 'flex';
+};
+
+window.printStatusRow = function(colabId) {
+  const colab = _colaboradoresSupabase.find(c => c.id_colaborador === colabId);
+  if (!colab) {
+    showToast('Colaborador não encontrado para impressão.', 'error');
+    return;
+  }
+  const w = window.open('', '_blank');
   w.document.write(`<html><head><title>Colaborador</title><style>body{font-family:sans-serif;padding:40px}h2{margin-bottom:20px}p{margin:6px 0;font-size:14px}</style></head><body>
     <h2>Minart Móveis — Ficha de Status</h2>
-    <p><strong>Nome:</strong> ${n}</p>
-    <p><strong>Cargo:</strong> ${c}</p>
-    <p><strong>Status:</strong> ${st}</p>
-    <p><strong>Desde:</strong> ${desde}</p>
+    <p><strong>Nome:</strong> ${colab.nome_colaborador}</p>
+    <p><strong>Cargo:</strong> ${colab.cargos ? colab.cargos.nome_cargo : 'N/A'}</p>
+    <p><strong>Status:</strong> ${colab.status_colaborador}</p>
+    <p><strong>Desde:</strong> ${colab.desde}</p>
     <p style="margin-top:30px;color:#888;font-size:12px">Impresso em: ${new Date().toLocaleDateString('pt-BR')}</p>
-  </body></html>`);w.print();
+  </body></html>`);
+  w.print();
 };
-window.printStatusCard = function(){
-  const body=document.getElementById('status-view-body').innerHTML;
-  const w=window.open('','_blank');
+
+window.printStatusCard = function() {
+  const body = document.getElementById('status-view-body').innerHTML;
+  const w = window.open('', '_blank');
   w.document.write(`<html><head><title>Colaborador</title><style>body{font-family:sans-serif;padding:40px}h2{margin-bottom:20px}div{margin:6px 0;font-size:14px}</style></head><body>
     <h2>Minart Móveis — Ficha de Status</h2>${body}
     <p style="margin-top:30px;color:#888;font-size:12px">Impresso em: ${new Date().toLocaleDateString('pt-BR')}</p>
-  </body></html>`);w.print();
+  </body></html>`);
+  w.print();
 };
+  
+// Função para carregar os colaboradores do Supabase
+async function loadColaboradoresFromSupabase() {
+  if (!supaClient) {
+    console.error('Supabase client not initialized.');
+    showToast('Erro: Supabase não inicializado.', 'error');
+    return;
+  }
+  const { data, error } = await supaClient
+    .from('colaboradores')
+    .select(`
+      id_colaborador,
+      nome_colaborador,
+      desde,
+      status_colaborador,
+      cargos (
+        id_cargo,
+        nome_cargo
+      )
+    `);
+
+  if (error) {
+    console.error('Erro ao carregar colaboradores do Supabase:', error.message);
+    showToast('Erro ao carregar colaboradores.', 'error');
+    _colaboradoresSupabase = [];
+  } else {
+    _colaboradoresSupabase = data;
+    // Se a tabela já estiver renderizada, atualiza-a
+    if (document.getElementById('status-tbody')) {
+      renderStatusTable();
+    }
+  }
+}
+
+// Função para renderizar a tabela de status dos colaboradores
+function renderStatusTable() {
+  const tbody = document.getElementById('status-tbody');
+  const countSpan = document.getElementById('status-count');
+  if (!tbody || !countSpan) return;
+
+  tbody.innerHTML = _colaboradoresSupabase.map(colab => `
+    <tr data-id="${colab.id_colaborador}">
+      <td><strong>${colab.nome_colaborador}</strong></td>
+      <td>${colab.cargos ? colab.cargos.nome_cargo : 'N/A'}</td>
+      <td><span class="badge ${colab.status_colaborador === 'Ativo' ? 'badge-active' : colab.status_colaborador === 'Afastado' ? 'badge-pending' : 'badge-inactive'}">${colab.status_colaborador}</span></td>
+      <td>${colab.desde}</td>
+      <td>
+        <button class="action-btn" title="Visualizar" onclick="viewStatusEmployee('${colab.id_colaborador}')">👁</button>
+        <button class="action-btn" title="Editar" onclick="editStatusEmployee('${colab.id_colaborador}')">✎</button>
+        <button class="action-btn" title="Imprimir" onclick="printStatusRow('${colab.id_colaborador}')">🖨</button>
+      </td>
+    </tr>`).join('');
+  countSpan.textContent = `${_colaboradoresSupabase.length} colaboradores`;
+}
+
+// Adicione esta função para carregar os cargos do Supabase no início
+async function loadCargosForApp() {
+  if (!supaClient) {
+    console.warn('Supabase client not initialized. Cannot load cargos.');
+    return;
+  }
+  const { data, error } = await supaClient.from('cargos').select('id_cargo, nome_cargo');
+  if (error) {
+    console.error('Erro ao carregar cargos:', error.message);
+    showToast('Erro ao carregar cargos para o sistema.', 'error');
+    window._cargos = []; // Garante que _cargos seja um array vazio em caso de erro
+  } else {
+    // Transforma o formato para o que o seu código espera: [['Nome Cargo', 'Salário']]
+    // Se a tabela 'cargos' no Supabase tiver 'salario_base', você pode incluí-lo aqui.
+    // Por enquanto, vamos usar apenas o nome do cargo e um salário vazio.
+    window._cargos = data.map(c => [c.nome_cargo, '']); // Salário vazio por enquanto
+  }
+}
 
 // ------------------------------------------------------------
 // EXAMES
@@ -2041,44 +2081,8 @@ function pageCadCargos() {
 // ------------------------------------------------------------
 function pageCargosTabela() {
   document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" onclick="openCargoModal()">+ Novo Cargo</button>`;
-  if(!window._cargos) window._cargos = [
-    ['Serviços Gerais','R$ 1.628,00'],
-    ['Recepcionista','R$ 1.628,00'],
-    ['Auxiliar de Cozinha','R$ 1.628,00'],
-    ['Auxiliar de Produção','R$ 1.765,00'],
-    ['Auxiliar de Montador','R$ 1.765,00'],
-    ['Auxiliar de Vidraceiro','R$ 1.765,00'],
-    ['Desenhista','R$ 1.765,00'],
-    ['Vendedor','R$ 1.765,00'],
-    ['Orçamentista','R$ 1.765,00'],
-    ['Cozinheira(o)','R$ 1.765,00'],
-    ['Entregador e Montador - Nível 1','R$ 1.956,00'],
-    ['Entregador e Montador - Nível 2','R$ 2.138,00'],
-    ['Entregador e Montador - Nível 3','R$ 2.304,00'],
-    ['Operador de Máquinas - Nível 1','R$ 1.956,00'],
-    ['Operador de Máquinas - Nível 2','R$ 2.138,00'],
-    ['Operador de Máquinas - Nível 3','R$ 2.300,00'],
-    ['Auxiliar Administrativo - Nível 1','R$ 1.960,00'],
-    ['Auxiliar Administrativo - Nível 2','R$ 2.142,00'],
-    ['Auxiliar Administrativo - Nível 3','R$ 2.308,00'],
-    ['Desenhista, Orçamentista e Vendedor','R$ 2.351,00'],
-    ['Marceneiro - Nível 1','R$ 2.352,00'],
-    ['Marceneiro - Nível 2','R$ 2.569,00'],
-    ['Marceneiro - Nível 3','R$ 2.765,00'],
-    ['Pintor','R$ 2.352,00'],
-    ['Soldador - Nível 1','R$ 2.352,00'],
-    ['Soldador - Nível 2','R$ 2.569,00'],
-    ['Soldador - Nível 3','R$ 2.765,00'],
-    ['Tapeceiro','R$ 2.352,00'],
-    ['Vidraceiro','R$ 2.352,00'],
-    ['Encarregado de Setor - Nível 1','R$ 2.355,00'],
-    ['Encarregado de Setor - Nível 2','R$ 2.482,00'],
-    ['Encarregado de Setor - Nível 3','R$ 2.610,00'],
-    ['Encarregado Geral','R$ 2.611,00'],
-    ['Designer de Interiores','R$ 2.611,00'],
-    ['Gerente Geral - Nível 1','R$ 2.852,00'],
-    ['Gerente Geral - Nível 2','R$ 3.070,00'],
-  ];
+  if(!window._cargos) window._cargos = [ ];
+  
   const revisao = '01/01/2026';
   return `
   <div id="cargo-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
@@ -3610,25 +3614,21 @@ if (supaClient) {
 
   carregarVagasLocal();
   carregarCandidaturasLocal();
+// Carrega os cargos do Supabase antes de qualquer página que os utilize
+  await loadCargosForApp();
 
-  // --- ESTA É A PARTE CRÍTICA QUE PRECISA SER SUBSTITUÍDA ---
-  // Função auxiliar para carregar dados do localStorage de forma robusta
-  const carregarDoLocalStorage = (chave, valorPadrao = []) => {
-    try {
-      const salvo = localStorage.getItem(chave);
-      return salvo ? JSON.parse(salvo) : valorPadrao;
-    } catch (e) {
-      console.error(`Erro ao carregar ${chave} do localStorage:`, e);
-      return valorPadrao;
-    }
-  };
-
-  window._cargosDescricao = carregarDoLocalStorage('_cargosDescricao');
-  window._historicoCarreira = carregarDoLocalStorage('_historicoCarreira');
-  // Adicione outras variáveis que você carrega do localStorage aqui, se houver
-  // Ex: window._documentosPorColab = carregarDoLocalStorage('_documentosPorColab', {});
-  // --- FIM DA PARTE CRÍTICA ---
-
+  // Inicializa arrays vazios para as variáveis que ainda não foram migradas para o Supabase
+  // Isso evita erros de "undefined" se alguma página tentar acessá-las antes de serem preenchidas
+  if (!window._cargosDescricao) window._cargosDescricao = [];
+  if (!window._historicoCarreira) window._historicoCarreira = [];
+  if (!window._documentosPorColab) window._documentosPorColab = {};
+  if (!window._perfisPorColab) window._perfisPorColab = {};
+  if (!window._dadosPessoais) window._dadosPessoais = {};
+  if (!window._contratosPorColab) window._contratosPorColab = {};
+  if (!window._ocorrencias) window._ocorrencias = [];
+  if (!window._vagas) window._vagas = [];
+  if (!window._candidaturas) window._candidaturas = []; // Já existe, mas bom reforçar
+  
   checkCandidaturaLink();
 });
 </script>
