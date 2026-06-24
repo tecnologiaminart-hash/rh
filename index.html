@@ -1317,6 +1317,122 @@ function filterStatusTable(searchTerm) {
 // ============================================================
 // PAGES
 // ============================================================
+
+// Página: Documentos por Colaborador
+function pageDocumentos() {
+  if (!window._documentosPorColab) window._documentosPorColab = {};
+
+  // Se colaboradores não carregados, tenta carregar e mostra mensagem
+  if (!_colaboradoresSupabase || _colaboradoresSupabase.length === 0) {
+    loadColaboradoresFromSupabase();
+    return `<div class="table-card"><div class="table-header"><span class="table-title">Documentos por Colaborador</span></div><div style="padding:36px;text-align:center;color:var(--text3)">Carregando colaboradores...</div></div>`;
+  }
+
+  const emp = _colaboradoresSupabase || [];
+  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" onclick="openEnviarDocModal()">+ Enviar Documento</button>`;
+
+  const rows = emp.map(colab => {
+    const cid = colab.id_colaborador || colab.id || colab.id_colab || colab.id_colaboradores || colab.codigo || '';
+    const nome = colab.nome_colaborador || colab.nome || colab.name || '—';
+    const cargo = colab.cargos ? (colab.cargos.nome_cargo || colab.cargos.nome || '') : '';
+    const status = colab.status_colaborador || colab.status || colab.situacao || '—';
+    const docs = window._documentosPorColab[cid] || [];
+    const qtd = docs.length;
+    const ini = nome ? nome[0].toUpperCase() : '?';
+    return `
+      <tr onclick="openDocColabModal('${cid}')">
+        <td><div style="display:flex;align-items:center;gap:12px"><div style="width:36px;height:36px;border-radius:50%;background:#111;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700">${ini}</div><strong>${nome}</strong></div></td>
+        <td>${cargo}</td>
+        <td><span class="badge ${String(status).toLowerCase().includes('ativo') ? 'badge-active' : 'badge-inactive'}">${status}</span></td>
+        <td>${qtd>0?`<span class="badge badge-info">${qtd} doc${qtd>1?'s':''}</span>`:'<span style="color:var(--text3);font-size:12px">Nenhum</span>'}</td>
+        <td><button class="btn btn-sm" onclick="event.stopPropagation();openDocColabModal('${cid}')">📎 Anexar / Ver</button></td>
+      </tr>`;
+  }).join('');
+
+  return `
+    <div class="table-card">
+      <div class="table-header">
+        <span class="table-title">Documentos por Colaborador</span>
+        <input class="search-input" id="doc-search" placeholder="Buscar colaborador..." oninput="filtrarDocColab(this.value)">
+      </div>
+      <table>
+        <thead><tr><th>Colaborador</th><th>Cargo</th><th>Status</th><th>Documentos</th><th>Ações</th></tr></thead>
+        <tbody id="doc-colab-tbody">${rows}</tbody>
+      </table>
+      <div class="table-pagination"><span>${emp.length} colaboradores</span></div>
+    </div>`;
+}
+
+window.filtrarDocColab = function(q) {
+  q = String(q||'').toLowerCase();
+  document.querySelectorAll('#doc-colab-tbody tr').forEach(tr => tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none');
+};
+
+window.openDocColabModal = function(colabId) {
+  // Modal simples: mostra lista de documentos em memória
+  const docs = window._documentosPorColab[colabId] || [];
+  const colab = (_colaboradoresSupabase||[]).find(c => String(c.id_colaborador||c.id||c.codigo) === String(colabId));
+  const nome = colab ? (colab.nome_colaborador||colab.nome||colab.name) : 'Colaborador';
+  const body = docs.length === 0
+    ? `<div class="empty-state"><div class="empty-state-icon">📂</div><div class="empty-state-title">Nenhum documento enviado</div><div class="empty-state-desc">Use "Enviar Documento" para anexar.</div></div>`
+    : `<table style="width:100%"><thead><tr><th>Tipo</th><th>Arquivo</th><th>Envio</th><th>Ações</th></tr></thead><tbody>${docs.map((d,i)=>`<tr><td><span class="badge badge-gray">${d.tipo}</span></td><td style="font-size:12px">${d.nome}</td><td style="color:var(--text3);font-size:12px">${d.envio}</td><td><button class="action-btn" onclick="showToast('Download: ${d.nome}')">⬇</button><button class="action-btn btn-danger" onclick="excluirDoc('${colabId}',${i})">✕</button></td></tr>`).join('')}</tbody></table>`;
+
+  // cria modal se não existir
+  if (!document.getElementById('doc-colab-modal')) {
+    const modal = document.createElement('div'); modal.id='doc-colab-modal'; modal.style.cssText='display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;';
+    modal.innerHTML = `<div style="background:#fff;border-radius:6px;width:620px;max-width:95vw;max-height:85vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.2)"><div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between"><div style="font-size:15px;font-weight:700" id="doc-colab-title">Documentos</div><button class="btn btn-sm" onclick="document.getElementById('doc-colab-modal').style.display='none'">✕ Fechar</button></div><div style="padding:24px" id="doc-colab-body"></div></div>`;
+    document.body.appendChild(modal);
+  }
+  document.getElementById('doc-colab-title').textContent = `Documentos — ${nome}`;
+  document.getElementById('doc-colab-body').innerHTML = body;
+  document.getElementById('doc-colab-modal').style.display = 'flex';
+};
+
+window.excluirDoc = function(colabId, idx) {
+  if (!confirm('Excluir este documento?')) return;
+  if (!window._documentosPorColab[colabId]) return;
+  window._documentosPorColab[colabId].splice(idx,1);
+  openDocColabModal(colabId);
+  showToast('Documento removido.');
+};
+
+window.openEnviarDocModal = function(prefillColabId='') {
+  // cria modal de envio se necessário
+  if (!document.getElementById('enviar-doc-modal')) {
+    const modal = document.createElement('div'); modal.id='enviar-doc-modal'; modal.style.cssText='display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;';
+    modal.innerHTML = `<div style="background:#fff;border-radius:6px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.2)"><div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between"><div style="font-size:15px;font-weight:700">Enviar Documento</div><button class="btn btn-sm" onclick="document.getElementById('enviar-doc-modal').style.display='none'">✕</button></div><div style="padding:24px"><div class="form-group" style="margin-bottom:16px"><label class="form-label">Colaborador</label><select class="form-select" id="enviar-doc-colab"><option value="">— Selecione —</option>${(_colaboradoresSupabase||[]).map(c=>`<option value="${c.id_colaborador||c.id||c.codigo}">${c.nome_colaborador||c.nome||c.name}</option>`).join('')}</select></div><div class="form-group" style="margin-bottom:16px"><label class="form-label">Tipo de Documento</label><select class="form-select" id="enviar-doc-tipo"><option value="">— Selecione —</option><option value="RG/CPF">RG/CPF</option><option value="Contrato">Contrato</option><option value="ASO Admissional">ASO Admissional</option></select></div><div class="form-group" style="margin-bottom:20px"><label class="form-label">Arquivo</label><input class="form-input" type="file" id="enviar-doc-arquivo" accept=".pdf,.jpg,.png,.jpeg"></div><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" onclick="document.getElementById('enviar-doc-modal').style.display='none'">Cancelar</button><button class="btn btn-primary" onclick="salvarDocumento()">📤 Enviar</button></div></div></div>`;
+    document.body.appendChild(modal);
+  }
+  // atualiza select caso as opções mudem
+  const sel = document.getElementById('enviar-doc-colab');
+  if (sel) {
+    sel.innerHTML = `<option value="">— Selecione —</option>${(_colaboradoresSupabase||[]).map(c=>`<option value="${c.id_colaborador||c.id||c.codigo}">${c.nome_colaborador||c.nome||c.name}</option>`).join('')}`;
+    if (prefillColabId) sel.value = prefillColabId;
+  }
+  document.getElementById('enviar-doc-tipo').value='';
+  if(document.getElementById('enviar-doc-arquivo')) document.getElementById('enviar-doc-arquivo').value='';
+  document.getElementById('enviar-doc-modal').style.display='flex';
+};
+
+window.salvarDocumento = function() {
+  const cid = document.getElementById('enviar-doc-colab').value;
+  const tipo = document.getElementById('enviar-doc-tipo').value;
+  const file = document.getElementById('enviar-doc-arquivo').files[0];
+  if (!cid) return showToast('Selecione um colaborador.');
+  if (!tipo) return showToast('Selecione o tipo de documento.');
+  if (!file) return showToast('Selecione um arquivo.');
+  if (!window._documentosPorColab[cid]) window._documentosPorColab[cid]=[];
+  window._documentosPorColab[cid].push({ tipo, nome: file.name, envio: new Date().toLocaleDateString('pt-BR'), status: 'OK' });
+  document.getElementById('enviar-doc-modal').style.display='none';
+  showToast('Documento enviado com sucesso!');
+  // refresh page
+  navigate('col-documentos','Documentos','Colaboradores');
+};
+
+// ============================================================
+// End pageDocumentos
+// ============================================================
+
 function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
   const el = document.getElementById('content-area');
   const pages = {
