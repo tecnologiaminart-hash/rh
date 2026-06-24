@@ -1171,7 +1171,7 @@ function pageStatus() {
         </div>
         <div class="form-group">
           <label class="form-label">Salário Base</label>
-          <input class="form-input" type="text" id="sm-salario-base" placeholder="R$ 0.000,00" readonly>
+          <input class="form-input" type="text" id="sm-salario-base" placeholder="R$ 0.000,00">
         </div>
         <div class="form-group">
           <label class="form-label">Status</label>
@@ -1217,7 +1217,7 @@ function pageStatus() {
     </table>
   </div>`;
 }
-function openStatusModal(colabId = null) {
+async function openStatusModal(colabId = null) {
   _editingStatusColabId = colabId;
   const modal = document.getElementById('status-modal');
   const modalTitle = document.getElementById('status-modal-title');
@@ -1227,7 +1227,10 @@ function openStatusModal(colabId = null) {
   const smStatus = document.getElementById('sm-status');
   const smSalarioBase = document.getElementById('sm-salario-base'); // Novo campo
 
-  // Popula o select de cargos
+  // Garante que cargos estejam carregados e popula o select de cargos
+  if (!window._cargos || window._cargos.length === 0) {
+    await loadCargosForApp();
+  }
   smCargo.innerHTML = '<option value="">— Selecione o Cargo —</option>';
   window._cargos.forEach(cargo => {
     smCargo.innerHTML += `<option value="${cargo.id_cargo}">${cargo.nome_cargo}</option>`;
@@ -1236,7 +1239,14 @@ function openStatusModal(colabId = null) {
   // Não preencher automaticamente o salário a partir dos cargos.
   // O salário base deve vir da coluna `salario_base` da tabela `colaboradores`.
   smCargo.onchange = () => {
-    // Mantém o campo salário como está (poderá ser preenchido/alterado manualmente se desejado).
+    const selectedCargoId = smCargo.value;
+    const selectedCargo = window._cargos.find(c => String(c.id_cargo) === String(selectedCargoId));
+    if (selectedCargo && selectedCargo.salario_base !== undefined && selectedCargo.salario_base !== null && String(selectedCargo.salario_base) !== '') {
+      smSalarioBase.value = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(selectedCargo.salario_base);
+    } else {
+      // limpa o campo para permitir preenchimento manual
+      smSalarioBase.value = '';
+    }
   };
 
   if (colabId) {
@@ -1254,6 +1264,10 @@ function openStatusModal(colabId = null) {
         smSalarioBase.value = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(colab.cargos.salario_base);
       } else {
         smSalarioBase.value = '';
+      }
+      // Se colaborador não tem salario_base, preenche a partir do cargo selecionado
+      if (colab.salario_base === undefined || colab.salario_base === null || String(colab.salario_base) === '') {
+        smCargo.dispatchEvent(new Event('change'));
       }
     }
   } else {
