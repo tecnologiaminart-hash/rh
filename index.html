@@ -1276,9 +1276,16 @@ async function openStatusModal(colabId = null) {
   };
 
   if (colabId) {
+    console.log('[EDIT] colabId recebido:', colabId);
+    console.log('[EDIT] _colaboradoresSupabase.length:', _colaboradoresSupabase.length);
     modalTitle.textContent = 'Editar Colaborador';
-    const colab = _colaboradoresSupabase.find(c => c.id_colaborador === colabId);
+    const colab = _colaboradoresSupabase.find(c => {
+      console.log('[EDIT] Comparando:', c.id_colaborador, '===', colabId, '?', c.id_colaborador === colabId);
+      return c.id_colaborador === colabId;
+    });
+    console.log('[EDIT] Colaborador encontrado:', colab);
     if (colab) {
+      console.log('[EDIT] Preenchendo modal com dados de:', colab.nome_colaborador);
       smNome.value = colab.nome_colaborador;
       smCargo.value = colab.id_cargos;
       smDesde.value = colab.desde;
@@ -1295,6 +1302,8 @@ async function openStatusModal(colabId = null) {
       if (colab.salario_base === undefined || colab.salario_base === null || String(colab.salario_base) === '') {
         smCargo.dispatchEvent(new Event('change'));
       }
+    } else {
+      console.error('[EDIT] Colaborador NÃO encontrado! Ids no array:', _colaboradoresSupabase.map(c => c.id_colaborador));
     }
   } else {
     modalTitle.textContent = 'Novo Colaborador';
