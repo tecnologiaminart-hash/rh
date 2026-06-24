@@ -1437,7 +1437,7 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
   const el = document.getElementById('content-area');
   const pages = {
     'dashboard':       pageDashboard,
-    'col-documentos':  pageDocumentos,
+    'col-documentos':  (typeof pageDocumentos === 'function') ? pageDocumentos : (function(){ console.error('pageDocumentos não está definida'); return function(){ return `<div class="empty-state"><div class="empty-state-icon">⚠</div><div class="empty-state-title">Página indisponível</div><div class="empty-state-desc">pageDocumentos não definida.</div></div>`; }; })(),
     'col-ferias':      pageFerias,
     'col-atestados':   pageAtestados,
     'col-status':      pageStatus,
