@@ -1334,13 +1334,18 @@ async function pageStatus() {
 
   setTimeout(() => {
     const search = document.getElementById('status-search');
-    if (search) search.addEventListener('input', function() {
-      const q = this.value.toLowerCase();
-      document.querySelectorAll('#status-tbody tr').forEach(tr => {
-        tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
-      });
-    });
-  }, 50);
+    if (search) {
+      search.oninput = function() { // Use oninput diretamente
+        const q = this.value.toLowerCase();
+        const tbody = document.getElementById('status-tbody');
+        if (tbody) {
+          Array.from(tbody.children).forEach(tr => { // Itera sobre os filhos do tbody
+            tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+          });
+        }
+      };
+    }
+  }, 100); // Um pequeno delay para garantir que o DOM esteja pronto
 
   return `
   <div id="status-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
