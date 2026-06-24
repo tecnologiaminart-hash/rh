@@ -756,7 +756,7 @@ function pageHistoricoCarreiraDetalhe(colabIdx) {
 
   // Se não houver registros para este colaborador, cria o primeiro
   if (registrosDoColaborador.length === 0) {
-    const salarioAtual = cargos.find(([c]) => c === cargoAtualColab)?.[1] || ''; // Busca o salário pelo cargo
+    const salarioAtual = (cargos.find(obj => (obj[window._cargoNameField] || obj.nome_cargo || obj.nome) === cargoAtualColab) || {}).salario_base || '';
     const novoRegistroInicial = {
       colabIdx: colabIdx,
       periodoInicio: dataAdmissaoColab,
@@ -841,7 +841,10 @@ function pageHistoricoCarreiraDetalhe(colabIdx) {
           <label class="form-label">Cargo</label>
           <select class="form-select" id="carreira-cargo">
             <option value="">— Selecione o Cargo —</option>
-            ${cargos.map(([c]) => `<option value="${c}">${c}</option>`).join('')}
+            ${cargos.map(cargo => {
+              const nome = cargo[window._cargoNameField] || cargo.nome_cargo || cargo.nome || '';
+              return `<option value="${nome}">${nome}</option>`;
+            }).join('')}
           </select>
         </div>
         <div class="form-group">
@@ -1560,7 +1563,10 @@ function postRender(id) {
         <label class="form-label">Nome do Cargo</label>
         <select class="form-select" id="desc-cargo">
           <option value="">— Selecione o Cargo —</option>
-          ${(window._cargos||[]).map(([c]) => `<option value="${c}">${c}</option>`).join('')}
+          ${(window._cargos||[]).map(cargo => {
+            const nome = cargo[window._cargoNameField] || cargo.nome_cargo || cargo.nome || '';
+            return `<option value="${nome}">${nome}</option>`;
+          }).join('')}
         </select>
       </div>
       <div class="form-group" style="margin-bottom:20px">
@@ -1961,7 +1967,10 @@ function pageVagas() {
         <label class="form-label">Cargo</label>
         <select class="form-select" id="vaga-cargo">
           <option value="">— Selecione o Cargo —</option>
-          ${(window._cargos||[]).map(([c]) => `<option value="${c}">${c}</option>`).join('')}
+          ${(window._cargos||[]).map(cargo => {
+            const nome = cargo[window._cargoNameField] || cargo.nome_cargo || cargo.nome || '';
+            return `<option value="${nome}">${nome}</option>`;
+          }).join('')}
         </select>
       </div>
       <div class="form-group" style="margin-bottom:14px">
@@ -2149,8 +2158,8 @@ function pageCadCargos() {
 // ------------------------------------------------------------
 function pageCargosTabela() {
   document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" onclick="openCargoModal()">+ Novo Cargo</button>`;
-  if(!window._cargos) window._cargos = [ ];
-  
+  // Garante que os cargos sejam carregados a partir do Supabase antes de renderizar
+  loadCargosForApp();
   const revisao = '01/01/2026';
   return `
   <div id="cargo-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
@@ -2174,24 +2183,30 @@ function pageCargosTabela() {
     <table>
       <thead><tr><th>Cargo</th><th>Salário Base</th><th>Última Revisão</th><th>Ações</th></tr></thead>
       <tbody id="cargos-tbody">
-        ${window._cargos.map(([c,sb],i)=>`
-          <tr><td><strong>${c}</strong></td><td style="font-weight:600">${sb}</td><td>${revisao}</td>
-          <td>
-            <button class="action-btn" title="Editar" onclick="editCargo(${i})">✎</button>
-            <button class="action-btn btn-danger" title="Excluir" onclick="deleteCargo(${i})">✕</button>
-          </td></tr>`).join('')}
-      </tbody>
+          ${ (window._cargos || []).map((cargo)=>{
+            const cid = cargo[window._cargoIdField] || cargo.id || cargo.id_cargo || '';
+            const nome = cargo[window._cargoNameField] || cargo.nome_cargo || cargo.nome || '';
+            const salario = cargo.salario_base !== undefined && cargo.salario_base !== null ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(cargo.salario_base)) : '';
+            return `<tr data-cargo-id="${cid}"><td><strong>${nome}</strong></td><td style="font-weight:600">${salario}</td><td>${revisao}</td>
+              <td>
+                <button class="action-btn" title="Editar" onclick="editCargo('${cid}')">✎</button>
+                <button class="action-btn btn-danger" title="Excluir" onclick="deleteCargo('${cid}')">✕</button>
+              </td></tr>`;
+          }).join('') }
+        </tbody>
     </table>
     <div class="table-pagination"><span>${window._cargos.length} cargos cadastrados</span></div>
   </div>`;
 }
-
-window.openCargoModal = function(idx=null){
-  window._editingCargoIdx=idx;
+window.openCargoModal = async function(id=null){
+  window._editingCargoId = id;
   const m=document.getElementById('cargo-modal');
-  if(idx!==null){
-    document.getElementById('cm-cargo').value=window._cargos[idx][0];
-    document.getElementById('cm-salario').value=window._cargos[idx][1];
+  // garante cargos carregados
+  if(!window._cargos || window._cargos.length===0) await loadCargosForApp();
+  if(id){
+    const cargo = (window._cargos||[]).find(c=> String(c[window._cargoIdField]||c.id||c.id_cargo)===String(id));
+    document.getElementById('cm-cargo').value = cargo ? (cargo[window._cargoNameField]||cargo.nome_cargo||cargo.nome||'') : '';
+    document.getElementById('cm-salario').value = cargo && cargo.salario_base !== undefined && cargo.salario_base !== null ? String(cargo.salario_base) : '';
     document.getElementById('cargo-modal-title').textContent='Editar Cargo';
   } else {
     document.getElementById('cm-cargo').value='';
@@ -2200,21 +2215,55 @@ window.openCargoModal = function(idx=null){
   }
   m.style.display='flex';
 };
-window.editCargo=function(i){openCargoModal(i);};
-window.deleteCargo=function(i){
-  if(confirm('Excluir este cargo?')){ window._cargos.splice(i,1); navigate('dep-tabela','Cargos e Salários Atual'); }
+window.editCargo=function(id){openCargoModal(id);};
+window.deleteCargo=async function(id){
+  if(!confirm('Excluir este cargo?')) return;
+  // deleta no Supabase
+  try{
+    const { error } = await supaClient.from('cargos').delete().eq(window._cargoIdField, id);
+    if(error) throw error;
+    showToast('Cargo excluído.');
+    await loadCargosForApp();
+    navigate('dep-tabela','Cargos e Salários Atual');
+  } catch(e){
+    console.error('Erro ao excluir cargo:', e);
+    showToast('Erro ao excluir cargo.');
+  }
 };
-window.saveCargo=function(){
-  const c=document.getElementById('cm-cargo').value.trim();
-  const s=document.getElementById('cm-salario').value.trim();
-  if(!c||!s) return alert('Preencha todos os campos.');
-  const idx=window._editingCargoIdx;
-  if(idx!==null) window._cargos[idx]=[c,s]; else window._cargos.push([c,s]);
-  document.getElementById('cargo-modal').style.display='none';
-  navigate('dep-tabela','Cargos e Salários Atual');
+window.saveCargo=async function(){
+  const nome = document.getElementById('cm-cargo').value.trim();
+  const salarioRaw = document.getElementById('cm-salario').value.trim();
+  if(!nome) return alert('Preencha o nome do cargo.');
+  // tenta converter salário para número
+  const salarioNum = salarioRaw ? parseFloat(String(salarioRaw).replace(/\./g,'').replace(/,/g,'.').replace(/[^0-9.\-]/g,'')) : null;
+  try{
+    if(window._editingCargoId){
+      const upd = { [window._cargoNameField]: nome };
+      if(salarioNum !== null && !isNaN(salarioNum)) upd.salario_base = salarioNum;
+      const { error } = await supaClient.from('cargos').update(upd).eq(window._cargoIdField, window._editingCargoId);
+      if(error) throw error;
+      showToast('Cargo atualizado.');
+    } else {
+      const insertObj = { [window._cargoNameField]: nome };
+      if(salarioNum !== null && !isNaN(salarioNum)) insertObj.salario_base = salarioNum;
+      const { error } = await supaClient.from('cargos').insert([insertObj]);
+      if(error) throw error;
+      showToast('Cargo criado.');
+    }
+    document.getElementById('cargo-modal').style.display='none';
+    await loadCargosForApp();
+    navigate('dep-tabela','Cargos e Salários Atual');
+  } catch(e){
+    console.error('Erro ao salvar cargo:', e);
+    showToast('Erro ao salvar cargo.');
+  }
 };
 window.printCargosTabela=function(){
-  const rows=window._cargos.map(([c,s])=>`<tr><td>${c}</td><td>${s}</td><td>01/01/2026</td></tr>`).join('');
+  const rows=(window._cargos||[]).map(cargo=>{
+    const nome = cargo[window._cargoNameField] || cargo.nome_cargo || cargo.nome || '';
+    const sal = cargo.salario_base !== undefined && cargo.salario_base !== null ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(cargo.salario_base)) : '';
+    return `<tr><td>${nome}</td><td>${sal}</td><td>01/01/2026</td></tr>`;
+  }).join('');
   const w=window.open('','_blank');
   w.document.write(`<html><head><title>Tabela Salarial</title><style>body{font-family:sans-serif;padding:40px}h2{margin-bottom:20px}table{width:100%;border-collapse:collapse}th,td{padding:8px 12px;border:1px solid #ddd;font-size:13px}th{background:#f5f5f5;font-weight:600;text-align:left}</style></head><body>
     <h2>Minart Móveis — Tabela Salarial Atual</h2>
@@ -2229,9 +2278,11 @@ window.printCargosTabela=function(){
 function pageDepHistorico() {
   if (!window._cargosHistorico) {
     // Inicializa histórico espelhando os cargos atuais
-    window._cargosHistorico = (window._cargos||[]).map(([c,s]) => ({
-      cargo: c, salario: s, revisao: '01/01/2026', motivo: 'Tabela inicial'
-    }));
+    window._cargosHistorico = (window._cargos||[]).map(cargo => {
+      const nome = cargo[window._cargoNameField] || cargo.nome_cargo || cargo.nome || '';
+      const sal = cargo.salario_base !== undefined && cargo.salario_base !== null ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(cargo.salario_base)) : '';
+      return { cargo: nome, salario: sal, revisao: '01/01/2026', motivo: 'Tabela inicial' };
+    });
   }
 
   document.getElementById('topbar-actions').innerHTML =
@@ -2257,7 +2308,10 @@ function pageDepHistorico() {
         <label class="form-label">Cargo</label>
         <select class="form-select" id="hcargo-cargo">
           <option value="">— Selecione —</option>
-          ${(window._cargos||[]).map(([c])=>`<option value="${c}">${c}</option>`).join('')}
+          ${(window._cargos||[]).map(cargo=>{
+            const nome = cargo[window._cargoNameField] || cargo.nome_cargo || cargo.nome || '';
+            return `<option value="${nome}">${nome}</option>`;
+          }).join('')}
         </select>
       </div>
       <div class="form-group" style="margin-bottom:14px">
@@ -2706,7 +2760,10 @@ function pageCarreira() {
           <label class="form-label">Cargo</label>
           <select class="form-select" id="carreira-cargo">
             <option value="">— Selecione o Cargo —</option>
-            ${cargos.map(([c]) => `<option value="${c}">${c}</option>`).join('')}
+            ${cargos.map(cargo => {
+              const nome = cargo[window._cargoNameField] || cargo.nome_cargo || cargo.nome || '';
+              return `<option value="${nome}">${nome}</option>`;
+            }).join('')}
           </select>
         </div>
         <div class="form-group form-full">
