@@ -427,8 +427,10 @@ async function loadCargosForApp() {
   if (error) {
     console.error('Erro ao carregar cargos:', error.message);
     _cargos = [];
+    window._cargos = [];
   } else {
     _cargos = data;
+    window._cargos = data;
     console.log('Cargos carregados:', _cargos);
   }
 }
