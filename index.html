@@ -1126,7 +1126,6 @@ function renderStatusTable() {
       <tr>
         <td>${colab.nome_colaborador}</td>
         <td>${cargoNome}</td>
-        <td>${colab.departamento || 'N/A'}</td>
         <td>${colab.desde ? new Date(colab.desde).toLocaleDateString('pt-BR') : 'N/A'}</td>
         <td>${salarioBase}</td>
         <td><span class="badge ${statusBadgeClass}">${colab.status_colaborador}</span></td>
@@ -1161,10 +1160,6 @@ function pageStatus() {
           <select class="form-select" id="sm-cargo">
             <!-- Opções de cargo serão preenchidas via JS -->
           </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Departamento</label>
-          <input class="form-input" id="sm-departamento" placeholder="Ex: Produção, RH">
         </div>
         <div class="form-group">
           <label class="form-label">Data de Admissão</label>
@@ -1205,7 +1200,6 @@ function pageStatus() {
         <tr>
           <th>Nome</th>
           <th>Cargo</th>
-          <th>Departamento</th>
           <th>Desde</th>
           <th>Salário Base</th>
           <th>Status</th>
@@ -1225,7 +1219,6 @@ function openStatusModal(colabId = null) {
   const modalTitle = document.getElementById('status-modal-title');
   const smNome = document.getElementById('sm-nome');
   const smCargo = document.getElementById('sm-cargo');
-  const smDepartamento = document.getElementById('sm-departamento'); // Novo campo
   const smDesde = document.getElementById('sm-desde');
   const smStatus = document.getElementById('sm-status');
   const smSalarioBase = document.getElementById('sm-salario-base'); // Novo campo
@@ -1253,7 +1246,6 @@ function openStatusModal(colabId = null) {
     if (colab) {
       smNome.value = colab.nome_colaborador;
       smCargo.value = colab.id_cargos;
-      smDepartamento.value = colab.departamento || ''; // Preenche o departamento
       smDesde.value = colab.desde;
       smStatus.value = colab.status_colaborador;
       // Dispara o evento change para atualizar o salário base ao carregar o modal
@@ -1263,7 +1255,6 @@ function openStatusModal(colabId = null) {
     modalTitle.textContent = 'Novo Colaborador';
     smNome.value = '';
     smCargo.value = '';
-    smDepartamento.value = ''; // Limpa o departamento
     smDesde.value = '';
     smStatus.value = 'Ativo';
     smSalarioBase.value = ''; // Limpa o salário base
@@ -1290,7 +1281,6 @@ async function saveStatusEmployee() {
   const newColabData = {
     nome_colaborador: smNome,
     id_cargos: smCargoId,
-    departamento: smDepartamento, // Salva o departamento
     desde: smDesde,
     status_colaborador: smStatus,
   };
@@ -1340,7 +1330,6 @@ function viewStatusEmployee(colabId) {
   showToast(`
     Nome: ${colab.nome_colaborador}
     Cargo: ${cargoNome}
-    Departamento: ${colab.departamento || 'N/A'}
     Salário Base: ${salarioBase}
     Desde: ${colab.desde ? new Date(colab.desde).toLocaleDateString('pt-BR') : 'N/A'}
     Status: ${colab.status_colaborador}
@@ -1362,7 +1351,6 @@ function printStatusRow(colabId) {
     <h2>Minart Móveis — Ficha de Admissão</h2>
     <p><strong>Nome:</strong> ${colab.nome_colaborador}</p>
     <p><strong>Cargo:</strong> ${cargoNome}</p>
-    <p><strong>Departamento:</strong> ${colab.departamento || 'N/A'}</p>
     <p><strong>Salário Base:</strong> ${salarioBase}</p>
     <p><strong>Status:</strong> ${colab.status_colaborador}</p>
     <p><strong>Desde:</strong> ${colab.desde ? new Date(colab.desde).toLocaleDateString('pt-BR') : 'N/A'}</p>
@@ -1381,13 +1369,11 @@ function filterStatusTable(searchTerm) {
   for (let i = 0; i < tr.length; i++) {
     let tdNome = tr[i].getElementsByTagName('td')[0]; // Colaborador
     let tdCargo = tr[i].getElementsByTagName('td')[1]; // Cargo
-    let tdDepartamento = tr[i].getElementsByTagName('td')[2]; // Departamento
     let tdStatus = tr[i].getElementsByTagName('td')[5]; // Status
 
-    if (tdNome || tdCargo || tdDepartamento || tdStatus) {
+    if (tdNome || tdCargo || tdStatus) {
       const textValue = (tdNome ? tdNome.textContent : '') +
                         (tdCargo ? tdCargo.textContent : '') +
-                        (tdDepartamento ? tdDepartamento.textContent : '') +
                         (tdStatus ? tdStatus.textContent : '');
       if (textValue.toUpperCase().indexOf(filter) > -1) {
         tr[i].style.display = '';
@@ -1921,7 +1907,6 @@ function pageVagas() {
       <thead>
         <tr>
           <th>Vaga</th>
-          <th>Departamento</th>
           <th>Abertura</th>
           <th>Prazo</th>
           <th>Candidatos</th>
@@ -2065,7 +2050,7 @@ function pageCadCargos() {
   <div class="table-card">
     <div class="table-header"><span class="table-title">Cargos Cadastrados</span></div>
     <table>
-      <thead><tr><th>Cargo</th><th>Departamento</th><th>Nível</th><th>Faixa Salarial</th><th>CBO</th><th>Ações</th></tr></thead>
+      <thead><tr><th>Cargo</th><th>Nível</th><th>Faixa Salarial</th><th>CBO</th><th>Ações</th></tr></thead>
       <tbody>
         ${[
           ['Analista de Sistemas','TI','Pleno','R$ 4.000–6.000','212405'],
