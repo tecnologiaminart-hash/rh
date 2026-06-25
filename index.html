@@ -371,7 +371,9 @@ const N8N_WEBHOOK_TOKEN = '1222314';
 const N8N_CHECK_WEBHOOK_URL = 'https://automatiza.minart.com.br/webhook/check-documento-drive';
 // Webhook do n8n dedicado ao upload de currículos enviados pelo formulário público
 // de candidatura (Webhook -> Google Drive -> Respond to Webhook devolvendo { url }).
-// Crie/importe esse workflow no n8n e cole a "Production URL" abaixo.
+// Após importar n8n/upload-curriculo-drive.workflow.json, preencher o folderId do
+// Drive e a credencial do Google Drive nos nodes, ativar o workflow e copiar a
+// "Production URL" do node Webhook para cá.
 const N8N_CURRICULO_WEBHOOK_URL = 'COLE_AQUI_URL_DO_WEBHOOK_CURRICULO';
 
 let _colaboradoresSupabase = [];
