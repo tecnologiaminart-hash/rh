@@ -369,7 +369,11 @@ const N8N_WEBHOOK_TOKEN = '1222314';
 // Após importar n8n/check-documento-drive.workflow.json e ativar o workflow,
 // copie a "Production URL" do node Webhook e cole abaixo.
 const N8N_CHECK_WEBHOOK_URL = 'https://automatiza.minart.com.br/webhook/check-documento-drive';
-  
+// Webhook do n8n dedicado ao upload de currículos enviados pelo formulário público
+// de candidatura (Webhook -> Google Drive -> Respond to Webhook devolvendo { url }).
+// Crie/importe esse workflow no n8n e cole a "Production URL" abaixo.
+const N8N_CURRICULO_WEBHOOK_URL = 'COLE_AQUI_URL_DO_WEBHOOK_CURRICULO';
+
 let _colaboradoresSupabase = [];
 let _editingStatusColabId = null;
 let _historicoColaboradoresSupabase = [];
@@ -419,16 +423,22 @@ window._salvarStorage = function() {
   }
 };
 
-function salvarCandidaturasLocal() {
-  localStorage.setItem('rh_candidaturas', JSON.stringify(window._candidaturas || []));
-}
-
-function carregarCandidaturasLocal() {
-  try {
-    const salvo = localStorage.getItem('rh_candidaturas');
-    window._candidaturas = salvo ? JSON.parse(salvo) : [];
-  } catch(e) {
+async function loadCandidaturasForApp() {
+  if (!supaClient) {
+    console.error('Supabase client não inicializado para candidaturas.');
     window._candidaturas = [];
+    return;
+  }
+  const { data, error } = await supaClient
+    .from('candidaturas')
+    .select('*')
+    .order('data_envio_candidatura', { ascending: false });
+
+  if (error) {
+    console.error('Erro ao carregar candidaturas:', error.message);
+    window._candidaturas = [];
+  } else {
+    window._candidaturas = data;
   }
 }
 
@@ -1614,6 +1624,39 @@ window.enviarArquivoParaDrive = async function(file, { cid, tipo, driveFolderId 
   return result.url || result.webViewLink || result.link || null;
 };
 
+// Envia o currículo do formulário público de candidatura para o webhook n8n
+// dedicado (Webhook -> Google Drive -> Respond to Webhook devolvendo { url }).
+window.enviarCurriculoParaDrive = async function(file, { nomeCandidato, vagaCargo }) {
+  if (!N8N_CURRICULO_WEBHOOK_URL || N8N_CURRICULO_WEBHOOK_URL.startsWith('COLE_AQUI')) {
+    throw new Error('Webhook de currículo não configurado: defina N8N_CURRICULO_WEBHOOK_URL no index.html.');
+  }
+
+  const formData = new FormData();
+  formData.append('file', file, file.name);
+  formData.append('nome_candidato', nomeCandidato);
+  formData.append('vaga_cargo', vagaCargo);
+  formData.append('nome_arquivo', file.name);
+  formData.append('token', N8N_WEBHOOK_TOKEN);
+
+  const res = await fetch(N8N_CURRICULO_WEBHOOK_URL, {
+    method: 'POST',
+    body: formData
+  });
+
+  if (!res.ok) {
+    throw new Error(`Webhook respondeu com status ${res.status}`);
+  }
+
+  let result = {};
+  try { result = await res.json(); } catch (e) { /* resposta sem corpo JSON */ }
+
+  if (result.success === false) {
+    throw new Error(result.error || 'Falha reportada pelo webhook do n8n.');
+  }
+
+  return result.url || result.webViewLink || result.link || null;
+};
+
 window.salvarDocumento = async function() {
   const cid = document.getElementById('enviar-doc-colab').value;
   const tipo = document.getElementById('enviar-doc-tipo').value;
@@ -2003,54 +2046,73 @@ function pageCandidatos() {
 
   document.getElementById('topbar-actions').innerHTML = '';
 
-  // Agrupa candidaturas por vaga
-  const grupos = window._vagas.map((v, vi) => {
-    const cands = window._candidaturas.filter(c => c.vagaToken === v['link-token']);
-    return { vaga: v, vagaIdx: vi, cands };
-  }).filter(g => g.cands.length > 0);
+  const renderCandidatos = () => {
+    const container = document.getElementById('candidatos-container');
+    if (!container) return;
 
-  const semCandidatos = grupos.length === 0;
+    // Agrupa candidaturas por vaga
+    const grupos = window._vagas.map((v) => {
+      const cands = window._candidaturas.filter(c => c.id_vagas === v.id_vagas);
+      return { vaga: v, cands };
+    }).filter(g => g.cands.length > 0);
 
-  const rows = grupos.map(g => `
-    <div class="table-card" style="margin-bottom:16px">
-      <div class="table-header">
-        <div>
-          <span class="table-title">${nomeCargoPorId(g.vaga.id_cargos)}</span>
-          <span style="font-size:12px;color:var(--text3);margin-left:12px">
-            Abertura: ${g.vaga.data_abertura ? new Date(g.vaga.data_abertura).toLocaleDateString('pt-BR') : '—'} &nbsp;·&nbsp;
-            <span class="badge badge-info">${g.cands.length} candidato${g.cands.length > 1 ? 's' : ''}</span>
-          </span>
+    if (grupos.length === 0) {
+      container.innerHTML = `<div class="empty-state">
+        <div class="empty-state-icon">📋</div>
+        <div class="empty-state-title">Nenhum candidato ainda</div>
+        <div class="empty-state-desc">Quando alguém preencher o formulário de uma vaga, aparecerá aqui agrupado por vaga.</div>
+      </div>`;
+      return;
+    }
+
+    container.innerHTML = grupos.map(g => `
+      <div class="table-card" style="margin-bottom:16px">
+        <div class="table-header">
+          <div>
+            <span class="table-title">${nomeCargoPorId(g.vaga.id_cargos)}</span>
+            <span style="font-size:12px;color:var(--text3);margin-left:12px">
+              Abertura: ${g.vaga.data_abertura ? new Date(g.vaga.data_abertura).toLocaleDateString('pt-BR') : '—'} &nbsp;·&nbsp;
+              <span class="badge badge-info">${g.cands.length} candidato${g.cands.length > 1 ? 's' : ''}</span>
+            </span>
+          </div>
         </div>
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th>Nome</th>
-            <th>E-mail</th>
-            <th>Currículo</th>
-            <th>Data de Envio</th>
-            <th>Ações</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${g.cands.map((c, ci) => `
+        <table>
+          <thead>
             <tr>
-              <td><strong>${c.nome}</strong></td>
-              <td>${c.email}</td>
-              <td>
-                ${c.curriculo
-                  ? `<span class="badge badge-active">Enviado</span>`
-                  : `<span class="badge badge-gray">Não enviado</span>`}
-              </td>
-              <td style="color:var(--text3);font-size:12px">${c.dataEnvio}</td>
-              <td>
-                <button class="action-btn" onclick="verCandidato('${c.vagaToken}', ${ci})" title="Ver dados completos">👁</button>
-              </td>
-            </tr>`).join('')}
-        </tbody>
-      </table>
-    </div>
-  `).join('');
+              <th>Nome</th>
+              <th>E-mail</th>
+              <th>Número</th>
+              <th>Instagram</th>
+              <th>Currículo</th>
+              <th>Data de Envio</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${g.cands.map((c) => `
+              <tr>
+                <td><strong>${c.nome_candidato || '—'}</strong></td>
+                <td>${c.email_candidato || '—'}</td>
+                <td>${c.numero || '—'}</td>
+                <td>${c.instagram || '—'}</td>
+                <td>
+                  ${c.url_curriculo
+                    ? `<a href="${c.url_curriculo}" target="_blank" rel="noopener" class="badge badge-active" style="text-decoration:none">Ver arquivo</a>`
+                    : `<span class="badge badge-gray">Não enviado</span>`}
+                </td>
+                <td style="color:var(--text3);font-size:12px">${c.data_envio_candidatura ? new Date(c.data_envio_candidatura).toLocaleDateString('pt-BR') : '—'}</td>
+                <td>
+                  <button class="action-btn" onclick="verCandidato(${c.id_candidaturas})" title="Ver dados completos">👁</button>
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    `).join('');
+  };
+
+  window._renderCandidatos = renderCandidatos;
+  loadCandidaturasForApp().then(renderCandidatos);
 
   return `
   <!-- Modal de detalhe do candidato -->
@@ -2064,27 +2126,29 @@ function pageCandidatos() {
     </div>
   </div>
 
-  ${semCandidatos
-    ? `<div class="empty-state">
-        <div class="empty-state-icon">📋</div>
-        <div class="empty-state-title">Nenhum candidato ainda</div>
-        <div class="empty-state-desc">Quando alguém preencher o formulário de uma vaga, aparecerá aqui agrupado por vaga.</div>
-      </div>`
-    : rows}`;
+  <div id="candidatos-container">
+    <div class="empty-state">
+      <div class="empty-state-icon">📋</div>
+      <div class="empty-state-title">Carregando...</div>
+    </div>
+  </div>`;
 }
 
-window.verCandidato = function(token, ci) {
-  const cand = (window._candidaturas || []).filter(c => c.vagaToken === token)[ci];
+window.verCandidato = function(idCandidatura) {
+  const cand = (window._candidaturas || []).find(c => c.id_candidaturas === idCandidatura);
   if (!cand) return;
+  const vaga = (window._vagas || []).find(v => v.id_vagas === cand.id_vagas);
   document.getElementById('candidato-detalhe-body').innerHTML = `
     <div style="display:flex;flex-direction:column;gap:12px;font-size:13px">
-      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Nome</span><div style="margin-top:4px">${cand.nome}</div></div>
-      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">E-mail</span><div style="margin-top:4px">${cand.email}</div></div>
-      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Vaga</span><div style="margin-top:4px">${cand.vagaCargo}</div></div>
-      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Data de Envio</span><div style="margin-top:4px">${cand.dataEnvio}</div></div>
+      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Nome</span><div style="margin-top:4px">${cand.nome_candidato || '—'}</div></div>
+      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">E-mail</span><div style="margin-top:4px">${cand.email_candidato || '—'}</div></div>
+      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Número</span><div style="margin-top:4px">${cand.numero || '—'}</div></div>
+      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Instagram</span><div style="margin-top:4px">${cand.instagram || '—'}</div></div>
+      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Vaga</span><div style="margin-top:4px">${vaga ? nomeCargoPorId(vaga.id_cargos) : '—'}</div></div>
+      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Data de Envio</span><div style="margin-top:4px">${cand.data_envio_candidatura ? new Date(cand.data_envio_candidatura).toLocaleDateString('pt-BR') : '—'}</div></div>
       <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Currículo</span><div style="margin-top:4px">
-        ${cand.curriculo
-          ? `<span class="badge badge-active">Arquivo enviado: ${cand.curriculo}</span>`
+        ${cand.url_curriculo
+          ? `<a href="${cand.url_curriculo}" target="_blank" rel="noopener" class="badge badge-active" style="text-decoration:none">Abrir currículo</a>`
           : '<span class="badge badge-gray">Não enviado</span>'}
       </div></div>
     </div>`;
@@ -2170,7 +2234,10 @@ function pageVagas() {
   </div>
 
   <div class="table-card">
-    <div class="table-header"><span class="table-title">Vagas em Aberto</span></div>
+    <div class="table-header">
+      <span class="table-title">Vagas em Aberto</span>
+      <input class="search-input" placeholder="Buscar vaga..." oninput="filtrarVagas(this.value)" style="margin-left:12px">
+    </div>
     <table>
       <thead>
         <tr>
@@ -2190,6 +2257,20 @@ function pageVagas() {
     <div class="table-pagination" id="vagas-pagination"><span>${window._vagas.length} vagas</span></div>
   </div>`;
 }
+
+window.filtrarVagas = function(query) {
+  const q = String(query || '').trim().toLowerCase();
+  const rows = document.querySelectorAll('#vagas-tbody tr');
+  let count = 0;
+  rows.forEach(row => {
+    const vaga = row.querySelector('td:first-child')?.textContent?.toLowerCase() || '';
+    const visible = !q || vaga.includes(q);
+    row.style.display = visible ? '' : 'none';
+    if (visible) count++;
+  });
+  const pag = document.querySelector('#vagas-pagination span');
+  if (pag) pag.textContent = `${count} vagas`;
+};
 
 window.copiarLinkVaga = function(id) {
   const v = window._vagas.find(v => v.id_vagas === id);
@@ -3865,51 +3946,83 @@ function checkCandidaturaLink() {
             <div style="font-size:16px;font-weight:600;color:#333;margin-bottom:8px">Vaga encerrada</div>
             <div style="font-size:13px">Esta vaga não está mais recebendo candidaturas.</div>
           </div>`
-        : `<div class="pub-logo">MINART MÓVEIS</div>
+        : (() => {
+            const cargoObj = (window._cargos || []).find(c => String(c[window._cargoIdField]) === String(vaga.id_cargos));
+            const descricao = cargoObj ? (cargoObj.descricao_cargo || '') : '';
+            return `<div class="pub-logo">MINART MÓVEIS</div>
            <div class="pub-sub">Candidatura Online</div>
            <div class="pub-cargo">${nomeCargoPorId(vaga.id_cargos)}</div>
-           <div class="pub-depto">Minart Móveis</div>
+           <div class="pub-depto">${descricao || 'Minart Móveis'}</div>
            <label class="pub-label">Nome Completo *</label>
            <input class="pub-input" id="pub-nome" placeholder="Seu nome completo">
            <label class="pub-label">E-mail *</label>
            <input class="pub-input" id="pub-email" type="email" placeholder="seu@email.com">
+           <label class="pub-label">Número</label>
+           <input class="pub-input" id="pub-numero" placeholder="(00) 00000-0000">
+           <label class="pub-label">Instagram</label>
+           <input class="pub-input" id="pub-instagram" placeholder="@seuusuario">
            <label class="pub-label">Currículo (PDF ou Word)</label>
            <input class="pub-input" id="pub-curriculo" type="file" accept=".pdf,.doc,.docx" style="padding:8px">
-           <button class="pub-btn" onclick="enviarCandidatura('${token}')">Enviar Candidatura</button>
-           <div class="pub-msg" id="pub-msg"></div>`}
+           <button class="pub-btn" id="pub-submit-btn" onclick="enviarCandidatura('${token}')">Enviar Candidatura</button>
+           <div class="pub-msg" id="pub-msg"></div>`;
+          })()}
   </div>`;
 }
 
-window.enviarCandidatura = function(token) {
-  const nome     = (document.getElementById('pub-nome')?.value || '').trim();
-  const email    = (document.getElementById('pub-email')?.value || '').trim();
-  const currFile = document.getElementById('pub-curriculo')?.files[0];
-  const msgEl    = document.getElementById('pub-msg');
+window.enviarCandidatura = async function(token) {
+  const nome      = (document.getElementById('pub-nome')?.value || '').trim();
+  const email     = (document.getElementById('pub-email')?.value || '').trim();
+  const numero    = (document.getElementById('pub-numero')?.value || '').trim();
+  const instagram = (document.getElementById('pub-instagram')?.value || '').trim();
+  const currFile  = document.getElementById('pub-curriculo')?.files[0];
+  const msgEl     = document.getElementById('pub-msg');
+  const btnEl     = document.getElementById('pub-submit-btn');
 
   if (!nome)  { msgEl.textContent = 'Informe seu nome.'; msgEl.className = 'pub-msg pub-error'; return; }
   if (!email) { msgEl.textContent = 'Informe seu e-mail.'; msgEl.className = 'pub-msg pub-error'; return; }
 
-  if (!window._candidaturas) window._candidaturas = [];
   if (!window._vagas) window._vagas = [];
-
   const vaga = window._vagas.find(v => v['link-token'] === token);
+  if (!vaga) { msgEl.textContent = 'Vaga não encontrada.'; msgEl.className = 'pub-msg pub-error'; return; }
 
-  window._candidaturas.push({
-    vagaToken: token,
-    vagaCargo: vaga ? nomeCargoPorId(vaga.id_cargos) : '—',
-    nome,
-    email,
-    curriculo: currFile ? currFile.name : null,
-    dataEnvio: new Date().toLocaleString('pt-BR')
-  });
+  btnEl.disabled = true;
+  msgEl.textContent = 'Enviando...';
+  msgEl.className = 'pub-msg';
 
-  // Incrementa contador da vaga (melhor esforço; candidaturas ainda fica em localStorage)
-  if (vaga) {
-    vaga.candidatos_count = (vaga.candidatos_count || 0) + 1;
-    supaClient.from('vagas').update({ candidatos_count: vaga.candidatos_count }).eq('id_vagas', vaga.id_vagas)
-      .then(({ error }) => { if (error) console.error('Erro ao atualizar contador de candidatos:', error.message); });
+  let urlCurriculo = null;
+  if (currFile) {
+    try {
+      urlCurriculo = await window.enviarCurriculoParaDrive(currFile, { nomeCandidato: nome, vagaCargo: nomeCargoPorId(vaga.id_cargos) });
+    } catch (error) {
+      console.error('Erro ao enviar currículo:', error);
+      msgEl.textContent = 'Falha ao enviar o currículo. Tente novamente.';
+      msgEl.className = 'pub-msg pub-error';
+      btnEl.disabled = false;
+      return;
+    }
   }
-  salvarCandidaturasLocal();
+
+  const { error } = await supaClient.from('candidaturas').insert([{
+    id_vagas: vaga.id_vagas,
+    nome_candidato: nome,
+    email_candidato: email,
+    numero: numero || null,
+    instagram: instagram || null,
+    url_curriculo: urlCurriculo,
+    data_envio_candidatura: new Date().toISOString().slice(0, 10)
+  }]);
+
+  if (error) {
+    console.error('Erro ao salvar candidatura:', error.message);
+    msgEl.textContent = 'Erro ao enviar candidatura. Tente novamente mais tarde.';
+    msgEl.className = 'pub-msg pub-error';
+    btnEl.disabled = false;
+    return;
+  }
+
+  // Incrementa contador da vaga (melhor esforço)
+  supaClient.from('vagas').update({ candidatos_count: (vaga.candidatos_count || 0) + 1 }).eq('id_vagas', vaga.id_vagas)
+    .then(({ error }) => { if (error) console.error('Erro ao atualizar contador de candidatos:', error.message); });
 
   // Feedback visual
   document.getElementById('pub-box').innerHTML = `
@@ -3952,10 +4065,10 @@ if (supaClient) {
   }
 }
 
-  carregarCandidaturasLocal();
 // Carrega os cargos do Supabase antes de qualquer página que os utilize
   await loadCargosForApp();
   await loadVagasForApp();
+  await loadCandidaturasForApp();
 
   // Inicializa arrays vazios para as variáveis que ainda não foram migradas para o Supabase
   // Isso evita erros de "undefined" se alguma página tentar acessá-las antes de serem preenchidas
