@@ -3900,7 +3900,7 @@ function pageGeneric(id) {
   // ============================================================
 // FORMULÁRIO PÚBLICO DE CANDIDATURA (sem autenticação)
 // ============================================================
-function checkCandidaturaLink() {
+async function checkCandidaturaLink() {
   const params = new URLSearchParams(location.search);
   const token  = params.get('candidatura');
   if (!token) return; // não é link de candidatura, carrega normalmente
@@ -3913,6 +3913,24 @@ function checkCandidaturaLink() {
 
   // Renderiza o formulário público no body
   const vaga = window._vagas.find(v => v['link-token'] === token);
+
+  // Busca só as colunas públicas do cargo (sem salario_base) — visitantes anônimos
+  // só têm GRANT de SELECT nessas colunas, então não dá pra reaproveitar window._cargos aqui.
+  let cargoNome = '—';
+  let cargoDescricao = '';
+  if (vaga && supaClient) {
+    const { data: cargoData, error: cargoError } = await supaClient
+      .from('cargos')
+      .select('id_cargos,nome_cargo,descricao_cargo')
+      .eq('id_cargos', vaga.id_cargos)
+      .maybeSingle();
+    if (cargoError) console.error('Erro ao carregar cargo da vaga:', cargoError.message);
+    if (cargoData) {
+      cargoNome = cargoData.nome_cargo || '—';
+      cargoDescricao = cargoData.descricao_cargo || '';
+    }
+  }
+  window._pubCargoNome = cargoNome;
 
   document.body.innerHTML = `
   <style>
@@ -3946,13 +3964,10 @@ function checkCandidaturaLink() {
             <div style="font-size:16px;font-weight:600;color:#333;margin-bottom:8px">Vaga encerrada</div>
             <div style="font-size:13px">Esta vaga não está mais recebendo candidaturas.</div>
           </div>`
-        : (() => {
-            const cargoObj = (window._cargos || []).find(c => String(c[window._cargoIdField]) === String(vaga.id_cargos));
-            const descricao = cargoObj ? (cargoObj.descricao_cargo || '') : '';
-            return `<div class="pub-logo">MINART MÓVEIS</div>
+        : `<div class="pub-logo">MINART MÓVEIS</div>
            <div class="pub-sub">Candidatura Online</div>
-           <div class="pub-cargo">${nomeCargoPorId(vaga.id_cargos)}</div>
-           <div class="pub-depto">${descricao || 'Minart Móveis'}</div>
+           <div class="pub-cargo">${cargoNome}</div>
+           <div class="pub-depto">${cargoDescricao || 'Minart Móveis'}</div>
            <label class="pub-label">Nome Completo *</label>
            <input class="pub-input" id="pub-nome" placeholder="Seu nome completo">
            <label class="pub-label">E-mail *</label>
@@ -3964,8 +3979,7 @@ function checkCandidaturaLink() {
            <label class="pub-label">Currículo (PDF ou Word)</label>
            <input class="pub-input" id="pub-curriculo" type="file" accept=".pdf,.doc,.docx" style="padding:8px">
            <button class="pub-btn" id="pub-submit-btn" onclick="enviarCandidatura('${token}')">Enviar Candidatura</button>
-           <div class="pub-msg" id="pub-msg"></div>`;
-          })()}
+           <div class="pub-msg" id="pub-msg"></div>`}
   </div>`;
 }
 
@@ -3992,7 +4006,7 @@ window.enviarCandidatura = async function(token) {
   let urlCurriculo = null;
   if (currFile) {
     try {
-      urlCurriculo = await window.enviarCurriculoParaDrive(currFile, { nomeCandidato: nome, vagaCargo: nomeCargoPorId(vaga.id_cargos) });
+      urlCurriculo = await window.enviarCurriculoParaDrive(currFile, { nomeCandidato: nome, vagaCargo: window._pubCargoNome || '—' });
     } catch (error) {
       console.error('Erro ao enviar currículo:', error);
       msgEl.textContent = 'Falha ao enviar o currículo. Tente novamente.';
@@ -4083,7 +4097,7 @@ if (supaClient) {
   if (!window._vagas) window._vagas = [];
   if (!window._candidaturas) window._candidaturas = []; // Já existe, mas bom reforçar
   
-  checkCandidaturaLink();
+  await checkCandidaturaLink();
 });
 </script>
 </body>
