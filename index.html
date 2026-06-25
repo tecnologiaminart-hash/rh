@@ -361,10 +361,10 @@ let currentUser = null;
 // Webhook do n8n responsável por enviar o arquivo para a pasta do Google Drive.
 // Após importar n8n/upload-documento-drive.workflow.json e ativar o workflow,
 // copie a "Production URL" do node Webhook e cole abaixo.
-const N8N_WEBHOOK_URL = 'COLE_AQUI_A_PRODUCTION_URL_DO_WEBHOOK_N8N';
+const N8N_WEBHOOK_URL = 'https://automatiza.minart.com.br/webhook/upload-documento-drive';
 // Mesmo valor configurado na credencial "Header Auth" do node Webhook no n8n
 // (campo Value; o campo Name da credencial deve ser exatamente "X-Webhook-Token").
-const N8N_WEBHOOK_TOKEN = 'DEFINA_UM_TOKEN_SECRETO_E_USE_O_MESMO_NA_CREDENCIAL_DO_N8N';
+const N8N_WEBHOOK_TOKEN = '1222314';
   
 let _colaboradoresSupabase = [];
 let _editingStatusColabId = null;
@@ -1450,10 +1450,13 @@ window.enviarArquivoParaDrive = async function(file, { cid, tipo, driveFolderId 
   formData.append('drive_folder_id', driveFolderId);
   formData.append('tipo_doc', tipo);
   formData.append('nome_arquivo', file.name);
+  // O token vai como campo do form (não como header customizado) para que o
+  // navegador trate isso como requisição "simples" e não dispare preflight CORS,
+  // que o n8n não responde por padrão e travaria a chamada silenciosamente.
+  formData.append('token', N8N_WEBHOOK_TOKEN);
 
   const res = await fetch(N8N_WEBHOOK_URL, {
     method: 'POST',
-    headers: { 'X-Webhook-Token': N8N_WEBHOOK_TOKEN },
     body: formData
   });
 
