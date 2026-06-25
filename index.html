@@ -2103,7 +2103,8 @@ function pageCandidatos() {
                   <td>${c.instagram || '—'}</td>
                   <td>
                     ${c.url_curriculo
-                      ? `<a href="${c.url_curriculo}" target="_blank" rel="noopener" class="badge badge-active" style="text-decoration:none">Ver arquivo</a>`
+                      ? `<button class="action-btn" title="Visualizar" onclick="visualizarDocumento('${c.url_curriculo}')">👁</button>
+                         <a class="action-btn" title="Baixar" href="${driveDownloadUrl(c.url_curriculo)}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">⬇</a>`
                       : `<span class="badge badge-gray">Não enviado</span>`}
                   </td>
                   <td style="color:var(--text3);font-size:12px">${c.data_envio_candidatura ? new Date(c.data_envio_candidatura).toLocaleDateString('pt-BR') : '—'}</td>
@@ -2165,7 +2166,8 @@ window.verCandidato = function(idCandidatura) {
       <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Data de Envio</span><div style="margin-top:4px">${cand.data_envio_candidatura ? new Date(cand.data_envio_candidatura).toLocaleDateString('pt-BR') : '—'}</div></div>
       <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Currículo</span><div style="margin-top:4px">
         ${cand.url_curriculo
-          ? `<a href="${cand.url_curriculo}" target="_blank" rel="noopener" class="badge badge-active" style="text-decoration:none">Abrir currículo</a>`
+          ? `<button class="action-btn" title="Visualizar" onclick="visualizarDocumento('${cand.url_curriculo}')">👁 Visualizar</button>
+             <a class="action-btn" title="Baixar" href="${driveDownloadUrl(cand.url_curriculo)}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">⬇ Baixar</a>`
           : '<span class="badge badge-gray">Não enviado</span>'}
       </div></div>
     </div>`;
@@ -2189,12 +2191,13 @@ function pageVagas() {
       : window._vagas.map((v) => {
           const link = `${location.origin}${location.pathname}?candidatura=${v['link-token']}`;
           const aberta = v.status === 'aberta';
+          const totalCandidatos = (window._candidaturas || []).filter(c => c.id_vagas === v.id_vagas).length;
           return `
             <tr>
               <td><strong>${nomeCargoPorId(v.id_cargos)}</strong></td>
               <td>${v.data_abertura ? new Date(v.data_abertura).toLocaleDateString('pt-BR') : '—'}</td>
               <td>${v.prazo ? new Date(v.prazo).toLocaleDateString('pt-BR') : '—'}</td>
-              <td><span class="badge badge-info">${v.candidatos_count || 0}</span></td>
+              <td><span class="badge badge-info">${totalCandidatos}</span></td>
               <td><span class="badge ${aberta ? 'badge-active' : 'badge-inactive'}">${v.status}</span></td>
               <td>
                 <div style="display:flex;align-items:center;gap:6px">
@@ -2219,7 +2222,7 @@ function pageVagas() {
   };
 
   window._renderVagasTabela = renderVagasTabela;
-  loadVagasForApp().then(() => {
+  Promise.all([loadVagasForApp(), loadCandidaturasForApp()]).then(() => {
     renderVagasTabela();
     document.getElementById('vagas-pagination').innerHTML = `<span>${window._vagas.length} vagas</span>`;
   });
