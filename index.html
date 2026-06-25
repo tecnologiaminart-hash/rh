@@ -1480,31 +1480,11 @@ window.openDocColabModal = async function(colabId) {
           <td>
             ${d.url ? `<button class="action-btn" title="Visualizar" onclick="visualizarDocumento('${d.url}')">👁</button>
             <a class="action-btn" title="Baixar" href="${driveDownloadUrl(d.url)}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">⬇</a>` : '<span style="color:var(--text3);font-size:12px">Sem arquivo</span>'}
-            <button class="action-btn btn-danger" title="Excluir" onclick="excluirDoc('${colabId}',${i})">✕</button>
           </td>
         </tr>`).join('')}</tbody></table>`;
 
   document.getElementById('doc-colab-title').textContent = `Documentos — ${nome}`;
   document.getElementById('doc-colab-body').innerHTML = body;
-};
-
-window.excluirDoc = async function(colabId, idx) {
-  if (!confirm('Excluir este documento?')) return;
-  const docs = window._documentosPorColab[colabId] || [];
-  const doc = docs[idx];
-  if (!doc) return;
-
-  if (doc.id_doc && supaClient) {
-    const { error } = await supaClient.from('documentos').delete().eq('id_doc', doc.id_doc);
-    if (error) {
-      console.error('Erro ao excluir documento:', error.message);
-      return showToast('Erro ao excluir documento.', 'danger');
-    }
-  }
-
-  docs.splice(idx,1);
-  openDocColabModal(colabId);
-  showToast('Documento removido.');
 };
 
 window.openEnviarDocModal = function(prefillColabId='') {
