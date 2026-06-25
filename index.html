@@ -3978,7 +3978,7 @@ async function checkCandidaturaLink() {
            <input class="pub-input" id="pub-numero" placeholder="(00) 00000-0000">
            <label class="pub-label">Instagram</label>
            <input class="pub-input" id="pub-instagram" placeholder="@seuusuario">
-           <label class="pub-label">Currículo (PDF ou Word)</label>
+           <label class="pub-label">Currículo (PDF ou Word) *</label>
            <input class="pub-input" id="pub-curriculo" type="file" accept=".pdf,.doc,.docx" style="padding:8px">
            <button class="pub-btn" id="pub-submit-btn" onclick="enviarCandidatura('${token}')">Enviar Candidatura</button>
            <div class="pub-msg" id="pub-msg"></div>`}
@@ -3994,8 +3994,9 @@ window.enviarCandidatura = async function(token) {
   const msgEl     = document.getElementById('pub-msg');
   const btnEl     = document.getElementById('pub-submit-btn');
 
-  if (!nome)  { msgEl.textContent = 'Informe seu nome.'; msgEl.className = 'pub-msg pub-error'; return; }
-  if (!email) { msgEl.textContent = 'Informe seu e-mail.'; msgEl.className = 'pub-msg pub-error'; return; }
+  if (!nome)     { msgEl.textContent = 'Informe seu nome.'; msgEl.className = 'pub-msg pub-error'; return; }
+  if (!email)    { msgEl.textContent = 'Informe seu e-mail.'; msgEl.className = 'pub-msg pub-error'; return; }
+  if (!currFile) { msgEl.textContent = 'Anexe seu currículo.'; msgEl.className = 'pub-msg pub-error'; return; }
 
   if (!window._vagas) window._vagas = [];
   const vaga = window._vagas.find(v => v['link-token'] === token);
