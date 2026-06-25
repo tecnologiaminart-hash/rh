@@ -1325,15 +1325,7 @@ function pageDocumentos() {
   // Se colaboradores não carregados, tenta carregar e mostra mensagem
   if (!_colaboradoresSupabase || _colaboradoresSupabase.length === 0) {
     loadColaboradoresFromSupabase();
-    loadDocumentosFromSupabase();
-    setTimeout(() => { if (activeId === 'col-documentos') navigate('col-documentos', 'Documentos', 'Colaboradores'); }, 700);
     return `<div class="table-card"><div class="table-header"><span class="table-title">Documentos por Colaborador</span></div><div style="padding:36px;text-align:center;color:var(--text3)">Carregando colaboradores...</div></div>`;
-  }
-
-  if (!Object.keys(window._documentosPorColab).length) {
-    loadDocumentosFromSupabase().then(() => {
-      if (activeId === 'col-documentos') navigate('col-documentos', 'Documentos', 'Colaboradores');
-    });
   }
 
   const emp = _colaboradoresSupabase || [];
@@ -1422,118 +1414,88 @@ window.openEnviarDocModal = function(prefillColabId='') {
   document.getElementById('enviar-doc-modal').style.display='flex';
 };
 
-async function loadDocumentosFromSupabase() {
-  if (!supaClient) {
-    console.error('Supabase client não inicializado para carregar documentos.');
-    return;
-  }
-
-  const { data, error } = await supaClient
-    .from('documentos')
-    .select('id_colaborador, tipo_doc, data_envio_doc, url_arquivo')
-    .order('data_envio_doc', { ascending: false });
-
-  if (error) {
-    console.error('Erro ao carregar documentos do Supabase:', error.message);
-    return;
-  }
-
-  window._documentosPorColab = {};
-  if (Array.isArray(data)) {
-    data.forEach(doc => {
-      const cid = String(doc.id_colaborador || '');
-      if (!window._documentosPorColab[cid]) window._documentosPorColab[cid] = [];
-      const arquivoNome = doc.url_arquivo ? String(doc.url_arquivo).split('/').pop() : 'Arquivo';
-      window._documentosPorColab[cid].push({
-        tipo: doc.tipo_doc || '—',
-        nome: arquivoNome,
-        envio: doc.data_envio_doc ? new Date(doc.data_envio_doc).toLocaleDateString('pt-BR') : '',
-        caminho: doc.url_arquivo || ''
-      });
-    });
-  }
-}
-
-async function getDriveFolderIdForColab(colabId) {
-  if (!supaClient) {
-    console.error('Supabase client não inicializado para buscar pasta de colaborador.');
-    return null;
-  }
-
+window.obterDriveFolderIdParaColaborador = async function(cid) {
+  if (!supaClient) throw new Error('Supabase não inicializado.');
   const { data, error } = await supaClient
     .from('mapeamento_pasta_doc_drive.colaborador')
     .select('drive_folder_id')
-    .eq('id_colaborador', colabId)
-    .maybeSingle();
-
+    .eq('id_colaborador', cid)
+    .limit(1)
+    .single();
   if (error) {
-    console.error('Erro ao buscar mapeamento de pasta:', error.message);
-    return null;
-  }
-  return data?.drive_folder_id || null;
-}
-
-function sanitizeFileName(name) {
-  return name.replace(/[^a-zA-Z0-9._-]/g, '_');
-}
-
-async function uploadDocumentoFile(colabId, file) {
-  const folderId = await getDriveFolderIdForColab(colabId);
-  if (!folderId) {
-    throw new Error('Nenhuma pasta de destino mapeada para este colaborador.');
-  }
-
-  const safeName = sanitizeFileName(file.name);
-  const timestamp = Date.now();
-  const storagePath = `${folderId}/${colabId}/${timestamp}_${safeName}`;
-  const { data, error } = await supaClient.storage.from('documentos').upload(storagePath, file, { upsert: false });
-
-  if (error) {
-    console.error('Erro ao enviar arquivo para Supabase Storage:', error.message);
     throw error;
   }
-
-  return { path: data?.path || storagePath };
-}
+  return data?.drive_folder_id || null;
+};
 
 window.salvarDocumento = async function() {
   const cid = document.getElementById('enviar-doc-colab').value;
   const tipo = document.getElementById('enviar-doc-tipo').value;
-  const fileEl = document.getElementById('enviar-doc-arquivo');
-  const file = fileEl ? fileEl.files[0] : null;
+  const file = document.getElementById('enviar-doc-arquivo').files[0];
+  if (!cid) return showToast('Selecione um colaborador.');
+  if (!tipo) return showToast('Selecione o tipo de documento.');
+  if (!file) return showToast('Selecione um arquivo.');
+  if (!supaClient) return showToast('Supabase não está configurado.');
 
-  if (!cid) return showToast('Selecione um colaborador.', 'danger');
-  if (!tipo) return showToast('Selecione o tipo de documento.', 'danger');
-  if (!file) return showToast('Selecione um arquivo.', 'danger');
-  if (!supaClient) return showToast('Supabase não inicializado.', 'danger');
-
+  let driveFolderId;
   try {
-    showToast('Enviando documento...', 2000);
-    const uploadResult = await uploadDocumentoFile(cid, file);
-
-    const dataEnvio = new Date().toISOString();
-    const insertPayload = {
-      id_colaborador: cid,
-      tipo_doc: tipo,
-      data_envio_doc: dataEnvio,
-      url_arquivo: uploadResult.path
-    };
-
-    const { error: insertError } = await supaClient.from('documentos').insert([insertPayload]);
-    if (insertError) {
-      console.error('Erro ao gravar documento no Supabase:', insertError.message);
-      showToast('Erro ao salvar documento no Supabase.', 2500);
-      return;
-    }
-
-    document.getElementById('enviar-doc-modal').style.display='none';
-    await loadDocumentosFromSupabase();
-    navigate('col-documentos','Documentos','Colaboradores');
-    showToast('Documento enviado e registrado com sucesso!');
-  } catch (e) {
-    console.error('Erro ao enviar documento:', e);
-    showToast('Erro no envio: ' + (e.message || 'Verifique o console.'), 'danger');
+    driveFolderId = await window.obterDriveFolderIdParaColaborador(cid);
+  } catch (error) {
+    console.error('Erro ao buscar pasta de documentos:', error);
+    return showToast('Erro ao localizar pasta do colaborador.', 'danger');
   }
+
+  if (!driveFolderId) {
+    return showToast('Pasta de documentos não encontrada para este colaborador.', 'danger');
+  }
+
+  const safeFileName = file.name.replace(/[^a-zA-Z0-9._\-]/g, '_');
+  const filePath = `${driveFolderId}/${Date.now()}_${safeFileName}`;
+  const bucketName = 'documentos';
+
+  const { data: uploadData, error: uploadError } = await supaClient
+    .storage
+    .from(bucketName)
+    .upload(filePath, file, { cacheControl: '3600', upsert: false });
+
+  if (uploadError) {
+    console.error('Erro ao enviar arquivo para storage:', uploadError);
+    return showToast('Falha ao enviar arquivo. Verifique a configuração do bucket.', 'danger');
+  }
+
+  const payload = {
+    id_colaborador: cid,
+    tipo_doc: tipo,
+    data_envio_doc: new Date().toISOString(),
+  };
+
+  // Inclui a referência de caminho se existir
+  if (uploadData && uploadData.path) {
+    payload.url_arquivo = uploadData.path;
+  }
+
+  const { error: insertError } = await supaClient
+    .from('documentos')
+    .insert([payload]);
+
+  if (insertError) {
+    console.error('Erro ao inserir documento:', insertError);
+    return showToast('Erro ao salvar registro de documento.', 'danger');
+  }
+
+  if (!window._documentosPorColab[cid]) window._documentosPorColab[cid] = [];
+  window._documentosPorColab[cid].push({
+    tipo,
+    nome: file.name,
+    envio: new Date().toLocaleDateString('pt-BR'),
+    status: 'OK',
+    pasta: driveFolderId,
+    arquivo: uploadData?.path || filePath
+  });
+
+  document.getElementById('enviar-doc-modal').style.display='none';
+  showToast('Documento enviado com sucesso!');
+  navigate('col-documentos','Documentos','Colaboradores');
 };
 
 // ============================================================
