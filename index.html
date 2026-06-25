@@ -1326,6 +1326,53 @@ function filterStatusTable(searchTerm) {
 // PAGES
 // ============================================================
 
+// Carrega os documentos reais da tabela `documentos` no Supabase e agrupa por id_colaborador.
+async function loadDocumentosFromSupabase() {
+  if (!supaClient) return;
+  const { data, error } = await supaClient.from('documentos').select('*');
+  if (error) {
+    console.error('Erro ao carregar documentos:', error.message);
+    return;
+  }
+  const porColab = {};
+  (data || []).forEach(doc => {
+    const cid = doc.id_colaborador;
+    if (!porColab[cid]) porColab[cid] = [];
+    porColab[cid].push({
+      id_doc: doc.id_doc,
+      tipo: doc.tipo_doc,
+      data: doc.data_envio_doc ? new Date(doc.data_envio_doc).toLocaleDateString('pt-BR') : '',
+      url: doc.url_arquivo
+    });
+  });
+  window._documentosPorColab = porColab;
+}
+
+function renderDocColabRows() {
+  const emp = _colaboradoresSupabase || [];
+  return emp.map(colab => {
+    const cid = colab.id_colaborador || colab.id || colab.id_colab || colab.id_colaboradores || colab.codigo || '';
+    const nome = colab.nome_colaborador || colab.nome || colab.name || '—';
+    const cargo = colab.cargos ? (colab.cargos.nome_cargo || colab.cargos.nome || '') : '';
+    const status = colab.status_colaborador || colab.status || colab.situacao || '—';
+    const docs = window._documentosPorColab[cid] || [];
+    const qtd = docs.length;
+    return `
+      <tr onclick="openDocColabModal('${cid}')">
+        <td>${nome}</td>
+        <td>${cargo}</td>
+        <td><span class="badge ${String(status).toLowerCase().includes('ativo') ? 'badge-active' : 'badge-inactive'}">${status}</span></td>
+        <td>${qtd>0?`<span class="badge badge-info">${qtd} doc${qtd>1?'s':''}</span>`:'<span style="color:var(--text3);font-size:12px">Nenhum</span>'}</td>
+        <td><button class="btn btn-sm" onclick="event.stopPropagation();openDocColabModal('${cid}')">Ver</button></td>
+      </tr>`;
+  }).join('');
+}
+
+window.renderDocColabTable = function() {
+  const tbody = document.getElementById('doc-colab-tbody');
+  if (tbody) tbody.innerHTML = renderDocColabRows();
+};
+
 // Página: Documentos por Colaborador
 function pageDocumentos() {
   if (!window._documentosPorColab) window._documentosPorColab = {};
@@ -1339,23 +1386,8 @@ function pageDocumentos() {
   const emp = _colaboradoresSupabase || [];
   document.getElementById('topbar-actions').innerHTML = `<button type="button" class="btn btn-primary" onclick="openEnviarDocModal()">+ Enviar Documento</button>`;
 
-  const rows = emp.map(colab => {
-    const cid = colab.id_colaborador || colab.id || colab.id_colab || colab.id_colaboradores || colab.codigo || '';
-    const nome = colab.nome_colaborador || colab.nome || colab.name || '—';
-    const cargo = colab.cargos ? (colab.cargos.nome_cargo || colab.cargos.nome || '') : '';
-    const status = colab.status_colaborador || colab.status || colab.situacao || '—';
-    const docs = window._documentosPorColab[cid] || [];
-    const qtd = docs.length;
-    const ini = nome ? nome[0].toUpperCase() : '?';
-    return `
-      <tr onclick="openDocColabModal('${cid}')">
-        <td>${nome}</td>
-        <td>${cargo}</td>
-        <td><span class="badge ${String(status).toLowerCase().includes('ativo') ? 'badge-active' : 'badge-inactive'}">${status}</span></td>
-        <td>${qtd>0?`<span class="badge badge-info">${qtd} doc${qtd>1?'s':''}</span>`:'<span style="color:var(--text3);font-size:12px">Nenhum</span>'}</td>
-        <td><button class="btn btn-sm" onclick="event.stopPropagation();openDocColabModal('${cid}')">Ver</button></td>
-      </tr>`;
-  }).join('');
+  // Atualiza a contagem de documentos por colaborador com dados reais do Supabase.
+  loadDocumentosFromSupabase().then(() => { if (activeId === 'col-documentos') window.renderDocColabTable(); });
 
   return `
     <div class="table-card">
@@ -1365,7 +1397,7 @@ function pageDocumentos() {
       </div>
       <table>
         <thead><tr><th>Colaborador</th><th>Cargo</th><th>Status</th><th>Documentos</th><th>Ações</th></tr></thead>
-        <tbody id="doc-colab-tbody">${rows}</tbody>
+        <tbody id="doc-colab-tbody">${renderDocColabRows()}</tbody>
       </table>
       <div class="table-pagination"><span>${emp.length} colaboradores</span></div>
     </div>`;
@@ -1376,14 +1408,40 @@ window.filtrarDocColab = function(q) {
   document.querySelectorAll('#doc-colab-tbody tr').forEach(tr => tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none');
 };
 
-window.openDocColabModal = function(colabId) {
-  // Modal simples: mostra lista de documentos em memória
-  const docs = window._documentosPorColab[colabId] || [];
+// Extrai o ID do arquivo a partir de um link do Google Drive (ex: .../file/d/ID/view ou ...?id=ID).
+function extrairDriveFileId(url) {
+  if (!url) return null;
+  const m = String(url).match(/\/d\/([a-zA-Z0-9_-]+)/) || String(url).match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  return m ? m[1] : null;
+}
+
+window.driveDownloadUrl = function(url) {
+  const id = extrairDriveFileId(url);
+  return id ? `https://drive.google.com/uc?export=download&id=${id}` : url;
+};
+
+// Mostra o documento em um iframe dentro do próprio site, sem precisar abrir a URL do Drive.
+window.visualizarDocumento = function(url) {
+  const id = extrairDriveFileId(url);
+  const previewUrl = id ? `https://drive.google.com/file/d/${id}/preview` : url;
+  if (!document.getElementById('doc-preview-modal')) {
+    const modal = document.createElement('div'); modal.id='doc-preview-modal'; modal.style.cssText='display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1100;align-items:center;justify-content:center;';
+    modal.innerHTML = `<div style="background:#fff;border-radius:6px;width:90vw;max-width:900px;height:85vh;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,.3)">
+      <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:14px;font-weight:700">Visualizar Documento</div>
+        <button class="btn btn-sm" onclick="document.getElementById('doc-preview-frame').src='about:blank';document.getElementById('doc-preview-modal').style.display='none'">✕ Fechar</button>
+      </div>
+      <iframe id="doc-preview-frame" style="flex:1;border:none;width:100%"></iframe>
+    </div>`;
+    document.body.appendChild(modal);
+  }
+  document.getElementById('doc-preview-frame').src = previewUrl;
+  document.getElementById('doc-preview-modal').style.display = 'flex';
+};
+
+window.openDocColabModal = async function(colabId) {
   const colab = (_colaboradoresSupabase||[]).find(c => String(c.id_colaborador||c.id||c.codigo) === String(colabId));
   const nome = colab ? (colab.nome_colaborador||colab.nome||colab.name) : 'Colaborador';
-  const body = docs.length === 0
-    ? `<div class="empty-state"><div class="empty-state-icon">📂</div><div class="empty-state-title">Nenhum documento enviado</div><div class="empty-state-desc">Use "Enviar Documento" para anexar.</div></div>`
-    : `<table style="width:100%"><thead><tr><th>Tipo</th><th>Arquivo</th><th>Envio</th><th>Ações</th></tr></thead><tbody>${docs.map((d,i)=>`<tr><td><span class="badge badge-gray">${d.tipo}</span></td><td style="font-size:12px">${d.nome}</td><td style="color:var(--text3);font-size:12px">${d.envio}</td><td><button class="action-btn" onclick="showToast('Download: ${d.nome}')">⬇</button><button class="action-btn btn-danger" onclick="excluirDoc('${colabId}',${i})">✕</button></td></tr>`).join('')}</tbody></table>`;
 
   // cria modal se não existir
   if (!document.getElementById('doc-colab-modal')) {
@@ -1392,14 +1450,59 @@ window.openDocColabModal = function(colabId) {
     document.body.appendChild(modal);
   }
   document.getElementById('doc-colab-title').textContent = `Documentos — ${nome}`;
-  document.getElementById('doc-colab-body').innerHTML = body;
+  document.getElementById('doc-colab-body').innerHTML = `<div style="text-align:center;padding:24px;color:var(--text3)">Carregando...</div>`;
   document.getElementById('doc-colab-modal').style.display = 'flex';
+
+  // Busca a lista de documentos sempre fresca do Supabase, para refletir uploads recentes.
+  if (supaClient) {
+    const { data, error } = await supaClient
+      .from('documentos')
+      .select('*')
+      .eq('id_colaborador', colabId)
+      .order('data_envio_doc', { ascending: false });
+    if (!error) {
+      window._documentosPorColab[colabId] = (data || []).map(doc => ({
+        id_doc: doc.id_doc,
+        tipo: doc.tipo_doc,
+        data: doc.data_envio_doc ? new Date(doc.data_envio_doc).toLocaleDateString('pt-BR') : '',
+        url: doc.url_arquivo
+      }));
+    }
+  }
+
+  const docs = window._documentosPorColab[colabId] || [];
+  const body = docs.length === 0
+    ? `<div class="empty-state"><div class="empty-state-icon">📂</div><div class="empty-state-title">Nenhum documento enviado</div><div class="empty-state-desc">Use "Enviar Documento" para anexar.</div></div>`
+    : `<table style="width:100%"><thead><tr><th>Tipo</th><th>Data de Envio</th><th>Ações</th></tr></thead><tbody>${docs.map((d,i)=>`
+        <tr>
+          <td><span class="badge badge-gray">${d.tipo || '—'}</span></td>
+          <td style="color:var(--text3);font-size:12px">${d.data || '—'}</td>
+          <td>
+            ${d.url ? `<button class="action-btn" title="Visualizar" onclick="visualizarDocumento('${d.url}')">👁</button>
+            <a class="action-btn" title="Baixar" href="${driveDownloadUrl(d.url)}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">⬇</a>` : '<span style="color:var(--text3);font-size:12px">Sem arquivo</span>'}
+            <button class="action-btn btn-danger" title="Excluir" onclick="excluirDoc('${colabId}',${i})">✕</button>
+          </td>
+        </tr>`).join('')}</tbody></table>`;
+
+  document.getElementById('doc-colab-title').textContent = `Documentos — ${nome}`;
+  document.getElementById('doc-colab-body').innerHTML = body;
 };
 
-window.excluirDoc = function(colabId, idx) {
+window.excluirDoc = async function(colabId, idx) {
   if (!confirm('Excluir este documento?')) return;
-  if (!window._documentosPorColab[colabId]) return;
-  window._documentosPorColab[colabId].splice(idx,1);
+  const docs = window._documentosPorColab[colabId] || [];
+  const doc = docs[idx];
+  if (!doc) return;
+
+  if (doc.id_doc && supaClient) {
+    const { error } = await supaClient.from('documentos').delete().eq('id_doc', doc.id_doc);
+    if (error) {
+      console.error('Erro ao excluir documento:', error.message);
+      return showToast('Erro ao excluir documento.', 'danger');
+    }
+  }
+
+  docs.splice(idx,1);
   openDocColabModal(colabId);
   showToast('Documento removido.');
 };
@@ -1511,9 +1614,11 @@ window.salvarDocumento = async function() {
   };
   if (urlArquivo) payload.url_arquivo = urlArquivo;
 
-  const { error: insertError } = await supaClient
+  const { data: insertedDoc, error: insertError } = await supaClient
     .from('documentos')
-    .insert([payload]);
+    .insert([payload])
+    .select()
+    .single();
 
   if (insertError) {
     console.error('Erro ao inserir documento:', insertError);
@@ -1522,12 +1627,10 @@ window.salvarDocumento = async function() {
 
   if (!window._documentosPorColab[cid]) window._documentosPorColab[cid] = [];
   window._documentosPorColab[cid].push({
+    id_doc: insertedDoc?.id_doc,
     tipo,
-    nome: file.name,
-    envio: new Date().toLocaleDateString('pt-BR'),
-    status: 'OK',
-    pasta: driveFolderId,
-    arquivo: urlArquivo || file.name
+    data: new Date().toLocaleDateString('pt-BR'),
+    url: urlArquivo
   });
 
   document.getElementById('enviar-doc-modal').style.display='none';
