@@ -2067,50 +2067,56 @@ function pageCandidatos() {
       return;
     }
 
-    container.innerHTML = grupos.map(g => `
+    container.innerHTML = grupos.map(g => {
+      const aberta = g.vaga.status === 'aberta';
+      return `
       <div class="table-card" style="margin-bottom:16px">
-        <div class="table-header">
+        <div class="table-header" style="cursor:pointer" onclick="toggleCandidatosVaga(${g.vaga.id_vagas})">
           <div>
             <span class="table-title">${nomeCargoPorId(g.vaga.id_cargos)}</span>
             <span style="font-size:12px;color:var(--text3);margin-left:12px">
-              Abertura: ${g.vaga.data_abertura ? new Date(g.vaga.data_abertura).toLocaleDateString('pt-BR') : '—'} &nbsp;·&nbsp;
               <span class="badge badge-info">${g.cands.length} candidato${g.cands.length > 1 ? 's' : ''}</span>
+              <span class="badge ${aberta ? 'badge-active' : 'badge-inactive'}" style="margin-left:6px">${g.vaga.status}</span>
             </span>
           </div>
+          <span id="candidatos-toggle-icon-${g.vaga.id_vagas}" style="margin-left:auto;color:var(--text3);font-size:12px">▸ ver candidatos</span>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Nome</th>
-              <th>E-mail</th>
-              <th>Número</th>
-              <th>Instagram</th>
-              <th>Currículo</th>
-              <th>Data de Envio</th>
-              <th>Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${g.cands.map((c) => `
+        <div id="candidatos-tabela-${g.vaga.id_vagas}" style="display:none">
+          <table>
+            <thead>
               <tr>
-                <td><strong>${c.nome_candidato || '—'}</strong></td>
-                <td>${c.email_candidato || '—'}</td>
-                <td>${c.numero || '—'}</td>
-                <td>${c.instagram || '—'}</td>
-                <td>
-                  ${c.url_curriculo
-                    ? `<a href="${c.url_curriculo}" target="_blank" rel="noopener" class="badge badge-active" style="text-decoration:none">Ver arquivo</a>`
-                    : `<span class="badge badge-gray">Não enviado</span>`}
-                </td>
-                <td style="color:var(--text3);font-size:12px">${c.data_envio_candidatura ? new Date(c.data_envio_candidatura).toLocaleDateString('pt-BR') : '—'}</td>
-                <td>
-                  <button class="action-btn" onclick="verCandidato(${c.id_candidaturas})" title="Ver dados completos">👁</button>
-                </td>
-              </tr>`).join('')}
-          </tbody>
-        </table>
+                <th>Nome</th>
+                <th>E-mail</th>
+                <th>Número</th>
+                <th>Instagram</th>
+                <th>Currículo</th>
+                <th>Data de Envio</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${g.cands.map((c) => `
+                <tr>
+                  <td><strong>${c.nome_candidato || '—'}</strong></td>
+                  <td>${c.email_candidato || '—'}</td>
+                  <td>${c.numero || '—'}</td>
+                  <td>${c.instagram || '—'}</td>
+                  <td>
+                    ${c.url_curriculo
+                      ? `<a href="${c.url_curriculo}" target="_blank" rel="noopener" class="badge badge-active" style="text-decoration:none">Ver arquivo</a>`
+                      : `<span class="badge badge-gray">Não enviado</span>`}
+                  </td>
+                  <td style="color:var(--text3);font-size:12px">${c.data_envio_candidatura ? new Date(c.data_envio_candidatura).toLocaleDateString('pt-BR') : '—'}</td>
+                  <td>
+                    <button class="action-btn" onclick="verCandidato(${c.id_candidaturas})" title="Ver dados completos">👁</button>
+                  </td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
   };
 
   window._renderCandidatos = renderCandidatos;
@@ -2135,6 +2141,15 @@ function pageCandidatos() {
     </div>
   </div>`;
 }
+
+window.toggleCandidatosVaga = function(idVaga) {
+  const tabela = document.getElementById(`candidatos-tabela-${idVaga}`);
+  const icon = document.getElementById(`candidatos-toggle-icon-${idVaga}`);
+  if (!tabela) return;
+  const expandido = tabela.style.display !== 'none';
+  tabela.style.display = expandido ? 'none' : '';
+  if (icon) icon.textContent = expandido ? '▸ ver candidatos' : '▾ ocultar candidatos';
+};
 
 window.verCandidato = function(idCandidatura) {
   const cand = (window._candidaturas || []).find(c => c.id_candidaturas === idCandidatura);
