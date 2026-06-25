@@ -357,6 +357,14 @@ let SUPA_URL = null;
 let SUPA_KEY = null;
 let supaClient = null;
 let currentUser = null;
+
+// Webhook do n8n responsável por enviar o arquivo para a pasta do Google Drive.
+// Após importar n8n/upload-documento-drive.workflow.json e ativar o workflow,
+// copie a "Production URL" do node Webhook e cole abaixo.
+const N8N_WEBHOOK_URL = 'COLE_AQUI_A_PRODUCTION_URL_DO_WEBHOOK_N8N';
+// Mesmo valor configurado na credencial "Header Auth" do node Webhook no n8n
+// (campo Value; o campo Name da credencial deve ser exatamente "X-Webhook-Token").
+const N8N_WEBHOOK_TOKEN = 'DEFINA_UM_TOKEN_SECRETO_E_USE_O_MESMO_NA_CREDENCIAL_DO_N8N';
   
 let _colaboradoresSupabase = [];
 let _editingStatusColabId = null;
@@ -1428,6 +1436,41 @@ window.obterDriveFolderIdParaColaborador = async function(cid) {
   return data?.drive_folder_id || null;
 };
 
+// Envia o arquivo para o webhook do n8n, que fica responsável por gravá-lo
+// na pasta do Google Drive identificada por driveFolderId. Espera de volta um
+// JSON contendo o link do arquivo criado (ex: { "url": "https://drive.google.com/..." }).
+window.enviarArquivoParaDrive = async function(file, { cid, tipo, driveFolderId }) {
+  if (!N8N_WEBHOOK_URL || N8N_WEBHOOK_URL.startsWith('COLE_AQUI')) {
+    throw new Error('Webhook do n8n não configurado: defina N8N_WEBHOOK_URL no index.html.');
+  }
+
+  const formData = new FormData();
+  formData.append('file', file, file.name);
+  formData.append('id_colaborador', cid);
+  formData.append('drive_folder_id', driveFolderId);
+  formData.append('tipo_doc', tipo);
+  formData.append('nome_arquivo', file.name);
+
+  const res = await fetch(N8N_WEBHOOK_URL, {
+    method: 'POST',
+    headers: { 'X-Webhook-Token': N8N_WEBHOOK_TOKEN },
+    body: formData
+  });
+
+  if (!res.ok) {
+    throw new Error(`Webhook respondeu com status ${res.status}`);
+  }
+
+  let result = {};
+  try { result = await res.json(); } catch (e) { /* resposta sem corpo JSON */ }
+
+  if (result.success === false) {
+    throw new Error(result.error || 'Falha reportada pelo webhook do n8n.');
+  }
+
+  return result.url || result.webViewLink || result.link || null;
+};
+
 window.salvarDocumento = async function() {
   const cid = document.getElementById('enviar-doc-colab').value;
   const tipo = document.getElementById('enviar-doc-tipo').value;
@@ -1449,30 +1492,21 @@ window.salvarDocumento = async function() {
     return showToast('Pasta de documentos não encontrada para este colaborador.', 'danger');
   }
 
-  const safeFileName = file.name.replace(/[^a-zA-Z0-9._\-]/g, '_');
-  const filePath = `${driveFolderId}/${Date.now()}_${safeFileName}`;
-  const bucketName = 'documentos';
-
-  const { data: uploadData, error: uploadError } = await supaClient
-    .storage
-    .from(bucketName)
-    .upload(filePath, file, { cacheControl: '3600', upsert: false });
-
-  if (uploadError) {
-    console.error('Erro ao enviar arquivo para storage:', uploadError);
-    return showToast('Falha ao enviar arquivo. Verifique a configuração do bucket.', 'danger');
+  let urlArquivo;
+  try {
+    urlArquivo = await window.enviarArquivoParaDrive(file, { cid, tipo, driveFolderId });
+  } catch (error) {
+    console.error('Erro ao enviar arquivo para o Drive via n8n:', error);
+    return showToast('Falha ao enviar arquivo para o Drive.', 'danger');
   }
 
+  const hoje = new Date().toISOString().slice(0, 10); // data_envio_doc é coluna "date"
   const payload = {
     id_colaborador: cid,
     tipo_doc: tipo,
-    data_envio_doc: new Date().toISOString(),
+    data_envio_doc: hoje,
   };
-
-  // Inclui a referência de caminho se existir
-  if (uploadData && uploadData.path) {
-    payload.url_arquivo = uploadData.path;
-  }
+  if (urlArquivo) payload.url_arquivo = urlArquivo;
 
   const { error: insertError } = await supaClient
     .from('documentos')
@@ -1490,7 +1524,7 @@ window.salvarDocumento = async function() {
     envio: new Date().toLocaleDateString('pt-BR'),
     status: 'OK',
     pasta: driveFolderId,
-    arquivo: uploadData?.path || filePath
+    arquivo: urlArquivo || file.name
   });
 
   document.getElementById('enviar-doc-modal').style.display='none';
