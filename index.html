@@ -368,7 +368,7 @@ const N8N_WEBHOOK_TOKEN = '1222314';
 // remover da lista documentos que foram apagados direto no Drive).
 // Após importar n8n/check-documento-drive.workflow.json e ativar o workflow,
 // copie a "Production URL" do node Webhook e cole abaixo.
-const N8N_CHECK_WEBHOOK_URL = 'COLE_AQUI_A_PRODUCTION_URL_DO_WEBHOOK_CHECK_N8N';
+const N8N_CHECK_WEBHOOK_URL = 'https://automatiza.minart.com.br/webhook/check-documento-drive';
   
 let _colaboradoresSupabase = [];
 let _editingStatusColabId = null;
@@ -377,17 +377,28 @@ let _editingHistoricoColabId = null;
 let _cargos = []; // Para armazenar os cargos do Supabase
 let _statusEmployees = [];
   
-function salvarVagasLocal() {
-  localStorage.setItem('rh_vagas', JSON.stringify(window._vagas || []));
+async function loadVagasForApp() {
+  if (!supaClient) {
+    console.error('Supabase client não inicializado para vagas.');
+    window._vagas = [];
+    return;
+  }
+  const { data, error } = await supaClient
+    .from('vagas')
+    .select('*')
+    .order('id_vagas', { ascending: false });
+
+  if (error) {
+    console.error('Erro ao carregar vagas:', error.message);
+    window._vagas = [];
+  } else {
+    window._vagas = data;
+  }
 }
 
-function carregarVagasLocal() {
-  try {
-    const salvo = localStorage.getItem('rh_vagas');
-    window._vagas = salvo ? JSON.parse(salvo) : [];
-  } catch(e) {
-    window._vagas = [];
-  }
+function nomeCargoPorId(idCargo) {
+  const cargo = (window._cargos || []).find(c => String(c[window._cargoIdField]) === String(idCargo));
+  return cargo ? (cargo[window._cargoNameField] || cargo.nome_cargo || cargo.nome || '—') : '—';
 }
 
 function carregarDescricoesLocal() {
@@ -1994,7 +2005,7 @@ function pageCandidatos() {
 
   // Agrupa candidaturas por vaga
   const grupos = window._vagas.map((v, vi) => {
-    const cands = window._candidaturas.filter(c => c.vagaToken === v.token);
+    const cands = window._candidaturas.filter(c => c.vagaToken === v['link-token']);
     return { vaga: v, vagaIdx: vi, cands };
   }).filter(g => g.cands.length > 0);
 
@@ -2004,9 +2015,9 @@ function pageCandidatos() {
     <div class="table-card" style="margin-bottom:16px">
       <div class="table-header">
         <div>
-          <span class="table-title">${g.vaga.cargo}</span>
+          <span class="table-title">${nomeCargoPorId(g.vaga.id_cargos)}</span>
           <span style="font-size:12px;color:var(--text3);margin-left:12px">
-            Abertura: ${g.vaga.abertura} &nbsp;·&nbsp;
+            Abertura: ${g.vaga.data_abertura ? new Date(g.vaga.data_abertura).toLocaleDateString('pt-BR') : '—'} &nbsp;·&nbsp;
             <span class="badge badge-info">${g.cands.length} candidato${g.cands.length > 1 ? 's' : ''}</span>
           </span>
         </div>
@@ -2093,17 +2104,17 @@ function pageVagas() {
     const tbody = document.getElementById('vagas-tbody');
     if (!tbody) return;
     tbody.innerHTML = window._vagas.length === 0
-      ? '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma vaga cadastrada</td></tr>'
-      : window._vagas.map((v, i) => {
-          const link = `${location.origin}${location.pathname}?candidatura=${v.token}`;
+      ? '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma vaga cadastrada</td></tr>'
+      : window._vagas.map((v) => {
+          const link = `${location.origin}${location.pathname}?candidatura=${v['link-token']}`;
+          const aberta = v.status === 'aberta';
           return `
             <tr>
-              <td><strong>${v.cargo}</strong></td>
-              <td>${v.depto || '—'}</td>
-              <td>${v.abertura}</td>
-              <td>${v.prazo || '—'}</td>
-              <td><span class="badge badge-info">${v.candidatos || 0}</span></td>
-              <td><span class="badge ${v.status === 'Aberta' ? 'badge-active' : 'badge-inactive'}">${v.status}</span></td>
+              <td><strong>${nomeCargoPorId(v.id_cargos)}</strong></td>
+              <td>${v.data_abertura ? new Date(v.data_abertura).toLocaleDateString('pt-BR') : '—'}</td>
+              <td>${v.prazo ? new Date(v.prazo).toLocaleDateString('pt-BR') : '—'}</td>
+              <td><span class="badge badge-info">${v.candidatos_count || 0}</span></td>
+              <td><span class="badge ${aberta ? 'badge-active' : 'badge-inactive'}">${v.status}</span></td>
               <td>
                 <div style="display:flex;align-items:center;gap:6px">
                   <input
@@ -2112,31 +2123,25 @@ function pageVagas() {
                     readonly
                     style="font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:3px;background:var(--bg2);width:220px;color:var(--text2);cursor:default"
                   >
-                  <button class="btn btn-sm" onclick="copiarLinkVaga(${i})" title="Copiar link">📋</button>
+                  <button class="btn btn-sm" onclick="copiarLinkVaga(${v.id_vagas})" title="Copiar link">📋</button>
                 </div>
               </td>
               <td>
-                ${v.status === 'Aberta'
-                  ? `<button class="action-btn" title="Encerrar" onclick="encerrarVaga(${i})">🔒</button>`
-                  : `<button class="action-btn" title="Reabrir" onclick="reabrirVaga(${i})">🔓</button>`}
+                ${aberta
+                  ? `<button class="action-btn" title="Encerrar" onclick="encerrarVaga(${v.id_vagas})">🔒</button>`
+                  : `<button class="action-btn" title="Reabrir" onclick="reabrirVaga(${v.id_vagas})">🔓</button>`}
                 <button class="action-btn" onclick="showToast('Visualizando')">👁</button>
-                <button class="action-btn" title="Excluir" onclick="deletarVaga(${i})" style="color:var(--danger)">✕</button>
+                <button class="action-btn" title="Excluir" onclick="deletarVaga(${v.id_vagas})" style="color:var(--danger)">✕</button>
               </td>
             </tr>`;
         }).join('');
   };
 
-  window.deletarVaga = function(i) {
-    if (!confirm('Excluir esta vaga?')) return;
-    window._vagas.splice(i, 1);
-    salvarVagasLocal(); // ← adicionar
-    window._renderVagasTabela();
-    document.getElementById('vagas-pagination').innerHTML = `<span>${window._vagas.length} vagas</span>`;
-    showToast('Vaga excluída.');
-  };
-
   window._renderVagasTabela = renderVagasTabela;
-  setTimeout(renderVagasTabela, 0);
+  loadVagasForApp().then(() => {
+    renderVagasTabela();
+    document.getElementById('vagas-pagination').innerHTML = `<span>${window._vagas.length} vagas</span>`;
+  });
 
   return `
   <div id="vaga-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
@@ -2147,14 +2152,11 @@ function pageVagas() {
         <select class="form-select" id="vaga-cargo">
           <option value="">— Selecione o Cargo —</option>
           ${(window._cargos||[]).map(cargo => {
+            const id = cargo[window._cargoIdField];
             const nome = cargo[window._cargoNameField] || cargo.nome_cargo || cargo.nome || '';
-            return `<option value="${nome}">${nome}</option>`;
+            return `<option value="${id}">${nome}</option>`;
           }).join('')}
         </select>
-      </div>
-      <div class="form-group" style="margin-bottom:14px">
-        <label class="form-label">Departamento</label>
-        <input class="form-input" id="vaga-depto" placeholder="Ex: Produção, Administrativo...">
       </div>
       <div class="form-group" style="margin-bottom:14px">
         <label class="form-label">Prazo</label>
@@ -2182,16 +2184,17 @@ function pageVagas() {
         </tr>
       </thead>
       <tbody id="vagas-tbody">
-        <tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
+        <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
       </tbody>
     </table>
     <div class="table-pagination" id="vagas-pagination"><span>${window._vagas.length} vagas</span></div>
   </div>`;
 }
 
-window.copiarLinkVaga = function(i) {
-  const v = window._vagas[i];
-  const link = `${location.origin}${location.pathname}?candidatura=${v.token}`;
+window.copiarLinkVaga = function(id) {
+  const v = window._vagas.find(v => v.id_vagas === id);
+  if (!v) return;
+  const link = `${location.origin}${location.pathname}?candidatura=${v['link-token']}`;
   navigator.clipboard.writeText(link).then(() => {
     showToast('Link copiado para a área de transferência!');
   }).catch(() => {
@@ -2206,50 +2209,78 @@ window.copiarLinkVaga = function(i) {
   });
 };
 
-window.encerrarVaga = function(i) {
-  window._vagas[i].status = 'Encerrada';
-  salvarVagasLocal(); // ← adicionar
+window.encerrarVaga = async function(id) {
+  const { error } = await supaClient.from('vagas').update({ status: 'fechado' }).eq('id_vagas', id);
+  if (error) {
+    console.error('Erro ao encerrar vaga:', error.message);
+    showToast('Erro ao encerrar vaga.');
+    return;
+  }
+  await loadVagasForApp();
   window._renderVagasTabela();
   document.getElementById('vagas-pagination').innerHTML =
     `<span>${window._vagas.length} vagas</span>`;
   showToast('Vaga encerrada.');
 };
 
-window.reabrirVaga = function(i) {
-  window._vagas[i].status = 'Aberta';
-  salvarVagasLocal(); // ← adicionar
+window.reabrirVaga = async function(id) {
+  const { error } = await supaClient.from('vagas').update({ status: 'aberta' }).eq('id_vagas', id);
+  if (error) {
+    console.error('Erro ao reabrir vaga:', error.message);
+    showToast('Erro ao reabrir vaga.');
+    return;
+  }
+  await loadVagasForApp();
   window._renderVagasTabela();
   showToast('Vaga reaberta.');
 };
 
+window.deletarVaga = async function(id) {
+  if (!confirm('Excluir esta vaga?')) return;
+  const { error } = await supaClient.from('vagas').delete().eq('id_vagas', id);
+  if (error) {
+    console.error('Erro ao excluir vaga:', error.message);
+    showToast('Erro ao excluir vaga.');
+    return;
+  }
+  await loadVagasForApp();
+  window._renderVagasTabela();
+  document.getElementById('vagas-pagination').innerHTML = `<span>${window._vagas.length} vagas</span>`;
+  showToast('Vaga excluída.');
+};
+
 window.openVagaModal = function() {
   document.getElementById('vaga-cargo').value = '';
-  document.getElementById('vaga-depto').value = '';
   document.getElementById('vaga-prazo').value = '';
   document.getElementById('vaga-modal').style.display = 'flex';
 };
 
-window.salvarVaga = function() {
-  const cargo = document.getElementById('vaga-cargo').value;
-  const depto = document.getElementById('vaga-depto').value;
+window.salvarVaga = async function() {
+  const idCargo = document.getElementById('vaga-cargo').value;
   const prazo = document.getElementById('vaga-prazo').value;
-  if (!cargo) return showToast('Selecione um cargo.');
+  if (!idCargo) return showToast('Selecione um cargo.');
 
   // Gera token único para o link público
   const token = Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
 
-  window._vagas.push({
-    cargo,
-    depto,
-    prazo: prazo ? prazo.split('-').reverse().join('/') : '—',
-    abertura: new Date().toLocaleDateString('pt-BR'),
-    candidatos: 0,
-    status: 'Aberta',
-    token
-  });
-  salvarVagasLocal(); // ← adicionar
+  const { error } = await supaClient.from('vagas').insert([{
+    id_cargos: idCargo,
+    prazo: prazo || null,
+    data_abertura: new Date().toISOString().slice(0, 10),
+    candidatos_count: 0,
+    status: 'aberta',
+    'link-token': token
+  }]);
+
+  if (error) {
+    console.error('Erro ao abrir vaga:', error.message);
+    showToast('Erro ao abrir vaga.');
+    return;
+  }
+
   document.getElementById('vaga-modal').style.display = 'none';
   showToast('Vaga aberta com sucesso!');
+  await loadVagasForApp();
   window._renderVagasTabela();
   document.getElementById('vagas-pagination').innerHTML =
     `<span>${window._vagas.length} vagas</span>`;
@@ -3800,7 +3831,7 @@ function checkCandidaturaLink() {
   if (!window._vagas) window._vagas = [];
 
   // Renderiza o formulário público no body
-  const vaga = window._vagas.find(v => v.token === token);
+  const vaga = window._vagas.find(v => v['link-token'] === token);
 
   document.body.innerHTML = `
   <style>
@@ -3828,7 +3859,7 @@ function checkCandidaturaLink() {
           <div style="font-size:16px;font-weight:600;color:#333;margin-bottom:8px">Vaga não encontrada</div>
           <div style="font-size:13px">Este link pode estar incorreto ou a vaga foi encerrada.</div>
         </div>`
-      : vaga.status !== 'Aberta'
+      : vaga.status !== 'aberta'
         ? `<div class="pub-not-found">
             <div style="font-size:32px;margin-bottom:12px">🔒</div>
             <div style="font-size:16px;font-weight:600;color:#333;margin-bottom:8px">Vaga encerrada</div>
@@ -3836,8 +3867,8 @@ function checkCandidaturaLink() {
           </div>`
         : `<div class="pub-logo">MINART MÓVEIS</div>
            <div class="pub-sub">Candidatura Online</div>
-           <div class="pub-cargo">${vaga.cargo}</div>
-           <div class="pub-depto">${vaga.depto || 'Minart Móveis'}</div>
+           <div class="pub-cargo">${nomeCargoPorId(vaga.id_cargos)}</div>
+           <div class="pub-depto">Minart Móveis</div>
            <label class="pub-label">Nome Completo *</label>
            <input class="pub-input" id="pub-nome" placeholder="Seu nome completo">
            <label class="pub-label">E-mail *</label>
@@ -3861,22 +3892,25 @@ window.enviarCandidatura = function(token) {
   if (!window._candidaturas) window._candidaturas = [];
   if (!window._vagas) window._vagas = [];
 
-  const vaga = window._vagas.find(v => v.token === token);
+  const vaga = window._vagas.find(v => v['link-token'] === token);
 
   window._candidaturas.push({
     vagaToken: token,
-    vagaCargo: vaga ? vaga.cargo : '—',
+    vagaCargo: vaga ? nomeCargoPorId(vaga.id_cargos) : '—',
     nome,
     email,
     curriculo: currFile ? currFile.name : null,
     dataEnvio: new Date().toLocaleString('pt-BR')
   });
 
-  // Incrementa contador da vaga
-  if (vaga) vaga.candidatos = (vaga.candidatos || 0) + 1;
-salvarCandidaturasLocal(); // ← adicionar
-salvarVagasLocal();        // ← adicionar (atualiza contador)
-  
+  // Incrementa contador da vaga (melhor esforço; candidaturas ainda fica em localStorage)
+  if (vaga) {
+    vaga.candidatos_count = (vaga.candidatos_count || 0) + 1;
+    supaClient.from('vagas').update({ candidatos_count: vaga.candidatos_count }).eq('id_vagas', vaga.id_vagas)
+      .then(({ error }) => { if (error) console.error('Erro ao atualizar contador de candidatos:', error.message); });
+  }
+  salvarCandidaturasLocal();
+
   // Feedback visual
   document.getElementById('pub-box').innerHTML = `
     <div style="text-align:center;padding:32px 0">
@@ -3918,10 +3952,10 @@ if (supaClient) {
   }
 }
 
-  carregarVagasLocal();
   carregarCandidaturasLocal();
 // Carrega os cargos do Supabase antes de qualquer página que os utilize
   await loadCargosForApp();
+  await loadVagasForApp();
 
   // Inicializa arrays vazios para as variáveis que ainda não foram migradas para o Supabase
   // Isso evita erros de "undefined" se alguma página tentar acessá-las antes de serem preenchidas
