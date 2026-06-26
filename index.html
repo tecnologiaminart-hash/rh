@@ -425,6 +425,65 @@ window._salvarStorage = function() {
   }
 };
 
+// ------------------------------------------------------------
+// PERFIL DISC (armazenado no navegador — sem tabela no Supabase)
+// ------------------------------------------------------------
+const DISC_PADRAO = {
+  executor: `1. Autoconfiante, Independente, Dominante
+2. Pró-ativo, Empreendedor, Corajoso
+3. Prático, Rápido, Eficiente
+4. Objetivo, Assertivo, Focado em Resultados
+5. Determinado, Firme, Enérgico
+6. Lutador, Combativo, Agressivo
+7. Automotivado, Pioneiro, Impulsionador
+8. Resolvedor, Destemido, Desafiador
+9. Competitivo, Assume riscos, Desbravador
+10. Direcionador, Solucionador, Audacioso`,
+  comunicador: `1. Comunicativo, Alegre, Extrovertido
+2. Participativo, Relacional, Flexível
+3. Persuasivo, Contagiante, Estimulador
+4. Preza pelo prazer, Emotivo, Divertido
+5. Criativo, Falante, Distraído
+6. Solidário, Facilitador, Influenciador
+7. Articulador, Empolgante, Motivador
+8. Vaidoso, Simpático, Gosta de ser reconhecido
+9. Entusiasmado, Impulsivo, Otimista
+10. Agregador, Sociável, Mobilidade`,
+  planejador: `1. Acolhedor, Amigável, Paciente
+2. Agradável, Tranquilo, Organizado
+3. Calmo, Rotineiro, Constante
+4. Conciliador, Conselheiro, Bom ouvinte
+5. Comedido, Amável, Mediador
+6. Autocontrolado, Conservador, Responsável
+7. Persistente, Prevenido, Tolerante
+8. Aconselhador, Harmônico, Apoiador
+9. Moderado, Equilibrado, Estável`,
+  analista: `1. Educado, Observador, Diplomático
+2. Autodisciplinado, Atento a detalhes, Diligente
+3. Criterioso, Cuidadoso, Especialista
+4. Idealizador, Perfeccionista, Uniforme
+5. Conforme, Sistemático, Sensato
+6. Preciso, Lógico, Racional
+7. Profundo, Perceptivo, Estratégico
+8. Exato, Exigente, Estruturado
+9. Ponderado, Ordenador, Analisador
+10. Teórico, Conservador, Aprofunda Conhecimentos
+11. Regulador, Técnico, Orientador`
+};
+
+function carregarPerfilDiscLocal() {
+  try {
+    const salvo = localStorage.getItem('rh_perfil_disc');
+    window._perfilDisc = salvo ? { ...DISC_PADRAO, ...JSON.parse(salvo) } : { ...DISC_PADRAO };
+  } catch(e) {
+    window._perfilDisc = { ...DISC_PADRAO };
+  }
+}
+
+function salvarPerfilDiscLocal() {
+  localStorage.setItem('rh_perfil_disc', JSON.stringify(window._perfilDisc || DISC_PADRAO));
+}
+
 async function loadCandidaturasForApp() {
   if (!supaClient) {
     console.error('Supabase client não inicializado para candidaturas.');
@@ -598,6 +657,12 @@ const NAV = [
     subs: [
       { id: 'dep-tabela', label: 'Cargos e Salários Atual' },
       { id: 'dep-descricao', label: 'Cargos e Descrição' },
+    ]
+  },
+  {
+    id: 'avaliacoes', label: 'Avaliações', icon: '◈',
+    subs: [
+      { id: 'aval-disc', label: 'Perfil DISC' },
     ]
   },
   {
@@ -1730,6 +1795,7 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
     'dep-descricao':   pageDepDescricao,
     'dep-alteracao':   pageAlteracao,
     'dep-relatorio':   pageRelatorio,
+    'aval-disc':       pagePerfilDisc,
     'ficha-perfil':    pagePerfil,
     'ficha-dados':     pageDadosPessoais,
     'ficha-ocorrencias': pageOcorrencias,
@@ -1981,7 +2047,46 @@ window.filtrarFormulariosEntrevista = function(query) {
   const pag = document.querySelector('#formulario-entrevista-pagination span');
   if (pag) pag.textContent = `${count} cargo${count !== 1 ? 's' : ''}`;
 };
-  
+
+// ------------------------------------------------------------
+// AVALIAÇÕES — PERFIL DISC
+// ------------------------------------------------------------
+function pagePerfilDisc() {
+  document.getElementById('topbar-actions').innerHTML = '';
+  if (!window._perfilDisc) carregarPerfilDiscLocal();
+
+  const colunas = [
+    { key: 'executor',    titulo: 'Executor',    cor: '#e74c3c', textColor: '#fff' },
+    { key: 'comunicador', titulo: 'Comunicador', cor: '#f1c40f', textColor: '#111' },
+    { key: 'planejador',  titulo: 'Planejador',  cor: '#27ae60', textColor: '#fff' },
+    { key: 'analista',    titulo: 'Analista',    cor: '#2980b9', textColor: '#fff' },
+  ];
+
+  return `
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
+    ${colunas.map(c => `
+      <div class="table-card" style="display:flex;flex-direction:column;overflow:hidden">
+        <div style="background:${c.cor};color:${c.textColor};padding:12px 16px;font-weight:700;font-size:14px;text-align:center">
+          ${c.titulo}
+        </div>
+        <div style="padding:16px;flex:1;display:flex;flex-direction:column;gap:12px">
+          <textarea id="disc-text-${c.key}" class="form-input" style="flex:1;min-height:340px;resize:vertical;font-size:13px;line-height:1.7;white-space:pre-wrap">${window._perfilDisc[c.key] || ''}</textarea>
+          <button class="btn btn-primary btn-sm" onclick="salvarPerfilDiscColuna('${c.key}')">💾 Salvar</button>
+        </div>
+      </div>
+    `).join('')}
+  </div>`;
+}
+
+window.salvarPerfilDiscColuna = function(key) {
+  const textarea = document.getElementById(`disc-text-${key}`);
+  if (!textarea) return;
+  if (!window._perfilDisc) window._perfilDisc = { ...DISC_PADRAO };
+  window._perfilDisc[key] = textarea.value;
+  salvarPerfilDiscLocal();
+  showToast('Perfil DISC salvo!');
+};
+
 // ------------------------------------------------------------
 // EXAMES
 // ------------------------------------------------------------
@@ -3834,6 +3939,7 @@ if (supaClient) {
   // Inicializa arrays vazios para as variáveis que ainda não foram migradas para o Supabase
   // Isso evita erros de "undefined" se alguma página tentar acessá-las antes de serem preenchidas
   carregarDescricoesLocal();
+  carregarPerfilDiscLocal();
   if (!window._cargosDescricao) window._cargosDescricao = [];
   if (!window._historicoCarreira) window._historicoCarreira = [];
   if (!window._documentosPorColab) window._documentosPorColab = {};
