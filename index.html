@@ -480,10 +480,6 @@ function carregarPerfilDiscLocal() {
   }
 }
 
-function salvarPerfilDiscLocal() {
-  localStorage.setItem('rh_perfil_disc', JSON.stringify(window._perfilDisc || DISC_PADRAO));
-}
-
 async function loadCandidaturasForApp() {
   if (!supaClient) {
     console.error('Supabase client não inicializado para candidaturas.');
@@ -2069,23 +2065,13 @@ function pagePerfilDisc() {
         <div style="background:${c.cor};color:${c.textColor};padding:12px 16px;font-weight:700;font-size:14px;text-align:center">
           ${c.titulo}
         </div>
-        <div style="padding:16px;flex:1;display:flex;flex-direction:column;gap:12px">
-          <textarea id="disc-text-${c.key}" class="form-input" style="flex:1;min-height:340px;resize:vertical;font-size:13px;line-height:1.7;white-space:pre-wrap">${window._perfilDisc[c.key] || ''}</textarea>
-          <button class="btn btn-primary btn-sm" onclick="salvarPerfilDiscColuna('${c.key}')">💾 Salvar</button>
+        <div style="padding:16px;flex:1;display:flex;flex-direction:column">
+          <textarea id="disc-text-${c.key}" class="form-input" readonly spellcheck="false" autocorrect="off" autocapitalize="off" style="flex:1;min-height:340px;resize:vertical;font-size:13px;line-height:1.7;white-space:pre-wrap;background:var(--bg2);cursor:default">${window._perfilDisc[c.key] || ''}</textarea>
         </div>
       </div>
     `).join('')}
   </div>`;
 }
-
-window.salvarPerfilDiscColuna = function(key) {
-  const textarea = document.getElementById(`disc-text-${key}`);
-  if (!textarea) return;
-  if (!window._perfilDisc) window._perfilDisc = { ...DISC_PADRAO };
-  window._perfilDisc[key] = textarea.value;
-  salvarPerfilDiscLocal();
-  showToast('Perfil DISC salvo!');
-};
 
 // ------------------------------------------------------------
 // EXAMES
