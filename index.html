@@ -2566,14 +2566,15 @@ window.verCandidato = function(idCandidatura) {
 
 window.aprovarCandidatoAvaliacao = async function(idCandidatura) {
   try {
-    const { error } = await supaClient.from('candidaturas').update({ aprovado_avaliacao: true }).eq('id_candidaturas', idCandidatura);
+    const { data, error } = await supaClient.from('candidaturas').update({ aprovado_avaliacao: true }).eq('id_candidaturas', idCandidatura).select();
     if (error) throw error;
+    if (!data || data.length === 0) throw new Error('Nenhuma linha foi atualizada (verifique a policy de UPDATE da tabela candidaturas no Supabase).');
     await loadCandidaturasForApp();
     if (window._renderCandidatos) window._renderCandidatos();
     showToast('Candidato aprovado para avaliação!');
   } catch (e) {
     console.error('Erro ao aprovar candidato para avaliação:', e);
-    showToast('Erro ao aprovar candidato. Verifique se a coluna "aprovado_avaliacao" existe na tabela candidaturas.');
+    showToast('Erro ao aprovar candidato: ' + (e.message || e));
   }
 };
 
@@ -2659,6 +2660,17 @@ function pageCandidatosAprovados() {
   Promise.all([loadVagasForApp(), loadCandidaturasForApp()]).then(renderAprovados);
 
   return `
+  <!-- Modal de detalhe do candidato -->
+  <div id="candidato-detalhe-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+      <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:15px;font-weight:700">Dados do Candidato</div>
+        <button class="btn btn-sm" onclick="document.getElementById('candidato-detalhe-modal').style.display='none'">✕ Fechar</button>
+      </div>
+      <div style="padding:24px" id="candidato-detalhe-body"></div>
+    </div>
+  </div>
+
   <div id="candidatos-aprovados-container">
     <div class="empty-state">
       <div class="empty-state-icon">📋</div>
@@ -2669,14 +2681,16 @@ function pageCandidatosAprovados() {
 
 window.removerCandidatoAvaliacao = async function(idCandidatura) {
   try {
-    const { error } = await supaClient.from('candidaturas').update({ aprovado_avaliacao: false }).eq('id_candidaturas', idCandidatura);
+    const { data, error } = await supaClient.from('candidaturas').update({ aprovado_avaliacao: false }).eq('id_candidaturas', idCandidatura).select();
     if (error) throw error;
+    if (!data || data.length === 0) throw new Error('Nenhuma linha foi atualizada (verifique a policy de UPDATE da tabela candidaturas no Supabase).');
     await loadCandidaturasForApp();
     if (window._renderCandidatosAprovados) window._renderCandidatosAprovados();
+    if (window._renderCandidatos) window._renderCandidatos();
     showToast('Candidato removido da avaliação.');
   } catch (e) {
     console.error('Erro ao remover candidato da avaliação:', e);
-    showToast('Erro ao remover candidato da avaliação.');
+    showToast('Erro ao remover candidato: ' + (e.message || e));
   }
 };
 
