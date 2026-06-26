@@ -4266,6 +4266,7 @@ window.enviarCandidatura = async function(token) {
 
   const { error } = await supaClient.from('candidaturas').insert([{
     id_vagas: vaga.id_vagas,
+    id_cargos: vaga.id_cargos,
     nome_candidato: nome,
     email_candidato: email,
     numero: numero || null,
