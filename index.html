@@ -590,6 +590,7 @@ const NAV = [
     subs: [
       { id: 'cont-candidatos', label: 'Candidatos' },
       { id: 'cont-vagas', label: 'Vagas' },
+      { id: 'cont-formulario-entrevista', label: 'Formulários para Entrevista' },
     ]
   },
   {
@@ -1733,6 +1734,7 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
     'col-historico-detalhe': pageHistoricoCarreiraDetalhe,
     'cont-candidatos': pageCandidatos,
     'cont-vagas':      pageVagas,
+    'cont-formulario-entrevista': pageFormularioEntrevista,
     'dep-tabela':      pageCargosTabela,
     'dep-historico':   pageDepHistorico,
     'dep-descricao':   pageDepDescricao,
@@ -1910,6 +1912,88 @@ window.filtrarDescricoes = function(query) {
     if (visible) count++;
   });
   const pag = document.querySelector('#descricao-pagination span');
+  if (pag) pag.textContent = `${count} cargo${count !== 1 ? 's' : ''}`;
+};
+
+// ------------------------------------------------------------
+// FORMULÁRIOS PARA ENTREVISTA (por cargo)
+// ------------------------------------------------------------
+function pageFormularioEntrevista() {
+  document.getElementById('topbar-actions').innerHTML = '';
+  loadCargosForApp();
+
+  return `
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">Formulários para Entrevista</span>
+      <input class="search-input" placeholder="Buscar cargo..." oninput="filtrarFormulariosEntrevista(this.value)" style="margin-left:12px">
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Cargo</th>
+          <th>Formulário de Entrevista</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="formulario-entrevista-tbody">
+        ${(() => {
+          const cargosArr = Array.isArray(window._cargos) ? window._cargos : (window._cargos ? Object.values(window._cargos) : []);
+          if (cargosArr.length === 0) {
+            return '<tr><td colspan="3" style="text-align:center;padding:32px;color:var(--text3)">Nenhum cargo encontrado.</td></tr>';
+          }
+          return cargosArr.map((cargo, i) => {
+            const nome = cargo[window._cargoNameField] || cargo.nome_cargo || cargo.nome || '';
+            const formulario = cargo.formulario_entrevista || '';
+            const cid = cargo[window._cargoIdField] || cargo.id || cargo.id_cargo || cargo.id_cargos || '';
+            return `<tr data-cargo-row="${i}" data-cargo-id="${cid}">
+              <td><strong>${nome}</strong></td>
+              <td><textarea id="fe-text-${i}" class="form-input" style="width:100%;min-height:80px;box-sizing:border-box">${formulario}</textarea></td>
+              <td style="white-space:nowrap">
+                <button class="action-btn" title="Salvar formulário" onclick="salvarFormularioEntrevistaLinha('${cid}', ${i})">💾</button>
+              </td>
+            </tr>`;
+          }).join('');
+        })()}
+      </tbody>
+    </table>
+    <div class="table-pagination" id="formulario-entrevista-pagination"><span>${ Array.isArray(window._cargos) ? window._cargos.length : (window._cargos ? Object.keys(window._cargos).length : 0) } cargos</span></div>
+  </div>`;
+}
+
+window.salvarFormularioEntrevistaLinha = async function(cargoId, i) {
+  const textarea = document.getElementById(`fe-text-${i}`);
+  if (!textarea) return;
+  const valor = textarea.value.trim();
+  const cargosArr = Array.isArray(window._cargos) ? window._cargos : (window._cargos ? Object.values(window._cargos) : []);
+  const cargo = cargosArr[i];
+  const cid = cargoId || (cargo ? (cargo[window._cargoIdField] || cargo.id || cargo.id_cargo || cargo.id_cargos || '') : '');
+  if (!cid) return showToast('Falha ao identificar o cargo.');
+  try {
+    const payload = { formulario_entrevista: valor };
+    const { error } = await supaClient.from('cargos').update(payload).eq(window._cargoIdField, cid);
+    if (error) throw error;
+    await loadCargosForApp();
+    textarea.value = valor;
+    showToast('Formulário de entrevista salvo no banco de dados!');
+  } catch (e) {
+    console.error('Erro ao salvar formulário de entrevista:', e);
+    showToast('Erro ao salvar formulário no banco.');
+  }
+};
+
+window.filtrarFormulariosEntrevista = function(query) {
+  const q = String(query || '').trim().toLowerCase();
+  const rows = document.querySelectorAll('#formulario-entrevista-tbody tr');
+  let count = 0;
+  rows.forEach(row => {
+    const cargo = row.querySelector('td:first-child')?.textContent?.toLowerCase() || '';
+    const texto = row.querySelector('textarea')?.value.toLowerCase() || '';
+    const visible = !q || cargo.includes(q) || texto.includes(q);
+    row.style.display = visible ? '' : 'none';
+    if (visible) count++;
+  });
+  const pag = document.querySelector('#formulario-entrevista-pagination span');
   if (pag) pag.textContent = `${count} cargo${count !== 1 ? 's' : ''}`;
 };
   
