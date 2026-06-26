@@ -610,16 +610,6 @@ const NAV = [
     ]
   },
   {
-    id: 'avaliacoes', label: 'Avaliações e Competências', icon: '◈',
-    subs: [
-      { id: 'av-competencias', label: 'Competências e Perfil DISC' },
-      { id: 'av-colaborador', label: 'Por Colaborador' },
-      { id: 'av-cronograma', label: 'Cronograma DISC' },
-      { id: 'av-20dias', label: 'Avaliação 20 Dias' },
-      { id: 'av-90dias', label: 'Avaliação 90 Dias' },
-    ]
-  },
-  {
     id: 'bonificacao', label: 'Bonificação', icon: '◇',
     subs: [
       { id: 'bon-regras', label: 'Regras de Bonificação' },
@@ -1744,11 +1734,6 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
     'ficha-dados':     pageDadosPessoais,
     'ficha-ocorrencias': pageOcorrencias,
     'ficha-relatorio': pageRelatorio,
-    'av-competencias': pageCompetencias,
-    'av-colaborador':  pageAvColaborador,
-    'av-cronograma':   pageCronograma,
-    'av-20dias':       page20dias,
-    'av-90dias':       page90dias,
     'bon-regras':      pageBonRegras,
     'bon-historico':   pageBonHistorico,
     'bon-relatorio':   pageRelatorio,
@@ -3395,65 +3380,6 @@ window.deletarOcorrencia = function(i) {
   showToast('Ocorrência removida.');
 };
 // ------------------------------------------------------------
-// COMPETÊNCIAS & DISC
-// ------------------------------------------------------------
-function pageCompetencias() {
-  return `
-  <div class="disc-container">
-    ${[['D','Dominância',72,'Foco em resultados, decisivo, direto'],['I','Influência',58,'Comunicativo, otimista, persuasivo'],['S','Estabilidade',44,'Paciente, leal, cooperativo'],['C','Cautela',85,'Analítico, preciso, sistemático']].map(([l,n,p,d])=>`
-      <div class="disc-item">
-        <div class="disc-letter disc-${l}">${l}</div>
-        <div class="disc-name">${n}</div>
-        <div class="disc-bar-wrap"><div class="disc-fill-${l}" style="width:${p}%;height:100%"></div></div>
-        <div class="disc-pct">${p}%</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:8px">${d}</div>
-      </div>`).join('')}
-  </div>
-  <div class="chart-card" style="margin-top:16px">
-    <div class="chart-title">Competências por Cargo — Analista de Sistemas</div>
-    <table><thead><tr><th>Competência</th><th>Esperado</th><th>Atual</th><th>Gap</th></tr></thead>
-    <tbody>
-      ${[['Pensamento Analítico',5,4.5,'▲ 0.5'],['Colaboração',4,3.8,'▲ 0.2'],['Comunicação Técnica',4,4.2,'✓'],['Gestão do Tempo',4,3.5,'▲ 0.5'],['Inovação',3,3.0,'✓']].map(([c,e,a,g])=>`
-        <tr><td>${c}</td><td>${e}/5</td><td style="font-weight:600">${a}/5</td>
-        <td style="color:${g.includes('✓')?'var(--success)':'var(--warning)'}">${g}</td></tr>`).join('')}
-    </tbody></table>
-  </div>`;
-}
-
-// ------------------------------------------------------------
-// AVALIAÇÃO POR COLABORADOR
-// ------------------------------------------------------------
-function pageAvColaborador() {
-  return `
-  <div class="form-card" style="margin-bottom:16px">
-    <div class="form-grid">
-      <div class="form-group"><label class="form-label">Colaborador</label>
-        <select class="form-select"><option>Carlos Souza</option><option>Ana Lima</option></select></div>
-      <div class="form-group"><label class="form-label">Período de Avaliação</label>
-        <select class="form-select"><option>1º Semestre 2024</option><option>2º Semestre 2023</option></select></div>
-    </div>
-  </div>
-  <div class="stat-row">
-    <div class="stat-box"><div class="stat-box-label">Nota Final</div><div class="stat-box-value">4.3</div></div>
-    <div class="stat-box"><div class="stat-box-label">Percentil</div><div class="stat-box-value">78°</div></div>
-    <div class="stat-box"><div class="stat-box-label">Avaliação Gestor</div><div class="stat-box-value">4.5</div></div>
-    <div class="stat-box"><div class="stat-box-label">Autoavaliação</div><div class="stat-box-value">4.0</div></div>
-  </div>
-  <div class="form-card">
-    <div class="form-section-title">Avaliação de Desempenho</div>
-    <form>
-      ${['Qualidade do Trabalho','Produtividade','Relacionamento','Iniciativa','Pontualidade','Metas Atingidas'].map(c=>`
-        <div class="form-group" style="margin-bottom:14px">
-          <label class="form-label">${c}</label>
-          <select class="form-select"><option>— Nota —</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
-        </div>`).join('')}
-      <div class="form-group"><label class="form-label">Feedback do Gestor</label><textarea class="form-textarea"></textarea></div>
-      <div class="form-footer"><button type="submit" class="btn btn-primary">Salvar Avaliação</button><button class="btn btn-print" type="button">🖨 Imprimir</button></div>
-    </form>
-  </div>`;
-}
-
-// ------------------------------------------------------------
 // CRONOGRAMA
 // ------------------------------------------------------------
 function pageCronograma() {
@@ -3478,67 +3404,6 @@ function pageCronograma() {
         <div style="position:absolute;left:${(e.mes/12)*100}%;top:${i*24+8}px;background:${e.col};color:#fff;font-size:11px;padding:3px 8px;border-radius:2px;white-space:nowrap">${e.nome}</div>`).join('')}
     </div>
     <div style="font-size:11px;color:var(--text3);margin-top:8px">* Cronograma ilustrativo — datas ajustáveis conforme admissão</div>
-  </div>`;
-}
-
-// ------------------------------------------------------------
-// AVALIAÇÃO 20 DIAS
-// ------------------------------------------------------------
-function page20dias() {
-  return `
-  <div class="form-card">
-    <div class="form-section-title">Avaliação de 20 Dias — Integração</div>
-    <form>
-      <div class="form-grid">
-        <div class="form-group"><label class="form-label">Colaborador</label><select class="form-select"><option>Pedro Augusto Silva</option></select></div>
-        <div class="form-group"><label class="form-label">Data da Admissão</label><input class="form-input" type="date" value="2024-06-01"></div>
-        <div class="form-group"><label class="form-label">Data da Avaliação</label><input class="form-input" type="date" value="2024-06-21"></div>
-        <div class="form-group"><label class="form-label">Avaliador</label><select class="form-select"><option>Gestor Imediato</option><option>RH</option></select></div>
-      </div>
-      <div class="form-section">
-        <div class="form-section-title">Adaptação e Integração</div>
-        <div class="form-grid form-grid-3">
-          ${['Integração à Equipe','Compreensão das Funções','Comprometimento','Apresentação Pessoal','Comunicação','Assiduidade'].map(c=>`
-            <div class="form-group"><label class="form-label">${c}</label>
-              <select class="form-select"><option>— Nota —</option><option>1 — Crítico</option><option>2 — Precisa Melhorar</option><option>3 — Adequado</option><option>4 — Bom</option><option>5 — Excelente</option></select>
-            </div>`).join('')}
-        </div>
-      </div>
-      <div class="form-group form-full" style="margin-bottom:16px"><label class="form-label">Observações e Plano de Ação</label><textarea class="form-textarea"></textarea></div>
-      <div class="form-group" style="margin-bottom:16px"><label class="form-label">Recomendação</label>
-        <select class="form-select"><option>Continuar — Processo normal</option><option>Atenção — Monitoramento especial</option><option>Desligamento antecipado</option></select>
-      </div>
-      <div class="form-footer"><button type="submit" class="btn btn-primary">Salvar Avaliação</button></div>
-    </form>
-  </div>`;
-}
-
-// ------------------------------------------------------------
-// AVALIAÇÃO 90 DIAS
-// ------------------------------------------------------------
-function page90dias() {
-  return `
-  <div class="form-card">
-    <div class="form-section-title">Avaliação de 90 Dias — Experiência</div>
-    <form>
-      <div class="form-grid">
-        <div class="form-group"><label class="form-label">Colaborador</label><select class="form-select"><option>Pedro Augusto Silva</option></select></div>
-        <div class="form-group"><label class="form-label">Resultado do Período de Experiência</label>
-          <select class="form-select"><option>Aprovado — Efetivado</option><option>Reprovado — Desligamento</option><option>Prorrogação 45 dias</option></select>
-        </div>
-      </div>
-      <div class="form-section">
-        <div class="form-section-title">Avaliação Técnica e Comportamental</div>
-        <div class="form-grid form-grid-3">
-          ${['Desempenho Técnico','Proatividade','Trabalho em Equipe','Foco em Resultados','Aderência à Cultura','Pontualidade/Assiduidade'].map(c=>`
-            <div class="form-group"><label class="form-label">${c}</label>
-              <select class="form-select"><option>— Nota —</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
-            </div>`).join('')}
-        </div>
-      </div>
-      <div class="form-group form-full" style="margin-bottom:16px"><label class="form-label">Feedback Geral</label><textarea class="form-textarea"></textarea></div>
-      <div class="form-footer"><button type="submit" class="btn btn-primary">Salvar Avaliação</button><button type="button" class="btn btn-print">🖨 Imprimir</button></div>
-    </form>
   </div>`;
 }
 
