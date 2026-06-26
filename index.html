@@ -7,6 +7,7 @@
 Departamentos > 
 <title>Minart Móveis - RH</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <style>
   :root {
     --bg: #ffffff;
@@ -2194,6 +2195,9 @@ window.enviarTesteDisc = function() {
 
   const perfil = `${ranking[0].rotulo} + ${ranking[1].rotulo}`;
 
+  // Guarda o resultado para o PDF de "Baixar Respostas"
+  window._discResultado = { perfil, ranking };
+
   const container = document.getElementById('disc-teste-quiz');
   if (container) {
     container.innerHTML = `
@@ -2201,10 +2205,57 @@ window.enviarTesteDisc = function() {
         <div style="font-size:40px;margin-bottom:16px">✅</div>
         <div style="font-size:18px;font-weight:700;margin-bottom:8px">Teste enviado!</div>
         <div style="font-size:14px;color:var(--text3);margin-bottom:20px">Obrigado por concluir a avaliação de Perfil DISC.</div>
-        <div style="font-size:16px;font-weight:700">Seu Perfil Disc é ${perfil}</div>
+        <div style="font-size:16px;font-weight:700;margin-bottom:20px">Seu Perfil Disc é ${perfil}</div>
+        <button class="btn btn-primary" onclick="baixarRespostasDisc()">⬇ Baixar Respostas</button>
       </div>`;
   }
   showToast('Teste DISC enviado!');
+};
+
+window.baixarRespostasDisc = function() {
+  if (!window.jspdf || !window._discMatriz || !window._discTeste || !window._discResultado) {
+    showToast('Não foi possível gerar o PDF.');
+    return;
+  }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const margemEsq = 14;
+  let y = 18;
+
+  doc.setFontSize(16);
+  doc.setFont(undefined, 'bold');
+  doc.text('Respostas — Teste de Perfil Comportamental DISC', margemEsq, y);
+  y += 10;
+
+  doc.setFontSize(11);
+  doc.setFont(undefined, 'normal');
+
+  window._discMatriz.forEach((linha, tela) => {
+    const respostasTela = window._discTeste.respostas[tela];
+    linha.forEach((item, i) => {
+      const texto = `Nº ${item.numero} (${item.rotulo}): ${item.texto} — Nota: ${respostasTela[i]}`;
+      const linhasQuebradas = doc.splitTextToSize(texto, 180);
+      if (y + linhasQuebradas.length * 6 > 280) { doc.addPage(); y = 18; }
+      doc.text(linhasQuebradas, margemEsq, y);
+      y += linhasQuebradas.length * 6;
+    });
+    y += 2;
+  });
+
+  if (y > 260) { doc.addPage(); y = 18; }
+  y += 6;
+  doc.setFont(undefined, 'bold');
+  doc.setFontSize(13);
+  doc.text(`Resultado: Seu Perfil Disc é ${window._discResultado.perfil}`, margemEsq, y);
+  y += 8;
+  doc.setFont(undefined, 'normal');
+  doc.setFontSize(11);
+  window._discResultado.ranking.forEach(r => {
+    doc.text(`${r.rotulo}: ${r.soma} pontos`, margemEsq, y);
+    y += 6;
+  });
+
+  doc.save('respostas-teste-disc.pdf');
 };
 
 window.renderDiscTeste = function() {
