@@ -2040,7 +2040,6 @@ window.filtrarFormulariosEntrevista = function(query) {
 // ------------------------------------------------------------
 function pagePerfilDisc() {
   document.getElementById('topbar-actions').innerHTML = '';
-  if (!window._perfilDisc) carregarPerfilDiscLocal();
 
   const colunas = [
     { key: 'executor',    titulo: 'Executor',    cor: '#e74c3c', textColor: '#fff' },
@@ -2057,7 +2056,7 @@ function pagePerfilDisc() {
           ${c.titulo}
         </div>
         <div style="padding:16px;flex:1;display:flex;flex-direction:column">
-          <textarea id="disc-text-${c.key}" class="form-input" readonly spellcheck="false" autocorrect="off" autocapitalize="off" style="flex:1;min-height:340px;resize:vertical;font-size:13px;line-height:1.7;white-space:pre-wrap;background:var(--bg2);cursor:default">${window._perfilDisc[c.key] || ''}</textarea>
+          <textarea id="disc-text-${c.key}" class="form-input" readonly spellcheck="false" autocorrect="off" autocapitalize="off" style="flex:1;min-height:340px;resize:vertical;font-size:13px;line-height:1.7;white-space:pre-wrap;background:var(--bg2);cursor:default">${DISC_PADRAO[c.key] || ''}</textarea>
         </div>
       </div>
     `).join('')}
