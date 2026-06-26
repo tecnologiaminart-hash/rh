@@ -583,7 +583,6 @@ const NAV = [
       { id: 'col-ferias', label: 'Férias' },
       { id: 'col-atestados', label: 'Atestados' },
       { id: 'col-exames', label: 'Exames' },
-      { id: 'col-enviar', label: 'Enviar Comunicado' },
     ]
   },
   {
@@ -591,8 +590,6 @@ const NAV = [
     subs: [
       { id: 'cont-candidatos', label: 'Candidatos' },
       { id: 'cont-vagas', label: 'Vagas' },
-      { id: 'cont-entrevista', label: 'Formulário de Entrevista' },
-      { id: 'cont-relatorio', label: 'Relatório e Impressão' },
     ]
   },
   {
@@ -607,7 +604,6 @@ const NAV = [
     subs: [
       { id: 'ficha-perfil', label: 'Perfil e Hobbies (Minart)' },
       { id: 'ficha-dados', label: 'Dados Pessoais' },
-      { id: 'ficha-contratos', label: 'Contratos e Alinhamento' },
       { id: 'ficha-ocorrencias', label: 'Ocorrências e Obs' },
       { id: 'ficha-relatorio', label: 'Relatório e Impressão' },
     ]
@@ -1735,11 +1731,8 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
     'col-exames':      pageExames,
     'col-historico':   pageHistoricoCol,
     'col-historico-detalhe': pageHistoricoCarreiraDetalhe,
-    'col-enviar':      pageEnviar,
     'cont-candidatos': pageCandidatos,
     'cont-vagas':      pageVagas,
-    'cont-entrevista': pageEntrevista,
-    'cont-relatorio':  pageRelatorio,
     'dep-tabela':      pageCargosTabela,
     'dep-historico':   pageDepHistorico,
     'dep-descricao':   pageDepDescricao,
@@ -1747,7 +1740,6 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
     'dep-relatorio':   pageRelatorio,
     'ficha-perfil':    pagePerfil,
     'ficha-dados':     pageDadosPessoais,
-    'ficha-contratos': pageContratos,
     'ficha-ocorrencias': pageOcorrencias,
     'ficha-relatorio': pageRelatorio,
     'av-competencias': pageCompetencias,
@@ -1997,48 +1989,6 @@ function pageHistoricoCol() {
     </table>
   </div>`;
 }
-// ------------------------------------------------------------
-// ENVIAR COMUNICADO
-// ------------------------------------------------------------
-function pageEnviar() {
-  return `
-  <div class="form-card">
-    <div class="form-section-title">Enviar Comunicado ao Colaborador</div>
-    <form>
-      <div class="form-grid">
-        <div class="form-group">
-          <label class="form-label">Colaborador</label>
-          <select class="form-select"><option>Todos</option><option>Carlos Souza</option><option>Ana Lima</option></select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Canal</label>
-          <select class="form-select"><option>E-mail</option><option>WhatsApp (n8n)</option><option>Ambos</option></select>
-        </div>
-        <div class="form-group form-full">
-          <label class="form-label">Assunto</label>
-          <input class="form-input" placeholder="Assunto do comunicado">
-        </div>
-        <div class="form-group form-full">
-          <label class="form-label">Mensagem</label>
-          <textarea class="form-textarea" style="min-height:140px" placeholder="Digite a mensagem..."></textarea>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Anexo</label>
-          <input class="form-input" type="file">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Agendar Envio</label>
-          <input class="form-input" type="datetime-local">
-        </div>
-      </div>
-      <div class="form-footer">
-        <button type="submit" class="btn btn-primary">📤 Enviar Comunicado</button>
-        <button type="button" class="btn" data-toast="Salvo como rascunho">Salvar Rascunho</button>
-      </div>
-    </form>
-  </div>`;
-}
-
 // ------------------------------------------------------------
 // CANDIDATOS
 // ------------------------------------------------------------
@@ -2386,58 +2336,6 @@ window.salvarVaga = async function() {
   document.getElementById('vagas-pagination').innerHTML =
     `<span>${window._vagas.length} vagas</span>`;
 };
-
-// ------------------------------------------------------------
-// FORMULÁRIO DE ENTREVISTA
-// ------------------------------------------------------------
-function pageEntrevista() {
-  return `
-  <div class="form-card">
-    <div class="form-section-title">Formulário de Entrevista</div>
-    <form>
-      <div class="form-grid">
-        <div class="form-group">
-          <label class="form-label">Candidato</label>
-          <select class="form-select"><option>Rafael Mendes</option><option>Fernanda Oliveira</option></select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Entrevistador</label>
-          <select class="form-select"><option>Ana Lima — RH</option><option>Carlos Souza — TI</option></select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Data da Entrevista</label>
-          <input class="form-input" type="date">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Vaga</label>
-          <input class="form-input" value="Dev Backend" readonly>
-        </div>
-      </div>
-      <div class="form-section">
-        <div class="form-section-title">Avaliação Técnica</div>
-        <div class="form-grid form-grid-3">
-          ${['Conhecimento Técnico','Resolução de Problemas','Comunicação','Trabalho em Equipe','Proatividade','Cultura Organizacional'].map(c=>`
-            <div class="form-group">
-              <label class="form-label">${c}</label>
-              <select class="form-select"><option>— Nota —</option><option>1 — Insuficiente</option><option>2 — Regular</option><option>3 — Bom</option><option>4 — Ótimo</option><option>5 — Excelente</option></select>
-            </div>`).join('')}
-        </div>
-      </div>
-      <div class="form-group form-full" style="margin-bottom:16px">
-        <label class="form-label">Observações</label>
-        <textarea class="form-textarea" style="min-height:100px" placeholder="Pontos fortes, fracos, impressões..."></textarea>
-      </div>
-      <div class="form-group" style="margin-bottom:16px">
-        <label class="form-label">Decisão</label>
-        <select class="form-select"><option>— Selecionar —</option><option>Aprovado para próxima fase</option><option>Aprovado — Contratar</option><option>Reprovado</option><option>Em avaliação</option></select>
-      </div>
-      <div class="form-footer">
-        <button type="submit" class="btn btn-primary">Salvar Avaliação</button>
-        <button type="button" class="btn btn-print">🖨 Imprimir</button>
-      </div>
-    </form>
-  </div>`;
-}
 
 // ------------------------------------------------------------
 // CADASTRAR CARGOS
@@ -3252,127 +3150,6 @@ function pageTreinamentosCol() {
 }
 
 // ------------------------------------------------------------
-// CONTRATOS E ALINHAMENTO
-// ------------------------------------------------------------
-function pageContratos() {
-  const emp = window._statusEmployees || [];
-  if (!window._contratosPorColab) window._contratosPorColab = {};
-
-  return `
-  <div class="form-card" style="margin-bottom:16px">
-    <div class="form-group">
-      <label class="form-label">Selecionar Colaborador</label>
-      <select class="form-select" id="contratos-select" onchange="carregarContratos(this.value)">
-        <option value="">— Selecione um colaborador —</option>
-        ${emp.map((e,i) => `<option value="${i}">${e[0]}</option>`).join('')}
-      </select>
-    </div>
-  </div>
-  <div id="contratos-wrap" style="display:none">
-    <div class="table-card" style="margin-bottom:16px">
-      <div class="table-header">
-        <span class="table-title" id="contratos-title">Contratos</span>
-        <div class="table-actions">
-          <button class="btn btn-primary btn-sm" onclick="openAnexoContrato()">+ Anexar Arquivo</button>
-        </div>
-      </div>
-      <table>
-        <thead><tr><th>Documento</th><th>Tipo</th><th>Arquivo</th><th>Data</th><th>Ações</th></tr></thead>
-        <tbody id="contratos-tbody"></tbody>
-      </table>
-    </div>
-    <div id="anexo-contrato-form" style="display:none" class="form-card">
-      <div class="form-section-title">Anexar Documento</div>
-      <div class="form-grid">
-        <div class="form-group">
-          <label class="form-label">Nome do Documento</label>
-          <input class="form-input" id="ct-nome" placeholder="Ex: Contrato CLT">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Tipo</label>
-          <select class="form-select" id="ct-tipo">
-            <option value="Contrato">Contrato</option>
-            <option value="NDA">NDA</option>
-            <option value="Política">Política</option>
-            <option value="Alinhamento">Alinhamento</option>
-            <option value="Outro">Outro</option>
-          </select>
-        </div>
-        <div class="form-group form-full">
-          <label class="form-label">Arquivo</label>
-          <input class="form-input" type="file" id="ct-arquivo" accept=".pdf,.doc,.docx,.jpg,.png">
-        </div>
-      </div>
-      <div class="form-footer">
-        <button class="btn" onclick="document.getElementById('anexo-contrato-form').style.display='none'">Cancelar</button>
-        <button class="btn btn-primary" onclick="salvarAnexoContrato()">Salvar</button>
-      </div>
-    </div>
-  </div>`;
-}
-
-window.carregarContratos = function(idx) {
-  const wrap = document.getElementById('contratos-wrap');
-  if (idx === '') { wrap.style.display = 'none'; return; }
-  const emp = window._statusEmployees[parseInt(idx)];
-  document.getElementById('contratos-title').textContent = `Contratos — ${emp[0]}`;
-  wrap.style.display = '';
-  renderContratosTabela(idx);
-};
-
-window.renderContratosTabela = function(idx) {
-  idx = idx || document.getElementById('contratos-select').value;
-  const docs = window._contratosPorColab[idx] || [];
-  const tbody = document.getElementById('contratos-tbody');
-  tbody.innerHTML = docs.length === 0
-    ? '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum documento anexado</td></tr>'
-    : docs.map((d,i) => `
-        <tr>
-          <td>${d.nome}</td>
-          <td><span class="badge badge-gray">${d.tipo}</span></td>
-          <td style="font-size:12px">${d.arquivo}</td>
-          <td style="font-size:12px;color:var(--text3)">${d.data}</td>
-          <td>
-            <button class="action-btn" onclick="showToast('Download: ${d.arquivo}')">⬇</button>
-            <button class="action-btn" style="color:var(--danger)" onclick="deletarContrato(${i})">✕</button>
-          </td>
-        </tr>`).join('');
-};
-
-window.openAnexoContrato = function() {
-  document.getElementById('ct-nome').value = '';
-  document.getElementById('ct-tipo').value = 'Contrato';
-  document.getElementById('ct-arquivo').value = '';
-  document.getElementById('anexo-contrato-form').style.display = '';
-};
-
-window.salvarAnexoContrato = function() {
-  const idx    = document.getElementById('contratos-select').value;
-  const nome   = document.getElementById('ct-nome').value.trim();
-  const tipo   = document.getElementById('ct-tipo').value;
-  const arq    = document.getElementById('ct-arquivo').files[0];
-  if (!nome) return showToast('Informe o nome do documento.');
-  if (!arq)  return showToast('Selecione um arquivo.');
-  if (!window._contratosPorColab[idx]) window._contratosPorColab[idx] = [];
-  window._contratosPorColab[idx].push({
-    nome, tipo,
-    arquivo: arq.name,
-    data: new Date().toLocaleDateString('pt-BR')
-  });
-  document.getElementById('anexo-contrato-form').style.display = 'none';
-  showToast('Documento anexado!');
-  renderContratosTabela(idx);
-};
-
-window.deletarContrato = function(i) {
-  const idx = document.getElementById('contratos-select').value;
-  if (!confirm('Excluir este documento?')) return;
-  window._contratosPorColab[idx].splice(i, 1);
-  renderContratosTabela(idx);
-  showToast('Documento removido.');
-};
-
-// ------------------------------------------------------------
 // OCORRÊNCIAS
 // ------------------------------------------------------------
 function pageOcorrencias() {
@@ -4113,7 +3890,6 @@ if (supaClient) {
   if (!window._documentosPorColab) window._documentosPorColab = {};
   if (!window._perfisPorColab) window._perfisPorColab = {};
   if (!window._dadosPessoais) window._dadosPessoais = {};
-  if (!window._contratosPorColab) window._contratosPorColab = {};
   if (!window._ocorrencias) window._ocorrencias = [];
   if (!window._vagas) window._vagas = [];
   if (!window._candidaturas) window._candidaturas = []; // Já existe, mas bom reforçar
