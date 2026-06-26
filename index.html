@@ -2039,7 +2039,8 @@ window.filtrarFormulariosEntrevista = function(query) {
 // AVALIAÇÕES — PERFIL DISC
 // ------------------------------------------------------------
 function pagePerfilDisc() {
-  document.getElementById('topbar-actions').innerHTML = '';
+  document.getElementById('topbar-actions').innerHTML =
+    `<button class="btn btn-primary" onclick="toggleDispatoTesteDisc()">+ Disparo Teste disk exemplo</button>`;
 
   const colunas = [
     { key: 'executor',    titulo: 'Executor',    cor: '#e74c3c', textColor: '#fff' },
@@ -2049,6 +2050,24 @@ function pagePerfilDisc() {
   ];
 
   return `
+  <div id="disc-teste-intro" class="form-card" style="display:none;margin-bottom:16px">
+    <div style="font-size:18px;font-weight:700;margin-bottom:12px">Teste de Perfil Comportamental DISC</div>
+    <p style="margin-bottom:12px">Seja bem-vindo à sua avaliação de perfil.</p>
+    <p style="margin-bottom:16px">Este questionário ajudará a identificar suas principais características e tendências comportamentais. Não existem respostas certas ou erradas; o importante é ser o mais sincero possível com quem você é hoje.</p>
+    <div style="background:#fff8e1;border:1px solid #f1c40f;border-radius:6px;padding:16px 20px;margin-bottom:16px">
+      <div style="font-weight:700;margin-bottom:10px">⚠️ Como preencher (Leia com atenção):</div>
+      <p style="margin-bottom:10px">O teste é composto por 10 linhas, e cada linha possui 4 blocos de palavras. Para cada linha, você deve distribuir as notas de 1 a 4, usando cada número apenas uma vez por linha:</p>
+      <ul style="margin:0 0 10px 18px;padding:0">
+        <li><strong>4</strong> = O bloco de palavras que <strong>MAIS</strong> tem a ver com você.</li>
+        <li><strong>3</strong> = O segundo que mais tem a ver com você.</li>
+        <li><strong>2</strong> = O terceiro que mais tem a ver com você.</li>
+        <li><strong>1</strong> = O bloco que <strong>MENOS</strong> tem a ver com você.</li>
+      </ul>
+      <p style="margin:0"><strong>Regra de ouro:</strong> O sistema não permitirá repetir a mesma nota na mesma linha. Distribua os pesos (1, 2, 3 e 4) comparando os 4 blocos antes de passar para a próxima linha.</p>
+    </div>
+    <button class="btn btn-primary" onclick="iniciarTesteDisc()">+ Iniciar Teste</button>
+  </div>
+
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
     ${colunas.map(c => `
       <div class="table-card" style="display:flex;flex-direction:column;overflow:hidden">
@@ -2062,6 +2081,18 @@ function pagePerfilDisc() {
     `).join('')}
   </div>`;
 }
+
+window.toggleDispatoTesteDisc = function() {
+  const intro = document.getElementById('disc-teste-intro');
+  if (!intro) return;
+  const visivel = intro.style.display !== 'none';
+  intro.style.display = visivel ? 'none' : '';
+  if (!visivel) intro.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
+window.iniciarTesteDisc = function() {
+  showToast('Em breve: início do teste DISC.');
+};
 
 // ------------------------------------------------------------
 // EXAMES
