@@ -494,6 +494,11 @@ async function loadCandidaturasForApp() {
   }
 }
 
+function candidatoAprovado(c) {
+  const v = c.aprovado_avaliacao;
+  return v === true || v === 't' || v === 1 || v === '1' || v === 'true';
+}
+
 function saveConfig() {
   const sbUrlEl = document.getElementById('sb-url');
   const sbKeyEl = document.getElementById('sb-key');
@@ -2497,7 +2502,7 @@ function pageCandidatos() {
                   <td style="color:var(--text3);font-size:12px">${c.data_envio_candidatura ? new Date(c.data_envio_candidatura).toLocaleDateString('pt-BR') : '—'}</td>
                   <td style="white-space:nowrap">
                     <button class="action-btn" onclick="verCandidato(${c.id_candidaturas})" title="Ver dados completos">👁</button>
-                    ${c.aprovado_avaliacao
+                    ${candidatoAprovado(c)
                       ? `<span class="badge badge-active" style="margin-left:4px">Aprovado</span>`
                       : `<button class="action-btn" title="Aprovar para Avaliação" onclick="aprovarCandidatoAvaliacao(${c.id_candidaturas})">✔ Aprovar</button>`}
                   </td>
@@ -2592,7 +2597,7 @@ function pageCandidatosAprovados() {
     if (!container) return;
 
     const grupos = window._vagas.map((v) => {
-      const cands = window._candidaturas.filter(c => c.id_vagas === v.id_vagas && c.aprovado_avaliacao);
+      const cands = window._candidaturas.filter(c => c.id_vagas === v.id_vagas && candidatoAprovado(c));
       return { vaga: v, cands };
     }).filter(g => g.cands.length > 0);
 
