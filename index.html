@@ -457,28 +457,19 @@ const DISC_PADRAO = {
 6. Autocontrolado, Conservador, Responsável
 7. Persistente, Prevenido, Tolerante
 8. Aconselhador, Harmônico, Apoiador
-9. Moderado, Equilibrado, Estável`,
-  analista: `1. Educado, Observador, Diplomático
-2. Autodisciplinado, Atento a detalhes, Diligente
-3. Criterioso, Cuidadoso, Especialista
-4. Idealizador, Perfeccionista, Uniforme
-5. Conforme, Sistemático, Sensato
-6. Preciso, Lógico, Racional
-7. Profundo, Perceptivo, Estratégico
-8. Exato, Exigente, Estruturado
-9. Ponderado, Ordenador, Analisador
-10. Teórico, Conservador, Aprofunda Conhecimentos
-11. Regulador, Técnico, Orientador`
+9. Moderado, Equilibrado, Estável
+10. Educado, Observador, Diplomático`,
+  analista: `1. Autodisciplinado, Atento a detalhes, Diligente
+2. Criterioso, Cuidadoso, Especialista
+3. Idealizador, Perfeccionista, Uniforme
+4. Conforme, Sistemático, Sensato
+5. Preciso, Lógico, Racional
+6. Profundo, Perceptivo, Estratégico
+7. Exato, Exigente, Estruturado
+8. Ponderado, Ordenador, Analisador
+9. Teórico, Conservador, Aprofunda Conhecimentos
+10. Regulador, Técnico, Orientador`
 };
-
-function carregarPerfilDiscLocal() {
-  try {
-    const salvo = localStorage.getItem('rh_perfil_disc');
-    window._perfilDisc = salvo ? { ...DISC_PADRAO, ...JSON.parse(salvo) } : { ...DISC_PADRAO };
-  } catch(e) {
-    window._perfilDisc = { ...DISC_PADRAO };
-  }
-}
 
 async function loadCandidaturasForApp() {
   if (!supaClient) {
@@ -3925,7 +3916,6 @@ if (supaClient) {
   // Inicializa arrays vazios para as variáveis que ainda não foram migradas para o Supabase
   // Isso evita erros de "undefined" se alguma página tentar acessá-las antes de serem preenchidas
   carregarDescricoesLocal();
-  carregarPerfilDiscLocal();
   if (!window._cargosDescricao) window._cargosDescricao = [];
   if (!window._historicoCarreira) window._historicoCarreira = [];
   if (!window._documentosPorColab) window._documentosPorColab = {};
