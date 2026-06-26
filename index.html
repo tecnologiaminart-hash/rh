@@ -2043,7 +2043,8 @@ window.filtrarFormulariosEntrevista = function(query) {
 // ------------------------------------------------------------
 function pagePerfilDisc() {
   document.getElementById('topbar-actions').innerHTML =
-    `<button class="btn btn-primary" onclick="toggleDispatoTesteDisc()">+ Disparo Teste disk exemplo</button>`;
+    `<button class="btn btn-primary" onclick="toggleDispatoTesteDisc()">+ Disparo Teste Disc
+       </button>`;
 
   const colunas = [
     { key: 'executor',    titulo: 'Executor',    cor: '#e74c3c', textColor: '#fff' },
@@ -2066,7 +2067,7 @@ function pagePerfilDisc() {
         <li><strong>2</strong> = O terceiro que mais tem a ver com você.</li>
         <li><strong>1</strong> = O bloco que <strong>MENOS</strong> tem a ver com você.</li>
       </ul>
-      <p style="margin:0"><strong>Regra de ouro:</strong> O sistema não permitirá repetir a mesma nota na mesma linha. Distribua os pesos (1, 2, 3 e 4) comparando os 4 blocos antes de passar para a próxima linha.</p>
+      <p style="margin:0"><strong>Regra de ouro:</strong> O sistema não permitirá repetir a mesma nota entre as 4 linhas. Distribua os pesos (1, 2, 3 e 4) comparando os 4 blocos antes de passar para a próximo bloco.</p>
     </div>
     <button class="btn btn-primary" onclick="iniciarTesteDisc()">+ Iniciar Teste</button>
   </div>
@@ -2089,10 +2090,11 @@ function pagePerfilDisc() {
 
 window.toggleDispatoTesteDisc = function() {
   const intro = document.getElementById('disc-teste-intro');
+  const colunasView = document.getElementById('disc-colunas-view');
   if (!intro) return;
-  const visivel = intro.style.display !== 'none';
-  intro.style.display = visivel ? 'none' : '';
-  if (!visivel) intro.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (colunasView) colunasView.style.display = 'none';
+  intro.style.display = '';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
 // Quebra o texto numerado de uma coluna do Perfil DISC em um array de frases (sem o "N. " na frente)
