@@ -654,6 +654,7 @@ const NAV = [
     subs: [
       { id: 'aval-disc', label: 'Perfil DISC' },
       { id: 'cont-formulario-entrevista', label: 'Formulários para Entrevista' },
+      { id: 'aval-perguntas-competencias', label: 'Perguntas por Competências' },
     ]
   },
   {
@@ -1787,6 +1788,7 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
     'dep-alteracao':   pageAlteracao,
     'dep-relatorio':   pageRelatorio,
     'aval-disc':       pagePerfilDisc,
+    'aval-perguntas-competencias': pagePerguntasCompetencias,
     'ficha-perfil':    pagePerfil,
     'ficha-dados':     pageDadosPessoais,
     'ficha-ocorrencias': pageOcorrencias,
@@ -2288,6 +2290,62 @@ window.renderDiscTeste = function() {
           : `<button class="btn btn-primary" onclick="enviarTesteDisc()">Enviar Teste</button>`}
       </div>
     </div>`;
+};
+
+// ------------------------------------------------------------
+// AVALIAÇÕES — PERGUNTAS POR COMPETÊNCIAS
+// ------------------------------------------------------------
+const PERGUNTAS_COMPETENCIAS = [
+  { competencia: 'Administração do tempo', conceito: 'Capacidade de empregar o tempo necessário para cada atividade sem desperdício', perguntas: '1. Já foi solicitado, pela empresa onde você já trabalhou, tarefas a serem executadas com prazo apertado estipulado? (Se sim) Como fez para cumprir esse prazo apertado para entregar as tarefas solicitadas a você? 2. Alguma vez já entregou tarefas fora do prazo? Me conta uma situação.' },
+  { competencia: 'Agilidade', conceito: 'Capacidade de otimizar as atribuições para cumprir metas de produtividade.', perguntas: '3. Conte sobre uma experiência sobre uma exigência que desafiou sua agilidade, e que por mais agil que tenha sido, não conseguiu evitar uma adversidade (ou seja, atraso na entrega do trabalho ou tarefa solicitada)' },
+  { competencia: 'Aplicação', conceito: 'Capacidade de aplicar aquilo que sabe, executa e realizar.', perguntas: '4. Dos principais curso que já fez, qual mais aplicou por onde já trabalhou? 2. Você considera que aplica os conhecimentos que possui? Me dá um exemplo.' },
+  { competencia: 'Atenção 1', conceito: 'Capacidade de concentrar atenção para evitar erros e defeitos', perguntas: '5. Conte quais as atribuições que exigiam mais atenção e como você administrou isso.' },
+  { competencia: 'Clareza', conceito: 'Capacidade de se comunicar claramente, de forma que o ouvinte compreenda com facilidade.', perguntas: '6.Conte sobre alguma situação em que tenha tido dificuldade para se fazer entender pelo cliente. 2. Conte sobre alguma vez em que teve de escrever o mesmo e-mail várias vezes para se fazer entender pelo cliente que o recebeu.' },
+  { competencia: 'Comportamento Ético', conceito: 'Capacidade de agir com integridade e transparência, priorizando a honestidade e a verdade nas interações pessoais e profissionais.', perguntas: '7.Relate alguma situação embaraçosa na qual precisou contestar alguém que faltava com a verdade.' },
+  { competencia: 'Comprometimento', conceito: 'Capacidade de desenvolver alto grau de compromisso com os resultados, de forma a tomar todas as providências necessárias para atingir o objetivo.', perguntas: '8.Você se considera uma pessoa comprometida? 9.Já houve uma situação que você até queria, mas não conseguiu se comprometer com uma meta específica ou tarefa? O que fez sobre isso (pediu mais um prazo ou procurou imediatamente formas de concluir e chegar a meta?' },
+  { competencia: 'Humildade', conceito: 'Capacidade de admitir e assumir os próprios erros e desculpar-se quando percebe que, de alguma forma, ofendeu alguém.', perguntas: '10.Conte alguma situação em que teve de admitir que estava errado e como foi. 2.Já houve alguma situação em que teve de pedir desculpas a alguém por um erro cometido? Como foi? Qual sensação você sentiu?' },
+  { competencia: 'Discrição', conceito: 'Capacidade de apresentar atitudes comedidas, sem se expor de forma negativa diante do ambiente profissional, preservando uma imagem positiva de si mesmo.', perguntas: '11. Você se considera uma pessoa discreta. 12. Você já trabalhou em um cargo de confiança em que tinha que manter sigilo sobre assuntos ligadas as funções que desempenhava?' },
+];
+
+function pagePerguntasCompetencias() {
+  document.getElementById('topbar-actions').innerHTML = '';
+  return `
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">Perguntas por Competências</span>
+      <input class="search-input" placeholder="Buscar competência..." oninput="filtrarPerguntasCompetencias(this.value)" style="margin-left:12px">
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Competência</th>
+          <th>Conceito</th>
+          <th>Perguntas comportamentais</th>
+        </tr>
+      </thead>
+      <tbody id="perguntas-competencias-tbody">
+        ${PERGUNTAS_COMPETENCIAS.map(item => `<tr>
+          <td><strong>${item.competencia}</strong></td>
+          <td>${item.conceito}</td>
+          <td>${item.perguntas}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    <div class="table-pagination" id="perguntas-competencias-pagination"><span>${PERGUNTAS_COMPETENCIAS.length} competências</span></div>
+  </div>`;
+}
+
+window.filtrarPerguntasCompetencias = function(query) {
+  const q = String(query || '').trim().toLowerCase();
+  const rows = document.querySelectorAll('#perguntas-competencias-tbody tr');
+  let count = 0;
+  rows.forEach(row => {
+    const visible = !q || row.textContent.toLowerCase().includes(q);
+    row.style.display = visible ? '' : 'none';
+    if (visible) count++;
+  });
+  const pag = document.querySelector('#perguntas-competencias-pagination span');
+  if (pag) pag.textContent = `${count} competência${count !== 1 ? 's' : ''}`;
 };
 
 // ------------------------------------------------------------
