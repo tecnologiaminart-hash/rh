@@ -2177,13 +2177,29 @@ window.voltarDiscTeste = function() {
 
 window.enviarTesteDisc = function() {
   if (!validarTelaDiscAtual()) return;
+
+  // Soma as notas por tipo: bloco 0=Executor (linhas 1–10), 1=Comunicador (11–20),
+  // 2=Planejador (21–30), 3=Analista (31–40) — mesma ordem usada em gerarMatrizDisc()
+  const rotulos = ['Executor', 'Comunicador', 'Planejador', 'Analista'];
+  const somas = [0, 0, 0, 0];
+  window._discTeste.respostas.forEach(respostasTela => {
+    respostasTela.forEach((nota, i) => { somas[i] += (nota || 0); });
+  });
+
+  const ranking = rotulos
+    .map((rotulo, i) => ({ rotulo, soma: somas[i] }))
+    .sort((a, b) => b.soma - a.soma);
+
+  const perfil = `${ranking[0].rotulo} + ${ranking[1].rotulo}`;
+
   const container = document.getElementById('disc-teste-quiz');
   if (container) {
     container.innerHTML = `
       <div class="form-card" style="text-align:center;padding:48px 24px">
         <div style="font-size:40px;margin-bottom:16px">✅</div>
         <div style="font-size:18px;font-weight:700;margin-bottom:8px">Teste enviado!</div>
-        <div style="font-size:14px;color:var(--text3)">Obrigado por concluir a avaliação de Perfil DISC.</div>
+        <div style="font-size:14px;color:var(--text3);margin-bottom:20px">Obrigado por concluir a avaliação de Perfil DISC.</div>
+        <div style="font-size:16px;font-weight:700">Seu Perfil Disc é ${perfil}</div>
       </div>`;
   }
   showToast('Teste DISC enviado!');
