@@ -2068,7 +2068,9 @@ function pagePerfilDisc() {
     <button class="btn btn-primary" onclick="iniciarTesteDisc()">+ Iniciar Teste</button>
   </div>
 
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
+  <div id="disc-teste-quiz" style="display:none;margin-bottom:16px"></div>
+
+  <div id="disc-colunas-view" style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
     ${colunas.map(c => `
       <div class="table-card" style="display:flex;flex-direction:column;overflow:hidden">
         <div style="background:${c.cor};color:${c.textColor};padding:12px 16px;font-weight:700;font-size:14px;text-align:center">
@@ -2090,8 +2092,131 @@ window.toggleDispatoTesteDisc = function() {
   if (!visivel) intro.scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
 
+// Quebra o texto numerado de uma coluna do Perfil DISC em um array de frases (sem o "N. " na frente)
+function discLinhasPorCor(texto) {
+  return String(texto || '').split('\n').map(l => l.replace(/^\s*\d+\.\s*/, '').trim()).filter(Boolean);
+}
+
+// Monta as 10 exibições (linhas) do teste, cada uma com os 4 blocos (um de cada cor) e
+// o número original da frase (1–10 Executor, 11–20 Comunicador, 21–30 Planejador, 31–40 Analista)
+function gerarMatrizDisc() {
+  const cores = [
+    { cor: 'executor',    base: 0,  rotulo: 'Executor',    bg: '#e74c3c', fg: '#fff', linhas: discLinhasPorCor(DISC_PADRAO.executor) },
+    { cor: 'comunicador', base: 10, rotulo: 'Comunicador', bg: '#f1c40f', fg: '#111', linhas: discLinhasPorCor(DISC_PADRAO.comunicador) },
+    { cor: 'planejador',  base: 20, rotulo: 'Planejador',  bg: '#27ae60', fg: '#fff', linhas: discLinhasPorCor(DISC_PADRAO.planejador) },
+    { cor: 'analista',    base: 30, rotulo: 'Analista',    bg: '#2980b9', fg: '#fff', linhas: discLinhasPorCor(DISC_PADRAO.analista) },
+  ];
+  const matriz = [];
+  for (let i = 0; i < 10; i++) {
+    matriz.push(cores.map(c => ({
+      cor: c.cor,
+      rotulo: c.rotulo,
+      bg: c.bg,
+      fg: c.fg,
+      numero: c.base + i + 1,
+      texto: c.linhas[i] || ''
+    })));
+  }
+  return matriz;
+}
+
 window.iniciarTesteDisc = function() {
-  showToast('Em breve: início do teste DISC.');
+  window._discMatriz = gerarMatrizDisc();
+  window._discTeste = { tela: 0, respostas: Array.from({ length: 10 }, () => [null, null, null, null]) };
+
+  const intro = document.getElementById('disc-teste-intro');
+  const colunasView = document.getElementById('disc-colunas-view');
+  const quiz = document.getElementById('disc-teste-quiz');
+  if (intro) intro.style.display = 'none';
+  if (colunasView) colunasView.style.display = 'none';
+  if (quiz) quiz.style.display = '';
+  window.renderDiscTeste();
+};
+
+function validarTelaDiscAtual() {
+  const st = window._discTeste;
+  const respostas = st.respostas[st.tela];
+  const avisoEl = document.getElementById('disc-teste-aviso');
+  if (respostas.some(v => v === null)) {
+    if (avisoEl) { avisoEl.textContent = 'Preencha as 4 notas antes de continuar.'; avisoEl.style.display = ''; }
+    return false;
+  }
+  if (new Set(respostas).size !== 4) {
+    if (avisoEl) { avisoEl.textContent = 'Repetição de números não é permitido'; avisoEl.style.display = ''; }
+    return false;
+  }
+  if (avisoEl) avisoEl.style.display = 'none';
+  return true;
+}
+
+window.selecionarNotaDisc = function(blocoIdx, nota) {
+  const st = window._discTeste;
+  st.respostas[st.tela][blocoIdx] = nota;
+  window.renderDiscTeste();
+};
+
+window.avancarDiscTeste = function() {
+  if (!validarTelaDiscAtual()) return;
+  if (window._discTeste.tela < 9) {
+    window._discTeste.tela++;
+    window.renderDiscTeste();
+  }
+};
+
+window.voltarDiscTeste = function() {
+  const avisoEl = document.getElementById('disc-teste-aviso');
+  if (avisoEl) avisoEl.style.display = 'none';
+  if (window._discTeste.tela > 0) {
+    window._discTeste.tela--;
+    window.renderDiscTeste();
+  }
+};
+
+window.enviarTesteDisc = function() {
+  if (!validarTelaDiscAtual()) return;
+  const container = document.getElementById('disc-teste-quiz');
+  if (container) {
+    container.innerHTML = `
+      <div class="form-card" style="text-align:center;padding:48px 24px">
+        <div style="font-size:40px;margin-bottom:16px">✅</div>
+        <div style="font-size:18px;font-weight:700;margin-bottom:8px">Teste enviado!</div>
+        <div style="font-size:14px;color:var(--text3)">Obrigado por concluir a avaliação de Perfil DISC.</div>
+      </div>`;
+  }
+  showToast('Teste DISC enviado!');
+};
+
+window.renderDiscTeste = function() {
+  const container = document.getElementById('disc-teste-quiz');
+  if (!container) return;
+  const st = window._discTeste;
+  const linha = window._discMatriz[st.tela];
+  const respostasTela = st.respostas[st.tela];
+
+  const blocoHtml = linha.map((item, i) => `
+    <div class="table-card" style="display:flex;align-items:center;gap:16px;padding:14px 18px;margin-bottom:10px">
+      <div style="background:${item.bg};color:${item.fg};font-weight:700;font-size:13px;border-radius:4px;padding:8px 10px;min-width:42px;text-align:center;flex-shrink:0">Nº ${item.numero}</div>
+      <div style="flex:1;font-size:14px">${item.texto}</div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        ${[1, 2, 3, 4].map(n => `
+          <button type="button" onclick="selecionarNotaDisc(${i}, ${n})"
+            style="width:36px;height:36px;border-radius:4px;border:1px solid var(--border);font-weight:700;font-size:14px;cursor:pointer;background:${respostasTela[i] === n ? '#111' : '#fff'};color:${respostasTela[i] === n ? '#fff' : '#111'}">${n}</button>`).join('')}
+      </div>
+    </div>`).join('');
+
+  container.innerHTML = `
+    <div class="form-card">
+      <div style="font-size:16px;font-weight:700;margin-bottom:4px">Exibição ${st.tela + 1} de 10</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:16px">Atribua as notas de 1 a 4 sem repetir entre os 4 blocos abaixo.</div>
+      ${blocoHtml}
+      <div id="disc-teste-aviso" style="display:none;color:var(--danger);font-size:13px;font-weight:600;margin:12px 0"></div>
+      <div style="display:flex;justify-content:space-between;margin-top:16px">
+        <button class="btn" onclick="voltarDiscTeste()" ${st.tela === 0 ? 'disabled style="opacity:.4;cursor:not-allowed"' : ''}>← Voltar</button>
+        ${st.tela < 9
+          ? `<button class="btn btn-primary" onclick="avancarDiscTeste()">Próxima Exibição →</button>`
+          : `<button class="btn btn-primary" onclick="enviarTesteDisc()">Enviar Teste</button>`}
+      </div>
+    </div>`;
 };
 
 // ------------------------------------------------------------
