@@ -640,6 +640,7 @@ const NAV = [
     subs: [
       { id: 'cont-candidatos', label: 'Candidatos' },
       { id: 'cont-vagas', label: 'Vagas' },
+      { id: 'cont-candidatos-aprovados', label: 'Candidatos para Avaliação' },
     ]
   },
   {
@@ -1781,6 +1782,7 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
     'col-historico-detalhe': pageHistoricoCarreiraDetalhe,
     'cont-candidatos': pageCandidatos,
     'cont-vagas':      pageVagas,
+    'cont-candidatos-aprovados': pageCandidatosAprovados,
     'cont-formulario-entrevista': pageFormularioEntrevista,
     'dep-tabela':      pageCargosTabela,
     'dep-historico':   pageDepHistorico,
@@ -2493,8 +2495,11 @@ function pageCandidatos() {
                       : `<span class="badge badge-gray">Não enviado</span>`}
                   </td>
                   <td style="color:var(--text3);font-size:12px">${c.data_envio_candidatura ? new Date(c.data_envio_candidatura).toLocaleDateString('pt-BR') : '—'}</td>
-                  <td>
+                  <td style="white-space:nowrap">
                     <button class="action-btn" onclick="verCandidato(${c.id_candidaturas})" title="Ver dados completos">👁</button>
+                    ${c.aprovado_avaliacao
+                      ? `<span class="badge badge-active" style="margin-left:4px">Aprovado</span>`
+                      : `<button class="action-btn" title="Aprovar para Avaliação" onclick="aprovarCandidatoAvaliacao(${c.id_candidaturas})">✔ Aprovar</button>`}
                   </td>
                 </tr>`).join('')}
             </tbody>
@@ -2557,6 +2562,122 @@ window.verCandidato = function(idCandidatura) {
       </div></div>
     </div>`;
   document.getElementById('candidato-detalhe-modal').style.display = 'flex';
+};
+
+window.aprovarCandidatoAvaliacao = async function(idCandidatura) {
+  try {
+    const { error } = await supaClient.from('candidaturas').update({ aprovado_avaliacao: true }).eq('id_candidaturas', idCandidatura);
+    if (error) throw error;
+    await loadCandidaturasForApp();
+    if (window._renderCandidatos) window._renderCandidatos();
+    showToast('Candidato aprovado para avaliação!');
+  } catch (e) {
+    console.error('Erro ao aprovar candidato para avaliação:', e);
+    showToast('Erro ao aprovar candidato. Verifique se a coluna "aprovado_avaliacao" existe na tabela candidaturas.');
+  }
+};
+
+// ------------------------------------------------------------
+// CANDIDATOS PARA AVALIAÇÃO (aprovados)
+// ------------------------------------------------------------
+function pageCandidatosAprovados() {
+  if (!window._vagas) window._vagas = [];
+  if (!window._candidaturas) window._candidaturas = [];
+
+  document.getElementById('topbar-actions').innerHTML = '';
+
+  const renderAprovados = () => {
+    const container = document.getElementById('candidatos-aprovados-container');
+    if (!container) return;
+
+    const grupos = window._vagas.map((v) => {
+      const cands = window._candidaturas.filter(c => c.id_vagas === v.id_vagas && c.aprovado_avaliacao);
+      return { vaga: v, cands };
+    }).filter(g => g.cands.length > 0);
+
+    if (grupos.length === 0) {
+      container.innerHTML = `<div class="empty-state">
+        <div class="empty-state-icon">✅</div>
+        <div class="empty-state-title">Nenhum candidato aprovado ainda</div>
+        <div class="empty-state-desc">Aprove candidatos na aba Candidatos para que apareçam aqui, agrupados por vaga.</div>
+      </div>`;
+      return;
+    }
+
+    container.innerHTML = grupos.map(g => {
+      const aberta = g.vaga.status === 'aberta';
+      return `
+      <div class="table-card" style="margin-bottom:16px">
+        <div class="table-header">
+          <div>
+            <span class="table-title">${nomeCargoPorId(g.vaga.id_cargos)}</span>
+            <span style="font-size:12px;color:var(--text3);margin-left:12px">
+              <span class="badge badge-info">${g.cands.length} candidato${g.cands.length > 1 ? 's' : ''}</span>
+              <span class="badge ${aberta ? 'badge-active' : 'badge-inactive'}" style="margin-left:6px">${g.vaga.status}</span>
+            </span>
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>E-mail</th>
+              <th>Número</th>
+              <th>Instagram</th>
+              <th>Currículo</th>
+              <th>Data de Envio</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${g.cands.map((c) => `
+              <tr>
+                <td><strong>${c.nome_candidato || '—'}</strong></td>
+                <td>${c.email_candidato || '—'}</td>
+                <td>${c.numero || '—'}</td>
+                <td>${c.instagram || '—'}</td>
+                <td>
+                  ${c.url_curriculo
+                    ? `<button class="action-btn" title="Visualizar" onclick="visualizarDocumento('${c.url_curriculo}')">👁</button>
+                       <a class="action-btn" title="Baixar" href="${driveDownloadUrl(c.url_curriculo)}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">⬇</a>`
+                    : `<span class="badge badge-gray">Não enviado</span>`}
+                </td>
+                <td style="color:var(--text3);font-size:12px">${c.data_envio_candidatura ? new Date(c.data_envio_candidatura).toLocaleDateString('pt-BR') : '—'}</td>
+                <td style="white-space:nowrap">
+                  <button class="action-btn" onclick="verCandidato(${c.id_candidaturas})" title="Ver dados completos">👁</button>
+                  <button class="action-btn" title="Remover da avaliação" onclick="removerCandidatoAvaliacao(${c.id_candidaturas})">↩</button>
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+    }).join('');
+  };
+
+  window._renderCandidatosAprovados = renderAprovados;
+  Promise.all([loadVagasForApp(), loadCandidaturasForApp()]).then(renderAprovados);
+
+  return `
+  <div id="candidatos-aprovados-container">
+    <div class="empty-state">
+      <div class="empty-state-icon">📋</div>
+      <div class="empty-state-title">Carregando...</div>
+    </div>
+  </div>`;
+}
+
+window.removerCandidatoAvaliacao = async function(idCandidatura) {
+  try {
+    const { error } = await supaClient.from('candidaturas').update({ aprovado_avaliacao: false }).eq('id_candidaturas', idCandidatura);
+    if (error) throw error;
+    await loadCandidaturasForApp();
+    if (window._renderCandidatosAprovados) window._renderCandidatosAprovados();
+    showToast('Candidato removido da avaliação.');
+  } catch (e) {
+    console.error('Erro ao remover candidato da avaliação:', e);
+    showToast('Erro ao remover candidato da avaliação.');
+  }
 };
 
 // ------------------------------------------------------------
