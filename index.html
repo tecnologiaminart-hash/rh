@@ -2804,7 +2804,7 @@ function pageCandidatosAprovados() {
       const aberta = g.vaga.status === 'aberta';
       return `
       <div class="table-card" style="margin-bottom:16px">
-        <div class="table-header">
+        <div class="table-header" style="cursor:pointer" onclick="toggleCandidatosAprovadosVaga(${g.vaga.id_vagas})">
           <div>
             <span class="table-title">${nomeCargoPorId(g.vaga.id_cargos)}</span>
             <span style="font-size:12px;color:var(--text3);margin-left:12px">
@@ -2812,7 +2812,9 @@ function pageCandidatosAprovados() {
               <span class="badge ${aberta ? 'badge-active' : 'badge-inactive'}" style="margin-left:6px">${g.vaga.status}</span>
             </span>
           </div>
+          <span id="candidatos-aprovados-toggle-icon-${g.vaga.id_vagas}" style="margin-left:auto;color:var(--text3);font-size:12px">▸ ver candidatos</span>
         </div>
+        <div id="candidatos-aprovados-tabela-${g.vaga.id_vagas}" style="display:none">
         <div style="overflow-x:auto">
         <table style="white-space:nowrap">
           <thead>
@@ -2883,6 +2885,7 @@ function pageCandidatosAprovados() {
           </tbody>
         </table>
         </div>
+        </div>
       </div>
     `;
     }).join('');
@@ -2910,6 +2913,15 @@ function pageCandidatosAprovados() {
     </div>
   </div>`;
 }
+
+window.toggleCandidatosAprovadosVaga = function(idVaga) {
+  const tabela = document.getElementById(`candidatos-aprovados-tabela-${idVaga}`);
+  const icon = document.getElementById(`candidatos-aprovados-toggle-icon-${idVaga}`);
+  if (!tabela) return;
+  const expandido = tabela.style.display !== 'none';
+  tabela.style.display = expandido ? 'none' : '';
+  if (icon) icon.textContent = expandido ? '▸ ver candidatos' : '▾ ocultar candidatos';
+};
 
 window.removerCandidatoAvaliacao = async function(idCandidatura) {
   try {
