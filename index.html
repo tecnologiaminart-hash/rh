@@ -1186,6 +1186,7 @@ function renderStatusTable() {
         <td>${colab.nome_colaborador}</td>
         <td>${cargoNome}</td>
         <td>${formatarDataBR(colab.desde) || 'N/A'}</td>
+        <td>${colab.tipo_de_contrato || 'N/A'}</td>
         <td>${salarioBase}</td>
         <td><span class="badge ${statusBadgeClass}">${colab.status_colaborador}</span></td>
         <td>
@@ -1258,6 +1259,7 @@ function pageStatus() {
           <th>Nome</th>
           <th>Cargo</th>
           <th>Desde</th>
+          <th>Tipo de Contrato</th>
           <th>Salário Base</th>
           <th>Status</th>
           <th>Ações</th>
