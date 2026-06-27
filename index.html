@@ -732,7 +732,6 @@ const NAV = [
     subs: [
       { id: 'bon-regras', label: 'Regras de Bonificação' },
       { id: 'bon-historico', label: 'Histórico de Pagamentos' },
-      { id: 'bon-relatorio', label: 'Relatório e Impressão' },
     ]
   },
   {
@@ -1176,30 +1175,84 @@ window.filtrarTabelaGenerica = function(tbodyId, query) {
   });
 };
 
+function salarioBaseDoColaborador(colab) {
+  const raw = (colab.salario_base !== undefined && colab.salario_base !== null && colab.salario_base !== '')
+    ? colab.salario_base
+    : (colab.cargos && colab.cargos.salario_base ? colab.cargos.salario_base : null);
+  return (raw !== null && raw !== undefined && String(raw) !== '') ? parseFloat(raw) : null;
+}
+
+window.filtrarStatusCargo = function(valor) {
+  if (!window._statusFiltros) window._statusFiltros = {};
+  window._statusFiltros.cargo = valor;
+  renderStatusTable();
+};
+window.filtrarStatusTipoContrato = function(valor) {
+  if (!window._statusFiltros) window._statusFiltros = {};
+  window._statusFiltros.tipoContrato = valor;
+  renderStatusTable();
+};
+window.filtrarStatusStatus = function(valor) {
+  if (!window._statusFiltros) window._statusFiltros = {};
+  window._statusFiltros.status = valor;
+  renderStatusTable();
+};
+window.ordenarStatusTabela = function(valor) {
+  window._statusOrdem = valor;
+  renderStatusTable();
+};
+
 function renderStatusTable() {
   const tbody = document.getElementById('status-table-body');
   if (!tbody) return;
 
-  tbody.innerHTML = ''; // Limpa a tabela
+  if (!window._statusFiltros) window._statusFiltros = { cargo: '', tipoContrato: '', status: '' };
+  if (!window._statusOrdem) window._statusOrdem = 'nome';
 
-  if (_colaboradoresSupabase.length === 0) {
+  // Atualiza as opções do filtro de Cargo com os cargos realmente em uso pelos colaboradores
+  const selCargo = document.getElementById('status-filtro-cargo');
+  if (selCargo) {
+    const cargosDistintos = [...new Set((_colaboradoresSupabase || []).map(c => c.cargos ? c.cargos.nome_cargo : null).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    selCargo.innerHTML = '<option value="">Todos os cargos</option>' +
+      cargosDistintos.map(c => `<option value="${c}" ${window._statusFiltros.cargo === c ? 'selected' : ''}>${c}</option>`).join('');
+  }
+
+  let lista = [...(_colaboradoresSupabase || [])];
+  if (window._statusFiltros.cargo) lista = lista.filter(c => (c.cargos ? c.cargos.nome_cargo : '') === window._statusFiltros.cargo);
+  if (window._statusFiltros.tipoContrato) lista = lista.filter(c => c.tipo_de_contrato === window._statusFiltros.tipoContrato);
+  if (window._statusFiltros.status) lista = lista.filter(c => c.status_colaborador === window._statusFiltros.status);
+
+  lista.sort((a, b) => {
+    if (window._statusOrdem === 'cargo') {
+      return (a.cargos ? a.cargos.nome_cargo : '').localeCompare(b.cargos ? b.cargos.nome_cargo : '');
+    }
+    if (window._statusOrdem === 'salario-desc' || window._statusOrdem === 'salario-asc') {
+      const sa = salarioBaseDoColaborador(a);
+      const sb = salarioBaseDoColaborador(b);
+      if (sa === null && sb === null) return 0;
+      if (sa === null) return 1;
+      if (sb === null) return -1;
+      return window._statusOrdem === 'salario-desc' ? sb - sa : sa - sb;
+    }
+    return (a.nome_colaborador || '').localeCompare(b.nome_colaborador || '');
+  });
+
+  if (lista.length === 0) {
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text3);">Nenhum colaborador encontrado.</td></tr>`;
     return;
   }
 
-  _colaboradoresSupabase.forEach(colab => {
+  tbody.innerHTML = lista.map(colab => {
     const cargoNome = colab.cargos ? colab.cargos.nome_cargo : 'N/A';
-    const salarioRaw = (colab.salario_base !== undefined && colab.salario_base !== null && colab.salario_base !== '')
-              ? colab.salario_base
-              : (colab.cargos && colab.cargos.salario_base ? colab.cargos.salario_base : null);
-    const salarioBase = salarioRaw !== null && salarioRaw !== undefined && String(salarioRaw) !== ''
-              ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(salarioRaw))
-              : 'N/A';
+    const salarioNum = salarioBaseDoColaborador(colab);
+    const salarioBase = salarioNum !== null
+      ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(salarioNum)
+      : 'N/A';
     const statusBadgeClass = colab.status_colaborador === 'Ativo' ? 'badge-active'
       : colab.status_colaborador === 'Pendente Documentação' ? 'badge-pending'
       : 'badge-inactive';
 
-    tbody.innerHTML += `
+    return `
       <tr>
         <td>${colab.nome_colaborador}</td>
         <td>${cargoNome}</td>
@@ -1212,13 +1265,16 @@ function renderStatusTable() {
         </td>
       </tr>
     `;
-  });
+  }).join('');
 }
 function pageStatus() {
   // Chama a função para carregar os dados do Supabase
   // e renderizar a tabela assim que a página for exibida.
   // Isso garante que os dados sejam carregados sempre que a aba for acessada.
   loadColaboradoresFromSupabase();
+
+  if (!window._statusFiltros) window._statusFiltros = { cargo: '', tipoContrato: '', status: '' };
+  if (!window._statusOrdem) window._statusOrdem = 'nome';
 
   // O HTML da página, incluindo o modal e a tabela vazia que será preenchida
   return `
@@ -1277,6 +1333,33 @@ function pageStatus() {
     <div class="table-header">
       <span class="table-title">Informações Contratuais</span>
       <input class="search-input" placeholder="Buscar colaborador..." oninput="filterStatusTable(this.value)">
+    </div>
+    <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:var(--bg2)">
+      <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase">Filtrar:</span>
+      <select class="form-select" id="status-filtro-cargo" style="width:auto" onchange="filtrarStatusCargo(this.value)">
+        <option value="">Todos os cargos</option>
+      </select>
+      <select class="form-select" style="width:auto" onchange="filtrarStatusTipoContrato(this.value)">
+        <option value="" ${window._statusFiltros.tipoContrato === '' ? 'selected' : ''}>Todos os tipos de contrato</option>
+        <option value="Efetivo" ${window._statusFiltros.tipoContrato === 'Efetivo' ? 'selected' : ''}>Efetivo</option>
+        <option value="Experiência" ${window._statusFiltros.tipoContrato === 'Experiência' ? 'selected' : ''}>Experiência</option>
+        <option value="Temporária" ${window._statusFiltros.tipoContrato === 'Temporária' ? 'selected' : ''}>Temporária</option>
+      </select>
+      <select class="form-select" style="width:auto" onchange="filtrarStatusStatus(this.value)">
+        <option value="" ${window._statusFiltros.status === '' ? 'selected' : ''}>Todos os status</option>
+        <option value="Ativo" ${window._statusFiltros.status === 'Ativo' ? 'selected' : ''}>Ativo</option>
+        <option value="Inativo" ${window._statusFiltros.status === 'Inativo' ? 'selected' : ''}>Inativo</option>
+        <option value="Férias" ${window._statusFiltros.status === 'Férias' ? 'selected' : ''}>Férias</option>
+        <option value="Afastado" ${window._statusFiltros.status === 'Afastado' ? 'selected' : ''}>Afastado</option>
+        <option value="Pendente Documentação" ${window._statusFiltros.status === 'Pendente Documentação' ? 'selected' : ''}>Pendente Documentação</option>
+      </select>
+      <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-left:12px">Ordenar:</span>
+      <select class="form-select" style="width:auto" onchange="ordenarStatusTabela(this.value)">
+        <option value="nome" ${window._statusOrdem === 'nome' ? 'selected' : ''}>Nome (A-Z)</option>
+        <option value="cargo" ${window._statusOrdem === 'cargo' ? 'selected' : ''}>Cargo (A-Z)</option>
+        <option value="salario-desc" ${window._statusOrdem === 'salario-desc' ? 'selected' : ''}>Salário (maior → menor)</option>
+        <option value="salario-asc" ${window._statusOrdem === 'salario-asc' ? 'selected' : ''}>Salário (menor → maior)</option>
+      </select>
     </div>
     <table>
       <thead>
@@ -2076,7 +2159,6 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
     'ficha-mapeamento': pageMapeamentoPerfil,
     'bon-regras':      pageBonRegras,
     'bon-historico':   pageBonHistorico,
-    'bon-relatorio':   pageRelatorio,
     'int-cultura':     pageCultura,
     'int-regulamento': pageRegulamento,
   };
@@ -2685,16 +2767,28 @@ function pageHistoricoCol() {
 function pageCandidatos() {
   if (!window._vagas) window._vagas = [];
   if (!window._candidaturas) window._candidaturas = [];
+  if (!window._candidatosOrdem) window._candidatosOrdem = 'recentes';
 
   document.getElementById('topbar-actions').innerHTML = '';
+
+  window.ordenarCandidatos = function(valor) {
+    window._candidatosOrdem = valor;
+    renderCandidatos();
+  };
 
   const renderCandidatos = () => {
     const container = document.getElementById('candidatos-container');
     if (!container) return;
 
+    const candidaturasOrdenadas = [...window._candidaturas].sort((a, b) => {
+      const da = a.data_envio_candidatura ? new Date(a.data_envio_candidatura) : new Date(0);
+      const db = b.data_envio_candidatura ? new Date(b.data_envio_candidatura) : new Date(0);
+      return window._candidatosOrdem === 'antigas' ? da - db : db - da;
+    });
+
     // Agrupa candidaturas por vaga
     const grupos = window._vagas.map((v) => {
-      const cands = window._candidaturas.filter(c => c.id_vagas === v.id_vagas);
+      const cands = candidaturasOrdenadas.filter(c => c.id_vagas === v.id_vagas);
       return { vaga: v, cands };
     }).filter(g => g.cands.length > 0);
 
@@ -2776,6 +2870,13 @@ function pageCandidatos() {
       </div>
       <div style="padding:24px" id="candidato-detalhe-body"></div>
     </div>
+  </div>
+
+  <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+    <select class="form-select" style="width:auto" onchange="ordenarCandidatos(this.value)">
+      <option value="recentes" ${window._candidatosOrdem !== 'antigas' ? 'selected' : ''}>Mais recentes</option>
+      <option value="antigas" ${window._candidatosOrdem === 'antigas' ? 'selected' : ''}>Mais antigas</option>
+    </select>
   </div>
 
   <div id="candidatos-container">
@@ -3409,16 +3510,27 @@ window.salvarCriarAdmissao = async function() {
 // ------------------------------------------------------------
 function pageVagas() {
   if (!window._vagas) window._vagas = [];
+  if (!window._vagasOrdem) window._vagasOrdem = 'recentes';
 
   document.getElementById('topbar-actions').innerHTML =
     `<button class="btn btn-primary" onclick="openVagaModal()">+ Abrir Vaga</button>`;
 
+  window.ordenarVagas = function(valor) {
+    window._vagasOrdem = valor;
+    renderVagasTabela();
+  };
+
   const renderVagasTabela = () => {
     const tbody = document.getElementById('vagas-tbody');
     if (!tbody) return;
-    tbody.innerHTML = window._vagas.length === 0
+    const lista = [...window._vagas].sort((a, b) => {
+      const da = a.data_abertura ? new Date(a.data_abertura) : new Date(0);
+      const db = b.data_abertura ? new Date(b.data_abertura) : new Date(0);
+      return window._vagasOrdem === 'antigas' ? da - db : db - da;
+    });
+    tbody.innerHTML = lista.length === 0
       ? '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma vaga cadastrada</td></tr>'
-      : window._vagas.map((v) => {
+      : lista.map((v) => {
           const link = `${location.origin}${location.pathname}?candidatura=${v['link-token']}`;
           const aberta = v.status === 'aberta';
           const totalCandidatos = (window._candidaturas || []).filter(c => c.id_vagas === v.id_vagas).length;
@@ -3487,6 +3599,10 @@ function pageVagas() {
     <div class="table-header">
       <span class="table-title">Vagas em Aberto</span>
       <input class="search-input" placeholder="Buscar vaga..." oninput="filtrarVagas(this.value)" style="margin-left:12px">
+      <select class="form-select" style="width:auto;margin-left:8px" onchange="ordenarVagas(this.value)">
+        <option value="recentes" ${window._vagasOrdem !== 'antigas' ? 'selected' : ''}>Mais recentes</option>
+        <option value="antigas" ${window._vagasOrdem === 'antigas' ? 'selected' : ''}>Mais antigas</option>
+      </select>
     </div>
     <table>
       <thead>
@@ -3651,10 +3767,48 @@ function pageCadCargos() {
 // ------------------------------------------------------------
 // CARGOS E SALÁRIOS ATUAL
 // ------------------------------------------------------------
+window.ordenarCargosTabela = function(valor) {
+  window._cargosOrdem = valor;
+  renderCargosTabela();
+};
+
+window.renderCargosTabela = function renderCargosTabela() {
+  const tbody = document.getElementById('cargos-tbody');
+  if (!tbody) return;
+  if (!window._cargosOrdem) window._cargosOrdem = 'cargo';
+
+  const cargosArr = [...(Array.isArray(window._cargos) ? window._cargos : (window._cargos ? Object.values(window._cargos) : []))];
+  const nomeDe = (cargo) => cargo[window._cargoNameField] || cargo.nome_cargo || cargo.nome || '';
+  const salarioDe = (cargo) => (cargo.salario_base !== undefined && cargo.salario_base !== null && String(cargo.salario_base) !== '') ? parseFloat(cargo.salario_base) : null;
+
+  cargosArr.sort((a, b) => {
+    if (window._cargosOrdem === 'salario-desc' || window._cargosOrdem === 'salario-asc') {
+      const sa = salarioDe(a), sb = salarioDe(b);
+      if (sa === null && sb === null) return 0;
+      if (sa === null) return 1;
+      if (sb === null) return -1;
+      return window._cargosOrdem === 'salario-desc' ? sb - sa : sa - sb;
+    }
+    return nomeDe(a).localeCompare(nomeDe(b));
+  });
+
+  tbody.innerHTML = cargosArr.map((cargo) => {
+    const cid = cargo[window._cargoIdField] || cargo.id || cargo.id_cargo || '';
+    const nome = nomeDe(cargo);
+    const salarioNum = salarioDe(cargo);
+    const salario = salarioNum !== null ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(salarioNum) : '';
+    return `<tr data-cargo-id="${cid}"><td><strong>${nome}</strong></td><td style="font-weight:600">${salario}</td>
+      <td>
+        <button class="action-btn" title="Editar" onclick="editCargo('${cid}')">✎</button>
+        <button class="action-btn btn-danger" title="Excluir" onclick="deleteCargo('${cid}')">✕</button>
+      </td></tr>`;
+  }).join('');
+};
+
 function pageCargosTabela() {
   document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" onclick="openCargoModal()">+ Novo Cargo</button>`;
   // Garante que os cargos sejam carregados a partir do Supabase antes de renderizar
-  loadCargosForApp();
+  loadCargosForApp().then(() => window.renderCargosTabela());
   const revisao = '01/01/2026';
   return `
   <div id="cargo-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
@@ -3672,6 +3826,11 @@ function pageCargosTabela() {
     <div class="table-header">
       <span class="table-title">Tabela Salarial Atual</span>
       <input class="search-input" placeholder="Buscar cargo..." oninput="filtrarCargosTabela(this.value)" style="margin-left:12px">
+      <select class="form-select" style="width:auto;margin-left:8px" onchange="ordenarCargosTabela(this.value)">
+        <option value="cargo" ${window._cargosOrdem !== 'salario-desc' && window._cargosOrdem !== 'salario-asc' ? 'selected' : ''}>Cargo (A-Z)</option>
+        <option value="salario-desc" ${window._cargosOrdem === 'salario-desc' ? 'selected' : ''}>Salário (maior → menor)</option>
+        <option value="salario-asc" ${window._cargosOrdem === 'salario-asc' ? 'selected' : ''}>Salário (menor → maior)</option>
+      </select>
       <div class="table-actions">
         <button class="btn btn-sm btn-print" onclick="printCargosTabela()">🖨 Imprimir</button>
       </div>
@@ -3679,20 +3838,8 @@ function pageCargosTabela() {
     <table>
       <thead><tr><th>Cargo</th><th>Salário Base</th><th>Ações</th></tr></thead>
       <tbody id="cargos-tbody">
-          ${ (()=>{
-            const cargosArr = Array.isArray(window._cargos) ? window._cargos : (window._cargos ? Object.values(window._cargos) : []);
-            return cargosArr.map((cargo)=>{
-              const cid = cargo[window._cargoIdField] || cargo.id || cargo.id_cargo || '';
-              const nome = cargo[window._cargoNameField] || cargo.nome_cargo || cargo.nome || '';
-              const salario = cargo.salario_base !== undefined && cargo.salario_base !== null ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(cargo.salario_base)) : '';
-              return `<tr data-cargo-id="${cid}"><td><strong>${nome}</strong></td><td style="font-weight:600">${salario}</td>
-                <td>
-                  <button class="action-btn" title="Editar" onclick="editCargo('${cid}')">✎</button>
-                  <button class="action-btn btn-danger" title="Excluir" onclick="deleteCargo('${cid}')">✕</button>
-                </td></tr>`;
-            }).join('');
-          })() }
-        </tbody>
+        <tr><td colspan="3" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
+      </tbody>
     </table>
     <div class="table-pagination"><span>${ Array.isArray(window._cargos) ? window._cargos.length : (window._cargos ? Object.keys(window._cargos).length : 0) } cargos cadastrados</span></div>
   </div>`;
