@@ -1114,7 +1114,9 @@ function renderStatusTable() {
     const salarioBase = salarioRaw !== null && salarioRaw !== undefined && String(salarioRaw) !== ''
               ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(salarioRaw))
               : 'N/A';
-    const statusBadgeClass = colab.status_colaborador === 'Ativo' ? 'badge-active' : 'badge-inactive';
+    const statusBadgeClass = colab.status_colaborador === 'Ativo' ? 'badge-active'
+      : colab.status_colaborador === 'Pendente Documentação' ? 'badge-pending'
+      : 'badge-inactive';
 
     tbody.innerHTML += `
       <tr>
@@ -1169,6 +1171,7 @@ function pageStatus() {
             <option value="Inativo">Inativo</option>
             <option value="Férias">Férias</option>
             <option value="Afastado">Afastado</option>
+            <option value="Pendente Documentação">Pendente Documentação</option>
           </select>
         </div>
       </div>
@@ -3506,7 +3509,7 @@ window.openDadosPessoaisModal = async function(id = null) {
           <div class="form-grid">
             <div class="form-group form-full">
               <label class="form-label">Nome Colaborador</label>
-              <select class="form-select" id="dp-colaborador"><option value="">— Selecione —</option></select>
+              <select class="form-select" id="dp-colaborador" onchange="preencherSalarioDadosPessoais(this.value)"><option value="">— Selecione —</option></select>
             </div>
             <div class="form-group"><label class="form-label">CPF</label><input class="form-input" id="dp-cpf" placeholder="000.000.000-00"></div>
             <div class="form-group"><label class="form-label">RG</label><input class="form-input" id="dp-rg"></div>
@@ -3584,6 +3587,20 @@ window.openDadosPessoaisModal = async function(id = null) {
   }
 
   document.getElementById('dados-pessoais-modal').style.display = 'flex';
+};
+
+// Ao selecionar/trocar o colaborador no modal, busca o salario_base dele na tabela
+// colaboradores (já carregada em _colaboradoresSupabase) e preenche o campo Salário.
+window.preencherSalarioDadosPessoais = function(idColaborador) {
+  const salarioEl = document.getElementById('dp-salario');
+  if (!salarioEl) return;
+  if (!idColaborador) { salarioEl.value = ''; return; }
+  const colab = (_colaboradoresSupabase || []).find(c => String(c.id_colaborador || c.id || c.codigo) === String(idColaborador));
+  if (colab && colab.salario_base !== undefined && colab.salario_base !== null && String(colab.salario_base) !== '') {
+    salarioEl.value = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(colab.salario_base);
+  } else {
+    salarioEl.value = '';
+  }
 };
 
 window.salvarDadosPessoaisEpi = async function() {
