@@ -541,6 +541,22 @@ function linkWhatsappAvaliacao(numero, nomeCandidato, cargoNome, link) {
   return `https://wa.me/${digits}?text=${encodeURIComponent(mensagem)}`;
 }
 
+// Gera um token com o "gerador" informado e confere na tabela/coluna se já existe,
+// repetindo até achar um valor que ainda não está em uso (evita colisão/repetição).
+async function gerarTokenUnico(tabela, coluna, gerador) {
+  for (let tentativa = 0; tentativa < 10; tentativa++) {
+    const candidato = gerador();
+    const { data, error } = await supaClient.from(tabela).select(coluna).eq(coluna, candidato).limit(1).maybeSingle();
+    if (error) {
+      console.error(`Erro ao verificar unicidade de ${coluna} em ${tabela}:`, error.message);
+      return candidato; // não bloqueia o fluxo por falha na verificação
+    }
+    if (!data) return candidato;
+    console.warn(`Token colidiu em ${tabela}.${coluna}, gerando outro (tentativa ${tentativa + 1}).`);
+  }
+  throw new Error(`Não foi possível gerar um token único para ${tabela}.${coluna} após várias tentativas.`);
+}
+
 function saveConfig() {
   const sbUrlEl = document.getElementById('sb-url');
   const sbKeyEl = document.getElementById('sb-key');
@@ -1787,15 +1803,19 @@ window.gerarDocxPerguntasRespostas = async function(titulo, perguntasRespostas) 
 };
 
 // Envia o .docx gerado na avaliação pública para o webhook do n8n, que grava o
-// arquivo numa pasta fixa do Drive e devolve { url }.
-window.enviarDocxAvaliacaoParaDrive = async function(blob, nomeArquivo) {
+// arquivo numa pasta fixa do Drive e devolve { url }. O nome final do arquivo
+// ("Respostas-Nome Candidato-Tipo de Avaliação.docx") é montado pelo próprio
+// workflow do n8n a partir de nome_candidato/tipo_avaliacao (ver "Preparar nome
+// do arquivo" em n8n/upload-documento-avaliacao-drive.workflow.json).
+window.enviarDocxAvaliacaoParaDrive = async function(blob, { nomeCandidato, tipoAvaliacao }) {
   if (!N8N_AVALIACAO_DOC_WEBHOOK_URL || N8N_AVALIACAO_DOC_WEBHOOK_URL.startsWith('COLE_AQUI')) {
     throw new Error('Webhook de documentos de avaliação não configurado: defina N8N_AVALIACAO_DOC_WEBHOOK_URL no index.html.');
   }
 
   const formData = new FormData();
-  formData.append('file', blob, nomeArquivo);
-  formData.append('nome_arquivo', nomeArquivo);
+  formData.append('file', blob, `${tipoAvaliacao}.docx`);
+  formData.append('nome_candidato', nomeCandidato);
+  formData.append('tipo_avaliacao', tipoAvaliacao);
   formData.append('token', N8N_WEBHOOK_TOKEN);
 
   const res = await fetch(N8N_AVALIACAO_DOC_WEBHOOK_URL, {
@@ -2695,7 +2715,7 @@ window.aprovarCandidatoAvaliacao = async function(idCandidatura) {
     const { data: existente } = await supaClient.from('testes_avaliacoes').select('token').eq('id_candidato', cand.id_candidaturas).limit(1).maybeSingle();
     let token = existente?.token;
     if (!token) {
-      token = crypto.randomUUID();
+      token = await gerarTokenUnico('testes_avaliacoes', 'token', () => crypto.randomUUID());
       const { error: insertError } = await supaClient.from('testes_avaliacoes').insert([{
         token,
         id_candidato: cand.id_candidaturas,
@@ -3042,8 +3062,14 @@ window.salvarVaga = async function() {
   const prazo = document.getElementById('vaga-prazo').value;
   if (!idCargo) return showToast('Selecione um cargo.');
 
-  // Gera token único para o link público
-  const token = Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+  // Gera token único para o link público, conferindo na tabela que ainda não existe
+  let token;
+  try {
+    token = await gerarTokenUnico('vagas', 'link-token', () => Math.random().toString(36).substring(2, 10) + Date.now().toString(36));
+  } catch (e) {
+    console.error(e);
+    return showToast('Erro ao gerar token único da vaga. Tente novamente.');
+  }
 
   const { error } = await supaClient.from('vagas').insert([{
     id_cargos: idCargo,
@@ -4532,11 +4558,23 @@ async function checkAvaliacaoLink() {
     cargo = cargoData;
   }
 
+  let candidato = null;
+  if (teste.id_candidato) {
+    const { data: candidatoData, error: candidatoError } = await supaClient
+      .from('candidaturas')
+      .select('id_candidaturas,nome_candidato')
+      .eq('id_candidaturas', teste.id_candidato)
+      .maybeSingle();
+    if (candidatoError) console.error('Erro ao carregar candidato da avaliação:', candidatoError.message);
+    candidato = candidatoData;
+  }
+
   window._pubAval = {
     token: teste.token,
     idCargo: teste.id_cargo,
     cargoNome: (cargo && cargo.nome_cargo) || '—',
     formularioEntrevista: (cargo && cargo.formulario_entrevista) || '',
+    nomeCandidato: (candidato && candidato.nome_candidato) || 'Candidato',
   };
 
   renderAvaliacaoEtapaDisc();
@@ -4721,8 +4759,7 @@ window.finalizarAvaliacaoCompetencias = async function() {
 
   try {
     const blob = await window.gerarDocxPerguntasRespostas('Respostas — Perguntas por Competências', respostas);
-    const nomeArquivo = `competencias-${window._pubAval.token}.docx`;
-    const url = await window.enviarDocxAvaliacaoParaDrive(blob, nomeArquivo);
+    const url = await window.enviarDocxAvaliacaoParaDrive(blob, { nomeCandidato: window._pubAval.nomeCandidato, tipoAvaliacao: 'Competências' });
     const { error } = await supaClient.from('testes_avaliacoes').update({ url_respostas_competencias: url }).eq('token', window._pubAval.token);
     if (error) throw error;
     renderAvaliacaoEtapaEntrevista();
@@ -4777,8 +4814,7 @@ window.finalizarAvaliacaoEntrevista = async function() {
     let url = null;
     if (perguntas.length > 0) {
       const blob = await window.gerarDocxPerguntasRespostas('Respostas — Formulário de Entrevista', respostas);
-      const nomeArquivo = `entrevista-${pa.token}.docx`;
-      url = await window.enviarDocxAvaliacaoParaDrive(blob, nomeArquivo);
+      url = await window.enviarDocxAvaliacaoParaDrive(blob, { nomeCandidato: pa.nomeCandidato, tipoAvaliacao: 'Entrevista' });
     }
     const { error } = await supaClient.from('testes_avaliacoes').update({
       url_respostas_entrevista: url,
