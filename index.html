@@ -3145,52 +3145,66 @@ window.salvarCriarAdmissao = async function() {
   const btn = document.getElementById('adm-btn-salvar');
   if (btn) { btn.disabled = true; btn.textContent = 'Salvando...'; }
 
+  let novoId;
   try {
     const { data, error } = await supaClient.from('colaboradores').insert([novoColaborador]).select().single();
     if (error) throw error;
-    const novoId = data.id_colaborador;
-
-    const dadosPayload = {
-      id_colaborador: novoId,
-      nome_colaborador: nome,
-      cpf: document.getElementById('adm-cpf').value || null,
-      rg: document.getElementById('adm-rg').value || null,
-      data_nascimento: document.getElementById('adm-nascimento').value || null,
-      telefone: document.getElementById('adm-telefone').value || null,
-      email: document.getElementById('adm-email').value || null,
-      endereco: document.getElementById('adm-endereco').value || null,
-      telefone_emergencia: document.getElementById('adm-tel-emergencia').value || null,
-      estado_civil: document.getElementById('adm-estado-civil').value || null,
-      escolaridade: document.getElementById('adm-escolaridade').value || null,
-      pix: document.getElementById('adm-pix').value || null,
-      funcao: document.querySelector('#adm-cargo option:checked')?.textContent || null,
-      epi_camisa: document.getElementById('adm-epi-camisa').value || null,
-      epi_calca: document.getElementById('adm-epi-calca').value || null,
-      epi_botina: document.getElementById('adm-epi-botina').value || null,
-      epi_jaleco: document.getElementById('adm-epi-jaleco').value || null,
-      epi_luva_raspa: document.getElementById('adm-epi-luva-raspa').value || null,
-      epi_luva_lavagem: document.getElementById('adm-epi-luva-lavagem').value || null,
-    };
-    const { error: errorDados } = await supaClient.from('dados_pessoais_epi').insert([dadosPayload]);
-    if (errorDados) throw errorDados;
-
-    await loadColaboradoresFromSupabase();
-    await loadDadosPessoaisEpiForApp();
-
-    showToast('Admissão criada! Agora envie os documentos do colaborador.');
-
-    // Trava os dados já salvos e libera a seção de Documentos (precisa do colaborador já existir)
-    document.querySelectorAll('#content-area input, #content-area select').forEach(el => el.disabled = true);
-    if (btn) btn.style.display = 'none';
-    const docCard = document.getElementById('adm-documentos-card');
-    docCard.style.display = '';
-    document.getElementById('adm-btn-enviar-doc').onclick = () => openEnviarDocModal(novoId);
-    document.getElementById('adm-btn-ver-docs').onclick = () => openDocColabModal(novoId);
+    if (!data) throw new Error('Nenhum colaborador retornado após o insert (verifique a policy de SELECT/INSERT da tabela colaboradores no Supabase).');
+    novoId = data.id_colaborador;
   } catch (e) {
-    console.error('Erro ao salvar admissão:', e);
-    showToast('Erro ao salvar admissão: ' + (e.message || e));
+    console.error('Erro ao criar colaborador da admissão:', e);
+    showToast('Erro ao criar colaborador: ' + (e.message || e));
     if (btn) { btn.disabled = false; btn.textContent = 'Salvar Admissão'; }
+    return;
   }
+
+  const dadosPayload = {
+    id_colaborador: novoId,
+    nome_colaborador: nome,
+    cpf: document.getElementById('adm-cpf').value || null,
+    rg: document.getElementById('adm-rg').value || null,
+    data_nascimento: document.getElementById('adm-nascimento').value || null,
+    telefone: document.getElementById('adm-telefone').value || null,
+    email: document.getElementById('adm-email').value || null,
+    endereco: document.getElementById('adm-endereco').value || null,
+    telefone_emergencia: document.getElementById('adm-tel-emergencia').value || null,
+    estado_civil: document.getElementById('adm-estado-civil').value || null,
+    escolaridade: document.getElementById('adm-escolaridade').value || null,
+    pix: document.getElementById('adm-pix').value || null,
+    funcao: document.querySelector('#adm-cargo option:checked')?.textContent || null,
+    epi_camisa: document.getElementById('adm-epi-camisa').value || null,
+    epi_calca: document.getElementById('adm-epi-calca').value || null,
+    epi_botina: document.getElementById('adm-epi-botina').value || null,
+    epi_jaleco: document.getElementById('adm-epi-jaleco').value || null,
+    epi_luva_raspa: document.getElementById('adm-epi-luva-raspa').value || null,
+    epi_luva_lavagem: document.getElementById('adm-epi-luva-lavagem').value || null,
+  };
+
+  try {
+    const { data: insertedDados, error: errorDados } = await supaClient.from('dados_pessoais_epi').insert([dadosPayload]).select();
+    if (errorDados) throw errorDados;
+    if (!insertedDados || insertedDados.length === 0) {
+      throw new Error('Nenhuma linha foi inserida em dados_pessoais_epi (verifique a policy de INSERT dessa tabela no Supabase).');
+    }
+  } catch (e) {
+    console.error('Erro ao salvar dados pessoais/EPIs da admissão:', e);
+    showToast('Colaborador criado, mas falhou ao salvar Dados Pessoais/EPIs: ' + (e.message || e));
+    if (btn) { btn.disabled = false; btn.textContent = 'Salvar Admissão'; }
+    return;
+  }
+
+  await loadColaboradoresFromSupabase();
+  await loadDadosPessoaisEpiForApp();
+
+  showToast('Admissão criada! Agora envie os documentos do colaborador.');
+
+  // Trava os dados já salvos e libera a seção de Documentos (precisa do colaborador já existir)
+  document.querySelectorAll('#content-area input, #content-area select').forEach(el => el.disabled = true);
+  if (btn) btn.style.display = 'none';
+  const docCard = document.getElementById('adm-documentos-card');
+  docCard.style.display = '';
+  document.getElementById('adm-btn-enviar-doc').onclick = () => openEnviarDocModal(novoId);
+  document.getElementById('adm-btn-ver-docs').onclick = () => openDocColabModal(novoId);
 };
 
 // ------------------------------------------------------------
