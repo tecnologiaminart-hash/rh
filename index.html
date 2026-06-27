@@ -898,14 +898,28 @@ function pageDashboard() {
   </div>`;
 }
 // ------------------------------------------------------------
-// HISTÓRICO DE CARREIRA DETALHADO POR COLABORADOR
+// HISTÓRICO DE CARREIRA DETALHADO POR COLABORADOR (tabela colaborador_historico)
 // ------------------------------------------------------------
-function pageHistoricoCarreiraDetalhe(colabIdx) {
-  if (!window._historicoCarreira) window._historicoCarreira = [];
-  const emp = window._statusEmployees || [];
-  const cargos = window._cargos || [];
+async function loadColaboradorHistoricoForApp() {
+  if (!supaClient) {
+    console.error('Supabase client não inicializado para colaborador_historico.');
+    window._colaboradorHistorico = [];
+    return;
+  }
+  const { data, error } = await supaClient
+    .from('colaborador_historico')
+    .select('*')
+    .order('periodo_inicio', { ascending: false });
+  if (error) {
+    console.error('Erro ao carregar histórico de carreira:', error.message);
+    window._colaboradorHistorico = [];
+  } else {
+    window._colaboradorHistorico = data;
+  }
+}
 
-  const colaborador = emp[colabIdx];
+function pageHistoricoCarreiraDetalhe(idColaborador) {
+  const colaborador = (_colaboradoresSupabase || []).find(c => String(c.id_colaborador) === String(idColaborador));
   if (!colaborador) {
     return `<div class="empty-state">
               <div class="empty-state-icon">🤔</div>
@@ -915,126 +929,40 @@ function pageHistoricoCarreiraDetalhe(colabIdx) {
             </div>`;
   }
 
-  const nomeColab = colaborador[0];
-  const cargoAtualColab = colaborador[1];
-  const dataAdmissaoColab = colaborador[3]; // Assumindo que o índice 3 é a data de admissão
-
-  // --- Lógica para criar o primeiro registro automaticamente ---
-  // Filtra os registros para o colaborador atual
-  let registrosDoColaborador = window._historicoCarreira.filter(reg => reg.colabIdx == colabIdx);
-
-  // Se não houver registros para este colaborador, cria o primeiro
-  if (registrosDoColaborador.length === 0) {
-    const salarioAtual = (cargos.find(obj => (obj[window._cargoNameField] || obj.nome_cargo || obj.nome) === cargoAtualColab) || {}).salario_base || '';
-    const novoRegistroInicial = {
-      colabIdx: colabIdx,
-      periodoInicio: dataAdmissaoColab,
-      periodoFim: null, // Vazio
-      cargo: cargoAtualColab,
-      salario: salarioAtual,
-      motivo: 'Admissão', // Ou 'Registro Inicial'
-      originalIndex: window._historicoCarreira.length > 0 ? Math.max(...window._historicoCarreira.map(r => r.originalIndex)) + 1 : 0
-    };
-    window._historicoCarreira.push(novoRegistroInicial);
-    window._salvarStorage(); // Salva imediatamente para persistir o novo registro
-    registrosDoColaborador.push(novoRegistroInicial); // Adiciona ao array local para renderizar
-  }
-  // --- Fim da lógica de criação automática ---
-
   document.getElementById('topbar-actions').innerHTML =
-    `<button class="btn btn-primary" onclick="openCarreiraModal(${colabIdx})">+ Adicionar Registro</button>`;
+    `<button class="btn btn-primary" onclick="openHistoricoModal('${idColaborador}')">+ Adicionar Registro</button>`;
 
-  const renderCarreiraTabelaDetalhe = () => {
+  const renderTabela = () => {
     const tbody = document.getElementById('carreira-tbody-detalhe');
     if (!tbody) return;
 
-    // Re-filtra e ordena para garantir que o registro recém-criado seja incluído e ordenado
-    const registrosParaRenderizar = window._historicoCarreira
-      .filter(reg => reg.colabIdx == colabIdx)
-      .sort((a, b) => {
-        // Converte datas para objetos Date para comparação, tratando null/vazio
-        const dateA = a.periodoInicio ? new Date(a.periodoInicio.split('/').reverse().join('-')) : new Date(0); // Epoch para null
-        const dateB = b.periodoInicio ? new Date(b.periodoInicio.split('/').reverse().join('-')) : new Date(0);
-        return dateB - dateA; // Mais recente primeiro
-      });
+    const registros = (window._colaboradorHistorico || [])
+      .filter(h => String(h.id_colaborador) === String(idColaborador))
+      .sort((a, b) => new Date(b.periodo_inicio || 0) - new Date(a.periodo_inicio || 0));
 
-    let htmlContent = '';
-    if (registrosParaRenderizar.length === 0) {
-      htmlContent = `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro de carreira para ${nomeColab}.</td></tr>`;
-    } else {
-      registrosParaRenderizar.forEach((reg) => {
-        htmlContent += `
+    tbody.innerHTML = registros.length === 0
+      ? `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro de carreira para ${colaborador.nome_colaborador}.</td></tr>`
+      : registros.map(reg => `
           <tr>
-            <td>${reg.periodoInicio || '—'}</td>
-            <td>${reg.periodoFim || 'Atual'}</td>
-            <td>${reg.cargo || '—'}</td>
-            <td>${reg.salario || '—'}</td>
+            <td>${formatarDataBR(reg.periodo_inicio) || '—'}</td>
+            <td>${formatarDataBR(reg.periodo_fim) || 'Atual'}</td>
+            <td>${nomeCargoPorId(reg.id_cargos)}</td>
+            <td>${reg.salario_hist !== null && reg.salario_hist !== undefined ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(reg.salario_hist)) : '—'}</td>
             <td>${reg.motivo || '—'}</td>
-            <td>
-              <button class="action-btn" title="Editar" onclick="openCarreiraModal(${colabIdx}, ${reg.originalIndex})">✎</button>
-              <button class="action-btn" title="Excluir" style="color:var(--danger)" onclick="deletarCarreira(${colabIdx}, ${reg.originalIndex})">✕</button>
+            <td style="white-space:nowrap">
+              <button class="action-btn" title="Editar" onclick="openHistoricoModal('${idColaborador}', ${reg.id_cargos_hist})">✎</button>
+              <button class="action-btn" title="Excluir" style="color:var(--danger)" onclick="excluirHistoricoCarreira(${reg.id_cargos_hist})">✕</button>
             </td>
-          </tr>`;
-      });
-    }
-    tbody.innerHTML = htmlContent;
+          </tr>`).join('');
   };
 
-  // Torna a função de renderização global para ser chamada após salvar/deletar
-  window.renderCarreiraTabelaDetalhe = renderCarreiraTabelaDetalhe;
-  setTimeout(renderCarreiraTabelaDetalhe, 0); // Renderiza a tabela após o HTML ser inserido
-
-  // Pega a data atual para preencher o campo de data no modal
-  const hoje = new Date().toISOString().split('T')[0];
+  window._renderHistoricoCarreiraDetalhe = renderTabela;
+  loadColaboradorHistoricoForApp().then(renderTabela);
 
   return `
-  <div id="carreira-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:6px;padding:32px;width:560px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
-      <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="carreira-modal-title">Adicionar Registro de Carreira</div>
-      <div class="form-grid">
-        <div class="form-group form-full">
-          <label class="form-label">Colaborador</label>
-          <select class="form-select" id="carreira-colab" disabled>
-            <option value="${colabIdx}">${nomeColab}</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Período Início</label>
-          <input class="form-input" type="date" id="carreira-inicio" value="${hoje}">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Período Fim</label>
-          <input class="form-input" type="date" id="carreira-fim">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Cargo</label>
-          <select class="form-select" id="carreira-cargo">
-            <option value="">— Selecione o Cargo —</option>
-            ${cargos.map(cargo => {
-              const nome = cargo[window._cargoNameField] || cargo.nome_cargo || cargo.nome || '';
-              return `<option value="${nome}">${nome}</option>`;
-            }).join('')}
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Salário</label>
-          <input class="form-input" type="text" id="carreira-salario" placeholder="R$ 0.000,00">
-        </div>
-        <div class="form-group form-full">
-          <label class="form-label">Motivo</label>
-          <textarea class="form-textarea" id="carreira-motivo" placeholder="Ex: Promoção, Transferência, Reajuste..."></textarea>
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
-        <button class="btn" onclick="document.getElementById('carreira-modal').style.display='none'">Cancelar</button>
-        <button class="btn btn-primary" onclick="salvarCarreira()">Salvar</button>
-      </div>
-    </div>
-  </div>
-
   <div class="table-card">
     <div class="table-header">
-      <span class="table-title">Histórico de Carreira de ${nomeColab}</span>
+      <span class="table-title">Histórico de Carreira de ${colaborador.nome_colaborador}</span>
       <div class="table-actions">
         <button class="btn" onclick="navigate('col-historico', 'Histórico', 'Colaboradores')">← Voltar</button>
       </div>
@@ -1051,11 +979,138 @@ function pageHistoricoCarreiraDetalhe(colabIdx) {
         </tr>
       </thead>
       <tbody id="carreira-tbody-detalhe">
-        <!-- Registros serão inseridos aqui pelo JavaScript -->
+        <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
       </tbody>
     </table>
   </div>`;
 }
+
+window.openHistoricoModal = async function(idColaborador, idRegistro = null) {
+  window._editingHistoricoId = idRegistro;
+  window._historicoModalColabId = idColaborador;
+
+  if (!window._cargos || window._cargos.length === 0) await loadCargosForApp();
+
+  if (!document.getElementById('historico-modal')) {
+    const modal = document.createElement('div');
+    modal.id = 'historico-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:6px;padding:32px;width:560px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+        <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="historico-modal-title">Adicionar Registro de Carreira</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Período Início</label>
+            <input class="form-input" type="date" id="historico-inicio">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Período Fim</label>
+            <input class="form-input" type="date" id="historico-fim">
+          </div>
+          <div class="form-group form-full">
+            <label class="form-label">Cargo</label>
+            <select class="form-select" id="historico-cargo"><option value="">— Selecione o Cargo —</option></select>
+          </div>
+          <div class="form-group form-full">
+            <label class="form-label">Salário</label>
+            <input class="form-input" id="historico-salario" placeholder="R$ 0.000,00">
+          </div>
+          <div class="form-group form-full">
+            <label class="form-label">Motivo</label>
+            <textarea class="form-textarea" id="historico-motivo" placeholder="Ex: Promoção, Transferência, Reajuste..."></textarea>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+          <button class="btn" onclick="document.getElementById('historico-modal').style.display='none'">Cancelar</button>
+          <button class="btn btn-primary" onclick="salvarHistoricoCarreira()">Salvar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  const selectCargo = document.getElementById('historico-cargo');
+  selectCargo.innerHTML = '<option value="">— Selecione o Cargo —</option>' +
+    (window._cargos || []).map(cargo => {
+      const cid = cargo[window._cargoIdField] || cargo.id_cargo || cargo.id || cargo.id_cargos || '';
+      const nome = cargo.nome_cargo || cargo.nome || cargo.cargo || cid;
+      return `<option value="${cid}">${nome}</option>`;
+    }).join('');
+
+  if (idRegistro) {
+    const reg = (window._colaboradorHistorico || []).find(h => h.id_cargos_hist === idRegistro);
+    document.getElementById('historico-modal-title').textContent = 'Editar Registro de Carreira';
+    document.getElementById('historico-inicio').value = reg?.periodo_inicio || '';
+    document.getElementById('historico-fim').value = reg?.periodo_fim || '';
+    selectCargo.value = reg?.id_cargos || '';
+    document.getElementById('historico-salario').value = (reg && reg.salario_hist !== null && reg.salario_hist !== undefined)
+      ? new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(reg.salario_hist)
+      : '';
+    document.getElementById('historico-motivo').value = reg?.motivo || '';
+  } else {
+    document.getElementById('historico-modal-title').textContent = 'Adicionar Registro de Carreira';
+    document.getElementById('historico-inicio').value = '';
+    document.getElementById('historico-fim').value = '';
+    selectCargo.value = '';
+    document.getElementById('historico-salario').value = '';
+    document.getElementById('historico-motivo').value = '';
+  }
+
+  document.getElementById('historico-modal').style.display = 'flex';
+};
+
+window.salvarHistoricoCarreira = async function() {
+  const idColaborador = window._historicoModalColabId;
+  const periodoInicio = document.getElementById('historico-inicio').value;
+  const periodoFim = document.getElementById('historico-fim').value;
+  const idCargo = document.getElementById('historico-cargo').value;
+  const salarioRaw = document.getElementById('historico-salario').value;
+  const motivo = document.getElementById('historico-motivo').value.trim();
+  const salarioNum = salarioRaw ? parseFloat(String(salarioRaw).replace(/\./g,'').replace(/,/g,'.').replace(/[^0-9.\-]/g,'')) : null;
+
+  if (!periodoInicio) return showToast('Informe o Período Início.');
+  if (!idCargo) return showToast('Selecione o Cargo.');
+
+  const payload = {
+    id_colaborador: idColaborador,
+    periodo_inicio: periodoInicio,
+    periodo_fim: periodoFim || null,
+    id_cargos: idCargo,
+    salario_hist: (salarioNum !== null && !isNaN(salarioNum)) ? salarioNum : null,
+    motivo: motivo || null,
+  };
+
+  try {
+    const id = window._editingHistoricoId;
+    const { data, error } = id
+      ? await supaClient.from('colaborador_historico').update(payload).eq('id_cargos_hist', id).select()
+      : await supaClient.from('colaborador_historico').insert([payload]).select();
+    if (error) throw error;
+    if (!data || data.length === 0) throw new Error('Nenhuma linha foi salva (verifique as policies da tabela colaborador_historico no Supabase).');
+    await loadColaboradorHistoricoForApp();
+    if (window._renderHistoricoCarreiraDetalhe) window._renderHistoricoCarreiraDetalhe();
+    if (window._renderColaboradoresHistorico) window._renderColaboradoresHistorico();
+    document.getElementById('historico-modal').style.display = 'none';
+    showToast('Registro de carreira salvo!');
+  } catch (e) {
+    console.error('Erro ao salvar histórico de carreira:', e);
+    showToast('Erro ao salvar registro: ' + (e.message || e));
+  }
+};
+
+window.excluirHistoricoCarreira = async function(id) {
+  if (!confirm('Excluir este registro de carreira?')) return;
+  try {
+    const { error } = await supaClient.from('colaborador_historico').delete().eq('id_cargos_hist', id);
+    if (error) throw error;
+    await loadColaboradorHistoricoForApp();
+    if (window._renderHistoricoCarreiraDetalhe) window._renderHistoricoCarreiraDetalhe();
+    if (window._renderColaboradoresHistorico) window._renderColaboradoresHistorico();
+    showToast('Registro de carreira removido.');
+  } catch (e) {
+    console.error('Erro ao excluir registro de carreira:', e);
+    showToast('Erro ao excluir registro: ' + (e.message || e));
+  }
+};
 
 
 
@@ -2576,35 +2631,38 @@ window.filtrarPerguntasCompetencias = function(query) {
 // COLABORADORES — HISTÓRICO (LISTA DE COLABORADORES COM BOTÃO PARA VER HISTÓRICO INDIVIDUAL)
 // ------------------------------------------------------------
 function pageHistoricoCol() {
-  const emp = window._statusEmployees || [];
-
-  // REMOVIDO: document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" onclick="openCarreiraModal()">+ Adicionar Registro de Carreira</button>`;
-  // O botão de adicionar registro agora só aparecerá na página de detalhes do colaborador.
+  document.getElementById('topbar-actions').innerHTML = '';
 
   const renderColaboradoresHistorico = (filtro = '') => {
     const tbody = document.getElementById('colaboradores-historico-tbody');
     if (!tbody) return;
 
-    const listaFiltrada = emp.filter(e => e[0].toLowerCase().includes(filtro.toLowerCase()));
+    const listaFiltrada = (_colaboradoresSupabase || []).filter(c => (c.nome_colaborador || '').toLowerCase().includes(filtro.toLowerCase()));
 
     tbody.innerHTML = listaFiltrada.length === 0
       ? '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">Nenhum colaborador encontrado.</td></tr>'
-      : listaFiltrada.map((e, i) => `
+      : listaFiltrada.map(c => {
+          const cargoNome = c.cargos ? c.cargos.nome_cargo : '—';
+          const qtd = (window._colaboradorHistorico || []).filter(h => String(h.id_colaborador) === String(c.id_colaborador)).length;
+          return `
           <tr>
-            <td><strong>${e[0]}</strong></td>
-            <td>${e[1]}</td>
-            <td>${e[3]}</td> <!-- Data de Admissão -->
+            <td><strong>${c.nome_colaborador}</strong></td>
+            <td>${cargoNome}</td>
+            <td>${formatarDataBR(c.desde) || '—'}</td>
             <td>
-              <button class="action-btn" title="Ver Histórico de Carreira" onclick="navigate('col-historico-detalhe', 'Histórico de Carreira', 'Colaboradores', ${i})">📈</button>
+              <span class="badge badge-info" style="margin-right:6px">${qtd} registro${qtd !== 1 ? 's' : ''}</span>
+              <button class="action-btn" title="Ver Histórico de Carreira" onclick="navigate('col-historico-detalhe', 'Histórico de Carreira', 'Colaboradores', ${c.id_colaborador})">📈</button>
             </td>
-          </tr>`).join('');
+          </tr>`;
+        }).join('');
   };
 
   window.filtrarColaboradoresHistorico = function(valor) {
     renderColaboradoresHistorico(valor);
   };
+  window._renderColaboradoresHistorico = () => renderColaboradoresHistorico();
 
-  setTimeout(() => renderColaboradoresHistorico(), 0); // Renderiza a tabela inicial
+  Promise.all([loadColaboradoresFromSupabase(), loadColaboradorHistoricoForApp()]).then(() => renderColaboradoresHistorico());
 
   return `
   <div class="table-card">
@@ -2622,7 +2680,7 @@ function pageHistoricoCol() {
         </tr>
       </thead>
       <tbody id="colaboradores-historico-tbody">
-        <!-- Conteúdo gerado por JavaScript -->
+        <tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
       </tbody>
     </table>
   </div>`;
@@ -4421,242 +4479,6 @@ window.excluirMapeamentoPerfil = async function(id) {
   }
 };
 // ------------------------------------------------------------
-// HISTÓRICO DE CARREIRA
-// ------------------------------------------------------------
-function pageCarreira() {
-  if (!window._historicoCarreira) window._historicoCarreira = [];
-  const emp = window._statusEmployees || [];
-  const cargos = window._cargos || [];
-
-  document.getElementById('topbar-actions').innerHTML =
-    `<button class="btn btn-primary" onclick="openCarreiraModal()">+ Adicionar Registro</button>`;
-
-  const renderCarreiraTabela = () => {
-    const tbody = document.getElementById('carreira-tbody');
-    if (!tbody) return;
-
-    const registrosAgrupados = {};
-    window._historicoCarreira.forEach(reg => {
-      if (!registrosAgrupados[reg.colabIdx]) {
-        registrosAgrupados[reg.colabIdx] = [];
-      }
-      registrosAgrupados[reg.colabIdx].push(reg);
-    });
-
-    let htmlContent = '';
-    if (Object.keys(registrosAgrupados).length === 0) {
-      htmlContent = `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro de carreira.</td></tr>`;
-    } else {
-      for (const colabIdx in registrosAgrupados) {
-        const nomeColab = emp[colabIdx] ? emp[colabIdx][0] : 'Colaborador Desconhecido';
-        const registros = registrosAgrupados[colabIdx].sort((a, b) => new Date(b.periodoInicio) - new Date(a.periodoInicio)); // Ordena por data mais recente
-
-        htmlContent += `
-          <tr style="background:var(--bg2);font-weight:600;">
-            <td colspan="7" style="padding: 10px 16px; border-bottom: 1px solid var(--border);">${nomeColab}</td>
-          </tr>`;
-
-        registros.forEach((reg, i) => {
-          htmlContent += `
-            <tr>
-              <td>${reg.periodoInicio}</td>
-              <td>${reg.periodoFim || 'Atual'}</td>
-              <td>${reg.cargo}</td>
-              <td>${reg.salario}</td>
-              <td>${reg.motivo || '—'}</td>
-              <td>
-                <button class="action-btn" title="Editar" onclick="editarCarreira(${colabIdx}, ${i})">✎</button>
-                <button class="action-btn" title="Excluir" style="color:var(--danger)" onclick="deletarCarreira(${colabIdx}, ${i})">✕</button>
-              </td>
-            </tr>`;
-        });
-      }
-    }
-    tbody.innerHTML = htmlContent;
-  };
-
-  window.renderCarreiraTabela = renderCarreiraTabela; // Torna a função global
-  setTimeout(renderCarreiraTabela, 0); // Renderiza a tabela após o HTML ser inserido
-
-  return `
-  <div id="carreira-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:6px;padding:32px;width:560px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
-      <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="carreira-modal-title">Adicionar Registro de Carreira</div>
-      <div class="form-grid">
-        <div class="form-group form-full">
-          <label class="form-label">Colaborador</label>
-          <select class="form-select" id="carreira-colab">
-            <option value="">— Selecione —</option>
-            ${emp.map((e,i) => `<option value="${i}">${e[0]}</option>`).join('')}
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Período Início</label>
-          <input class="form-input" type="date" id="carreira-inicio">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Período Fim (opcional)</label>
-          <input class="form-input" type="date" id="carreira-fim">
-        </div>
-        <div class="form-group form-full">
-          <label class="form-label">Cargo</label>
-          <select class="form-select" id="carreira-cargo">
-            <option value="">— Selecione o Cargo —</option>
-            ${cargos.map(cargo => {
-              const nome = cargo[window._cargoNameField] || cargo.nome_cargo || cargo.nome || '';
-              return `<option value="${nome}">${nome}</option>`;
-            }).join('')}
-          </select>
-        </div>
-        <div class="form-group form-full">
-          <label class="form-label">Salário</label>
-          <input class="form-input" id="carreira-salario" placeholder="R$ 0.000,00">
-        </div>
-        <div class="form-group form-full">
-          <label class="form-label">Motivo (opcional)</label>
-          <textarea class="form-textarea" id="carreira-motivo" placeholder="Ex: Promoção, Transferência, Aumento Salarial..."></textarea>
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
-        <button class="btn" onclick="document.getElementById('carreira-modal').style.display='none'">Cancelar</button>
-        <button class="btn btn-primary" onclick="salvarCarreira()">Salvar</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="table-card">
-    <div class="table-header">
-      <span class="table-title">Histórico de Carreira</span>
-    </div>
-    <table class="table">
-      <thead>
-        <tr>
-          <th>Período Início</th>
-          <th>Período Fim</th>
-          <th>Cargo</th>
-          <th>Salário</th>
-          <th>Motivo</th>
-          <th>Ações</th>
-        </tr>
-      </thead>
-      <tbody id="carreira-tbody">
-        <!-- Registros serão inseridos aqui pelo JavaScript -->
-      </tbody>
-    </table>
-  </div>`;
-}
-
-// Funções globais para o modal e ações
-window.openCarreiraModal = function(colabIdx = null, originalIndex = null) {
-  window._editingCarreiraColabIdx = colabIdx;
-  window._editingCarreiraRegOriginalIndex = originalIndex; // Usamos originalIndex para identificar o registro
-  const modal = document.getElementById('carreira-modal');
-  if (!modal) return;
-
-  const hoje = new Date().toISOString().split('T')[0];
-
-  // Se estamos editando, preenche os campos
-  if (colabIdx !== null && originalIndex !== null) {
-    const registro = window._historicoCarreira.find(r => r.colabIdx == colabIdx && r.originalIndex == originalIndex);
-    if (registro) {
-      document.getElementById('carreira-colab').value = registro.colabIdx;
-      document.getElementById('carreira-inicio').value = registro.periodoInicio;
-      document.getElementById('carreira-fim').value = registro.periodoFim;
-      document.getElementById('carreira-cargo').value = registro.cargo;
-      document.getElementById('carreira-salario').value = registro.salario;
-      document.getElementById('carreira-motivo').value = registro.motivo;
-      document.getElementById('carreira-modal-title').textContent = `Editar Registro de Carreira para ${window._statusEmployees[colabIdx][0]}`;
-      // Desabilita o campo de seleção de colaborador na edição
-      document.getElementById('carreira-colab').disabled = true;
-    }
-  } else {
-    // Novo registro
-    document.getElementById('carreira-colab').value = colabIdx !== null ? colabIdx : ''; // Pré-seleciona se veio de uma página de detalhes
-    document.getElementById('carreira-inicio').value = hoje;
-    document.getElementById('carreira-fim').value = '';
-    document.getElementById('carreira-cargo').value = '';
-    document.getElementById('carreira-salario').value = '';
-    document.getElementById('carreira-motivo').value = '';
-    document.getElementById('carreira-modal-title').textContent = 'Adicionar Registro de Carreira';
-    // Habilita/desabilita o campo de seleção de colaborador
-    document.getElementById('carreira-colab').disabled = (colabIdx !== null);
-  }
-  modal.style.display = 'flex';
-};
-
-window.salvarCarreira = function() {
-  const colabSelect = document.getElementById('carreira-colab');
-  const colabIdx = colabSelect.value; // Pega o valor do select, que pode estar desabilitado
-  const periodoInicio = document.getElementById('carreira-inicio').value;
-  const periodoFim = document.getElementById('carreira-fim').value;
-  const cargo = document.getElementById('carreira-cargo').value;
-  const salario = document.getElementById('carreira-salario').value.trim();
-  const motivo = document.getElementById('carreira-motivo').value.trim();
-
-  if (!colabIdx) return showToast('Selecione um colaborador.');
-  if (!periodoInicio) return showToast('Informe a data de início.');
-  if (!cargo) return showToast('Selecione o cargo.');
-  if (!salario) return showToast('Informe o salário.');
-
-  const novoRegistro = {
-    colabIdx: parseInt(colabIdx), // Garante que seja um número
-    periodoInicio: periodoInicio,
-    periodoFim: periodoFim,
-    cargo: cargo,
-    salario: salario,
-    motivo: motivo,
-  };
-
-  if (window._editingCarreiraColabIdx !== null && window._editingCarreiraRegOriginalIndex !== null) {
-    // Edição de um registro existente
-    const originalIndex = window._editingCarreiraRegOriginalIndex;
-    const existingRecord = window._historicoCarreira.find(r => r.colabIdx == window._editingCarreiraColabIdx && r.originalIndex == originalIndex);
-    if (existingRecord) {
-      Object.assign(existingRecord, novoRegistro); // Atualiza o registro
-    }
-  } else {
-    // Novo registro
-    // Atribui um originalIndex único para o novo registro
-    novoRegistro.originalIndex = window._historicoCarreira.length > 0 ? Math.max(...window._historicoCarreira.map(r => r.originalIndex)) + 1 : 0;
-    window._historicoCarreira.push(novoRegistro);
-  }
-
-  window._salvarStorage();
-  document.getElementById('carreira-modal').style.display = 'none';
-  showToast('Registro de carreira salvo!');
-
-  // Chama a função de renderização apropriada
-  if (document.getElementById('carreira-tbody-detalhe')) { // Se estiver na página de detalhes
-    window.renderCarreiraTabelaDetalhe();
-  } else if (document.getElementById('colaboradores-historico-tbody')) { // Se estiver na lista geral de colaboradores
-    window.renderColaboradoresHistorico();
-  }
-};
-  
-window.editarCarreira = function(colabIdx, regIdx) {
-  openCarreiraModal(colabIdx, regIdx);
-};
-
-window.deletarCarreira = function(colabIdx, originalIndex) {
-  if (!confirm('Excluir este registro de carreira?')) return;
-
-  // Encontra o índice real do registro no array _historicoCarreira
-  const indexToDelete = window._historicoCarreira.findIndex(r => r.colabIdx == colabIdx && r.originalIndex == originalIndex);
-
-  if (indexToDelete !== -1) {
-    window._historicoCarreira.splice(indexToDelete, 1);
-    window._salvarStorage();
-    showToast('Registro de carreira removido.');
-// Chama a função de renderização apropriada
-if (document.getElementById('carreira-tbody-detalhe')) { // Se estiver na página de detalhes
-  window.renderCarreiraTabelaDetalhe();
-} else if (document.getElementById('colaboradores-historico-tbody')) { // Se estiver na lista geral de colaboradores
-  window.renderColaboradoresHistorico();
-}
-    }
-};
-  
-// ------------------------------------------------------------
 // OCORRÊNCIAS
 // ------------------------------------------------------------
 function pageOcorrencias() {
@@ -5466,7 +5288,6 @@ if (supaClient) {
   // Isso evita erros de "undefined" se alguma página tentar acessá-las antes de serem preenchidas
   carregarDescricoesLocal();
   if (!window._cargosDescricao) window._cargosDescricao = [];
-  if (!window._historicoCarreira) window._historicoCarreira = [];
   if (!window._documentosPorColab) window._documentosPorColab = {};
   if (!window._ocorrencias) window._ocorrencias = [];
   if (!window._vagas) window._vagas = [];
