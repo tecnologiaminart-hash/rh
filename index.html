@@ -1166,6 +1166,15 @@ function pageStatus() {
           <input class="form-input" type="text" id="sm-salario-base" placeholder="R$ 0.000,00">
         </div>
         <div class="form-group">
+          <label class="form-label">Tipo de Contrato</label>
+          <select class="form-select" id="sm-tipo-contrato">
+            <option value="">— Selecione —</option>
+            <option value="Efetivo">Efetivo</option>
+            <option value="Experiência">Experiência</option>
+            <option value="Temporária">Temporária</option>
+          </select>
+        </div>
+        <div class="form-group">
           <label class="form-label">Status</label>
           <select class="form-select" id="sm-status">
             <option value="Ativo">Ativo</option>
@@ -1226,6 +1235,7 @@ async function openStatusModal(colabId = null) {
   const smDesde = document.getElementById('sm-desde');
   const smStatus = document.getElementById('sm-status');
   const smSalarioBase = document.getElementById('sm-salario-base'); // Novo campo
+  const smTipoContrato = document.getElementById('sm-tipo-contrato');
 
   // Garante que cargos estejam carregados e popula o select de cargos
   if (!window._cargos || window._cargos.length === 0) {
@@ -1270,6 +1280,7 @@ async function openStatusModal(colabId = null) {
       smCargo.value = colab.id_cargos;
       smDesde.value = colab.desde;
       smStatus.value = colab.status_colaborador;
+      smTipoContrato.value = colab.tipo_de_contrato || '';
       console.log('[EDIT] Dados preenchidos. Salário base:', colab.salario_base);
       // Preenche o salário base a partir da coluna `salario_base` de colaboradores (ou fallback para cargos)
       if (colab.salario_base !== undefined && colab.salario_base !== null && String(colab.salario_base) !== '') {
@@ -1294,6 +1305,7 @@ async function openStatusModal(colabId = null) {
     smDesde.value = '';
     smStatus.value = 'Ativo';
     smSalarioBase.value = ''; // Limpa o salário base
+    smTipoContrato.value = '';
   }
   modal.style.display = 'flex';
 }
@@ -1308,6 +1320,7 @@ async function saveStatusEmployee() {
   const smDesde = document.getElementById('sm-desde').value;
   const smStatus = document.getElementById('sm-status').value;
   const smSalarioRaw = document.getElementById('sm-salario-base').value;
+  const smTipoContrato = document.getElementById('sm-tipo-contrato').value;
   // Converte formato BRL (ex: 1.234,56) para número (1234.56)
   const smSalarioNum = smSalarioRaw ? parseFloat(String(smSalarioRaw).replace(/\./g,'').replace(/,/g,'.').replace(/[^0-9.\-]/g,'')) : null;
 
@@ -1321,6 +1334,7 @@ async function saveStatusEmployee() {
     id_cargos: smCargoId,
     desde: smDesde,
     status_colaborador: smStatus,
+    tipo_de_contrato: smTipoContrato || null,
   };
   if (smSalarioNum !== null && !isNaN(smSalarioNum)) newColabData.salario_base = smSalarioNum;
 
