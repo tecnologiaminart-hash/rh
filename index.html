@@ -725,7 +725,6 @@ const NAV = [
     subs: [
       { id: 'ficha-dados', label: 'Dados Pessoais' },
       { id: 'ficha-mapeamento', label: 'Mapeamento de Perfil' },
-      { id: 'ficha-ocorrencias', label: 'Ocorrências e Obs' },
     ]
   },
   {
@@ -2075,7 +2074,6 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
     'aval-perguntas-competencias': pagePerguntasCompetencias,
     'ficha-dados':     pageDadosPessoais,
     'ficha-mapeamento': pageMapeamentoPerfil,
-    'ficha-ocorrencias': pageOcorrencias,
     'bon-regras':      pageBonRegras,
     'bon-historico':   pageBonHistorico,
     'bon-relatorio':   pageRelatorio,
@@ -2116,10 +2114,6 @@ function postRender(id) {
   });
   // Print
   document.querySelectorAll('.btn-print').forEach(b => b.addEventListener('click', () => window.print()));
-  // Ocorrências
-  if (id === 'ficha-ocorrencias') {
-    setTimeout(() => { if (window.renderOcorrenciasTabela) renderOcorrenciasTabela(); }, 0);
-  }
 }
 
 
@@ -4106,6 +4100,13 @@ window.openDadosPessoaisModal = async function(id = null) {
               </select>
             </div>
             <div class="form-group"><label class="form-label">PIX</label><input class="form-input" id="dp-pix"></div>
+            <div class="form-group"><label class="form-label">Optante por Vale-Transporte</label>
+              <select class="form-select" id="dp-vale-transporte">
+                <option value="">— Selecione —</option>
+                <option value="Sim">Sim</option>
+                <option value="Não">Não</option>
+              </select>
+            </div>
             <div class="form-group"><label class="form-label">Função</label><input class="form-input" id="dp-funcao"></div>
             <div class="form-group"><label class="form-label">Salário R$ <span style="font-weight:400;text-transform:none;color:var(--text3)">(vem de Informações Contratuais)</span></label><input class="form-input" id="dp-salario" placeholder="—" readonly style="background:var(--bg2);cursor:not-allowed"></div>
           </div>
@@ -4131,7 +4132,7 @@ window.openDadosPessoaisModal = async function(id = null) {
   selectColab.innerHTML = '<option value="">— Selecione —</option>' +
     (_colaboradoresSupabase || []).map(c => `<option value="${c.id_colaborador || c.id || c.codigo}">${c.nome_colaborador || c.nome || c.name}</option>`).join('');
 
-  const campos = ['cpf','rg','nascimento','telefone','email','endereco','tel-emergencia','estado-civil','escolaridade','pix','funcao','salario','epi-camisa','epi-calca','epi-botina','epi-jaleco','epi-luva-raspa','epi-luva-lavagem'];
+  const campos = ['cpf','rg','nascimento','telefone','email','endereco','tel-emergencia','estado-civil','escolaridade','pix','vale-transporte','funcao','salario','epi-camisa','epi-calca','epi-botina','epi-jaleco','epi-luva-raspa','epi-luva-lavagem'];
 
   if (id) {
     const registro = (window._dadosPessoaisEpi || []).find(d => d.id === id);
@@ -4147,6 +4148,7 @@ window.openDadosPessoaisModal = async function(id = null) {
     document.getElementById('dp-estado-civil').value = registro?.estado_civil || '';
     document.getElementById('dp-escolaridade').value = registro?.escolaridade || '';
     document.getElementById('dp-pix').value = registro?.pix || '';
+    document.getElementById('dp-vale-transporte').value = (registro && registro['vale-transporte']) || '';
     document.getElementById('dp-funcao').value = registro?.funcao || '';
     preencherSalarioDadosPessoais(selectColab.value);
     document.getElementById('dp-epi-camisa').value = registro?.epi_camisa || '';
@@ -4198,6 +4200,7 @@ window.salvarDadosPessoaisEpi = async function() {
     estado_civil: document.getElementById('dp-estado-civil').value || null,
     escolaridade: document.getElementById('dp-escolaridade').value || null,
     pix: document.getElementById('dp-pix').value || null,
+    'vale-transporte': document.getElementById('dp-vale-transporte').value || null,
     funcao: document.getElementById('dp-funcao').value || null,
     epi_camisa: document.getElementById('dp-epi-camisa').value || null,
     epi_calca: document.getElementById('dp-epi-calca').value || null,
@@ -4477,167 +4480,6 @@ window.excluirMapeamentoPerfil = async function(id) {
     console.error('Erro ao excluir registro:', e);
     showToast('Erro ao excluir registro: ' + (e.message || e));
   }
-};
-// ------------------------------------------------------------
-// OCORRÊNCIAS
-// ------------------------------------------------------------
-function pageOcorrencias() {
-  if (!window._ocorrencias) window._ocorrencias = [];
-  const emp = window._statusEmployees || [];
-
-  document.getElementById('topbar-actions').innerHTML =
-    `<button class="btn btn-primary" onclick="openOcorrenciaModal()">+ Registrar Ocorrência</button>`;
-
-  return `
-  <div id="ocorrencia-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:6px;padding:32px;width:520px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
-      <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="oc-modal-title">Registrar Ocorrência</div>
-      <div class="form-grid">
-        <div class="form-group form-full">
-          <label class="form-label">Colaborador</label>
-          <select class="form-select" id="oc-colab">
-            <option value="">— Selecione —</option>
-            ${emp.map((e,i) => `<option value="${i}">${e[0]}</option>`).join('')}
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Tipo</label>
-          <select class="form-select" id="oc-tipo">
-            <option value="Elogio">Elogio</option>
-            <option value="Observação">Observação</option>
-            <option value="Advertência">Advertência</option>
-            <option value="Suspensão">Suspensão</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Data</label>
-          <input class="form-input" type="date" id="oc-data">
-        </div>
-        <div class="form-group form-full">
-          <label class="form-label">Descrição</label>
-          <textarea class="form-textarea" id="oc-descricao" placeholder="Descreva a ocorrência..."></textarea>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Registrado por</label>
-          <input class="form-input" id="oc-registrado" placeholder="Nome do responsável">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Gravidade</label>
-          <select class="form-select" id="oc-gravidade">
-            <option value="—">—</option>
-            <option value="Baixa">Baixa</option>
-            <option value="Média">Média</option>
-            <option value="Alta">Alta</option>
-          </select>
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
-        <button class="btn" onclick="document.getElementById('ocorrencia-modal').style.display='none'">Cancelar</button>
-        <button class="btn btn-primary" onclick="salvarOcorrencia()">Salvar</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="table-card">
-    <div class="table-header"><span class="table-title">Ocorrências e Observações</span></div>
-    <table>
-      <thead>
-        <tr>
-          <th>Colaborador</th>
-          <th>Data</th>
-          <th>Tipo</th>
-          <th>Descrição</th>
-          <th>Registrado por</th>
-          <th>Gravidade</th>
-          <th>Ações</th>
-        </tr>
-      </thead>
-      <tbody id="ocorrencias-tbody"></tbody>
-    </table>
-  </div>`;
-}
-
-window.renderOcorrenciasTabela = function() {
-  const tbody = document.getElementById('ocorrencias-tbody');
-  if (!tbody) return;
-  const emp = window._statusEmployees || [];
-  tbody.innerHTML = (window._ocorrencias||[]).length === 0
-    ? '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma ocorrência registrada</td></tr>'
-    : window._ocorrencias.map((o,i) => {
-        const nomeColab = emp[o.colab] ? emp[o.colab][0] : '—';
-        return `
-        <tr>
-          <td><strong>${nomeColab}</strong></td>
-          <td>${o.data}</td>
-          <td><span class="badge ${o.tipo==='Elogio'?'badge-active':o.tipo==='Observação'?'badge-pending':'badge-inactive'}">${o.tipo}</span></td>
-          <td style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${o.descricao}</td>
-          <td>${o.registrado}</td>
-          <td>${o.gravidade}</td>
-          <td>
-            <button class="action-btn" onclick="editarOcorrencia(${i})">✎</button>
-            <button class="action-btn" style="color:var(--danger)" onclick="deletarOcorrencia(${i})">✕</button>
-          </td>
-        </tr>`;
-      }).join('');
-};
-
-window.openOcorrenciaModal = function(idx=null) {
-  window._editingOcorrenciaIdx = idx;
-  const hoje = new Date().toISOString().split('T')[0];
-  if (idx !== null) {
-    const o = window._ocorrencias[idx];
-    document.getElementById('oc-colab').value      = o.colab;
-    document.getElementById('oc-tipo').value       = o.tipo;
-    document.getElementById('oc-data').value       = o.data.split('/').reverse().join('-');
-    document.getElementById('oc-descricao').value  = o.descricao;
-    document.getElementById('oc-registrado').value = o.registrado;
-    document.getElementById('oc-gravidade').value  = o.gravidade;
-    document.getElementById('oc-modal-title').textContent = 'Editar Ocorrência';
-  } else {
-    document.getElementById('oc-colab').value      = '';
-    document.getElementById('oc-tipo').value       = 'Elogio';
-    document.getElementById('oc-data').value       = hoje;
-    document.getElementById('oc-descricao').value  = '';
-    document.getElementById('oc-registrado').value = '';
-    document.getElementById('oc-gravidade').value  = '—';
-    document.getElementById('oc-modal-title').textContent = 'Registrar Ocorrência';
-  }
-  document.getElementById('ocorrencia-modal').style.display = 'flex';
-};
-
-window.editarOcorrencia = function(i) { openOcorrenciaModal(i); };
-
-window.salvarOcorrencia = function() {
-  const colab     = document.getElementById('oc-colab').value;
-  const tipo      = document.getElementById('oc-tipo').value;
-  const data      = document.getElementById('oc-data').value;
-  const descricao = document.getElementById('oc-descricao').value.trim();
-  const registrado= document.getElementById('oc-registrado').value.trim();
-  const gravidade = document.getElementById('oc-gravidade').value;
-  if (colab === '') return showToast('Selecione um colaborador.');
-  if (!descricao)  return showToast('Informe a descrição.');
-  const registro = {
-    colab,
-    tipo,
-    data: data ? data.split('-').reverse().join('/') : new Date().toLocaleDateString('pt-BR'),
-    descricao,
-    registrado: registrado || '—',
-    gravidade
-  };
-  const idx = window._editingOcorrenciaIdx;
-  if (idx !== null) window._ocorrencias[idx] = registro;
-  else window._ocorrencias.push(registro);
-  window._salvarStorage();
-  document.getElementById('ocorrencia-modal').style.display = 'none';
-  showToast('Ocorrência salva!');
-  renderOcorrenciasTabela();
-};
-
-window.deletarOcorrencia = function(i) {
-  if (!confirm('Excluir esta ocorrência?')) return;
-  window._ocorrencias.splice(i, 1);
-  renderOcorrenciasTabela();
-  showToast('Ocorrência removida.');
 };
 // ------------------------------------------------------------
 // BONIFICAÇÃO
@@ -5289,7 +5131,6 @@ if (supaClient) {
   carregarDescricoesLocal();
   if (!window._cargosDescricao) window._cargosDescricao = [];
   if (!window._documentosPorColab) window._documentosPorColab = {};
-  if (!window._ocorrencias) window._ocorrencias = [];
   if (!window._vagas) window._vagas = [];
   if (!window._candidaturas) window._candidaturas = []; // Já existe, mas bom reforçar
   
