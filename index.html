@@ -3407,93 +3407,244 @@ window.preencherCargoAtual = function(idx) {
   document.getElementById('alt-salario-atual').value = emp[4] || '—';
 };
 // ------------------------------------------------------------
-// DADOS PESSOAIS
+// DADOS PESSOAIS (Ficha e EPIs) — registros em Supabase (dados_pessoais_epi)
 // ------------------------------------------------------------
+async function loadDadosPessoaisEpiForApp() {
+  if (!supaClient) {
+    console.error('Supabase client não inicializado para dados_pessoais_epi.');
+    window._dadosPessoaisEpi = [];
+    return;
+  }
+  const { data, error } = await supaClient
+    .from('dados_pessoais_epi')
+    .select('*')
+    .order('nome_colaborador', { ascending: true });
+  if (error) {
+    console.error('Erro ao carregar dados pessoais/EPIs:', error.message);
+    window._dadosPessoaisEpi = [];
+  } else {
+    window._dadosPessoaisEpi = data;
+  }
+}
+
 function pageDadosPessoais() {
-  const emp = window._statusEmployees || [];
-  if (!window._dadosPessoais) window._dadosPessoais = {};
+  if (!window._dadosPessoaisEpi) window._dadosPessoaisEpi = [];
+
+  document.getElementById('topbar-actions').innerHTML =
+    `<button class="btn btn-primary" onclick="openDadosPessoaisModal()">+ Novo Registro</button>`;
+
+  const renderTabela = () => {
+    const tbody = document.getElementById('dados-pessoais-tbody');
+    if (!tbody) return;
+    const lista = window._dadosPessoaisEpi || [];
+    tbody.innerHTML = lista.length === 0
+      ? '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro cadastrado.</td></tr>'
+      : lista.map(d => `
+          <tr>
+            <td><strong>${d.nome_colaborador || '—'}</strong></td>
+            <td>${d.cpf || '—'}</td>
+            <td>${d.funcao || '—'}</td>
+            <td>${d.salario !== null && d.salario !== undefined && d.salario !== '' ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(d.salario)) : '—'}</td>
+            <td style="white-space:nowrap">
+              <button class="action-btn" title="Editar" onclick="openDadosPessoaisModal(${d.id})">✎</button>
+              <button class="action-btn" title="Excluir" onclick="excluirDadosPessoaisEpi(${d.id})" style="color:var(--danger)">✕</button>
+            </td>
+          </tr>`).join('');
+  };
+
+  window._renderDadosPessoaisEpi = renderTabela;
+  loadDadosPessoaisEpiForApp().then(renderTabela);
 
   return `
-  <div class="form-card" style="margin-bottom:16px">
-    <div class="form-group">
-      <label class="form-label">Selecionar Colaborador</label>
-      <select class="form-select" id="dados-select" onchange="carregarDadosPessoais(this.value)">
-        <option value="">— Selecione um colaborador —</option>
-        ${emp.map((e,i) => {
-          const preenchido = window._dadosPessoais[i] && window._dadosPessoais[i].cpf;
-          return `<option value="${i}">${e[0]} ${preenchido ? '✅' : '⬜'}</option>`;
-        }).join('')}
-      </select>
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">Dados Pessoais e EPIs</span>
+      <input class="search-input" placeholder="Buscar colaborador..." oninput="filtrarDadosPessoaisEpi(this.value)" style="margin-left:12px">
     </div>
-  </div>
-  <div id="dados-form-wrap" style="display:none">
-    <div class="form-card">
-      <div class="form-section-title">Dados Pessoais</div>
-      <div class="form-grid">
-        <div class="form-group"><label class="form-label">Nome Completo</label><input class="form-input" id="dp-nome"></div>
-        <div class="form-group"><label class="form-label">Nome Social</label><input class="form-input" id="dp-social"></div>
-        <div class="form-group"><label class="form-label">Data de Nascimento</label><input class="form-input" type="date" id="dp-nascimento"></div>
-        <div class="form-group"><label class="form-label">CPF</label><input class="form-input" id="dp-cpf" placeholder="000.000.000-00"></div>
-        <div class="form-group"><label class="form-label">RG</label><input class="form-input" id="dp-rg"></div>
-        <div class="form-group"><label class="form-label">Estado Civil</label>
-          <select class="form-select" id="dp-estado-civil">
-            <option value="">— Selecione —</option>
-            <option>Solteiro(a)</option><option>Casado(a)</option><option>Divorciado(a)</option><option>Viúvo(a)</option><option>União Estável</option>
-          </select>
-        </div>
-        <div class="form-group"><label class="form-label">Escolaridade</label>
-          <select class="form-select" id="dp-escolaridade">
-            <option value="">— Selecione —</option>
-            <option>Fundamental</option><option>Médio</option><option>Superior</option><option>Pós-Graduação</option>
-          </select>
-        </div>
-        <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" id="dp-telefone" placeholder="(00) 00000-0000"></div>
-        <div class="form-group"><label class="form-label">E-mail Pessoal</label><input class="form-input" type="email" id="dp-email"></div>
-        <div class="form-group"><label class="form-label">CEP</label><input class="form-input" id="dp-cep"></div>
-        <div class="form-group"><label class="form-label">Endereço</label><input class="form-input" id="dp-endereco"></div>
-        <div class="form-group"><label class="form-label">Bairro</label><input class="form-input" id="dp-bairro"></div>
-        <div class="form-group"><label class="form-label">Cidade</label><input class="form-input" id="dp-cidade"></div>
-        <div class="form-group"><label class="form-label">UF</label><input class="form-input" id="dp-uf" maxlength="2"></div>
-        <div class="form-group form-full"><label class="form-label">Observações</label><textarea class="form-textarea" id="dp-obs"></textarea></div>
-      </div>
-      <div class="form-footer">
-        <button class="btn btn-primary" onclick="salvarDadosPessoais()">Salvar Dados</button>
-        <span id="dp-status-label" style="font-size:12px;color:var(--text3);margin-left:8px;align-self:center"></span>
-      </div>
-    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Nome Colaborador</th>
+          <th>CPF</th>
+          <th>Função</th>
+          <th>Salário R$</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="dados-pessoais-tbody">
+        <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
+      </tbody>
+    </table>
   </div>`;
 }
 
-window.carregarDadosPessoais = function(idx) {
-  const wrap = document.getElementById('dados-form-wrap');
-  if (idx === '') { wrap.style.display = 'none'; return; }
-  const d = window._dadosPessoais[idx] || {};
-  const campos = ['nome','social','nascimento','cpf','rg','estado-civil','escolaridade','telefone','email','cep','endereco','bairro','cidade','uf','obs'];
-  campos.forEach(c => {
-    const el = document.getElementById(`dp-${c}`);
-    if (el) el.value = d[c] || '';
+window.filtrarDadosPessoaisEpi = function(query) {
+  const q = String(query || '').trim().toLowerCase();
+  document.querySelectorAll('#dados-pessoais-tbody tr').forEach(row => {
+    row.style.display = !q || row.textContent.toLowerCase().includes(q) ? '' : 'none';
   });
-  const preenchido = d.cpf;
-  document.getElementById('dp-status-label').textContent = preenchido ? '✅ Preenchido' : '⬜ Não preenchido';
-  wrap.style.display = '';
 };
 
-window.salvarDadosPessoais = function() {
-  const idx = document.getElementById('dados-select').value;
-  if (!idx) return showToast('Selecione um colaborador.');
-  const campos = ['nome','social','nascimento','cpf','rg','estado-civil','escolaridade','telefone','email','cep','endereco','bairro','cidade','uf','obs'];
-  const dados = {};
-  campos.forEach(c => {
-    const el = document.getElementById(`dp-${c}`);
-    if (el) dados[c] = el.value;
-  });
-  window._dadosPessoais[idx] = dados;
-  const preenchido = dados.cpf;
-  document.getElementById('dp-status-label').textContent = preenchido ? '✅ Preenchido' : '⬜ Não preenchido';
-  // Atualiza o select para mostrar o ícone correto
-  const opt = document.querySelector(`#dados-select option[value="${idx}"]`);
-  if (opt) opt.textContent = `${window._statusEmployees[idx][0]} ${preenchido ? '✅' : '⬜'}`;
-  showToast('Dados salvos com sucesso!');
+window.openDadosPessoaisModal = async function(id = null) {
+  window._editingDadosPessoaisId = id;
+  if (!_colaboradoresSupabase || _colaboradoresSupabase.length === 0) {
+    await loadColaboradoresFromSupabase();
+  }
+
+  if (!document.getElementById('dados-pessoais-modal')) {
+    const modal = document.createElement('div');
+    modal.id = 'dados-pessoais-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:6px;width:720px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:15px;font-weight:700" id="dados-pessoais-modal-title">Novo Registro</div>
+          <button type="button" class="btn btn-sm" onclick="document.getElementById('dados-pessoais-modal').style.display='none'">✕</button>
+        </div>
+        <div style="padding:24px">
+          <div class="form-section-title">Dados Pessoais</div>
+          <div class="form-grid">
+            <div class="form-group form-full">
+              <label class="form-label">Nome Colaborador</label>
+              <select class="form-select" id="dp-colaborador"><option value="">— Selecione —</option></select>
+            </div>
+            <div class="form-group"><label class="form-label">CPF</label><input class="form-input" id="dp-cpf" placeholder="000.000.000-00"></div>
+            <div class="form-group"><label class="form-label">RG</label><input class="form-input" id="dp-rg"></div>
+            <div class="form-group"><label class="form-label">Data de Nascimento</label><input class="form-input" type="date" id="dp-nascimento"></div>
+            <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" id="dp-telefone" placeholder="(00) 00000-0000"></div>
+            <div class="form-group"><label class="form-label">E-mail</label><input class="form-input" type="email" id="dp-email"></div>
+            <div class="form-group form-full"><label class="form-label">Endereço</label><input class="form-input" id="dp-endereco"></div>
+            <div class="form-group"><label class="form-label">Telefone Emergência (Nome/Fone)</label><input class="form-input" id="dp-tel-emergencia" placeholder="Ex: Maria - (00) 00000-0000"></div>
+            <div class="form-group"><label class="form-label">Estado Civil</label>
+              <select class="form-select" id="dp-estado-civil">
+                <option value="">— Selecione —</option>
+                <option>Solteiro(a)</option><option>Casado(a)</option><option>Divorciado(a)</option><option>Viúvo(a)</option><option>União Estável</option>
+              </select>
+            </div>
+            <div class="form-group"><label class="form-label">Grau de Instrução ou Escolaridade</label>
+              <select class="form-select" id="dp-escolaridade">
+                <option value="">— Selecione —</option>
+                <option>Fundamental</option><option>Médio</option><option>Superior</option><option>Pós-Graduação</option>
+              </select>
+            </div>
+            <div class="form-group"><label class="form-label">PIX</label><input class="form-input" id="dp-pix"></div>
+            <div class="form-group"><label class="form-label">Função</label><input class="form-input" id="dp-funcao"></div>
+            <div class="form-group"><label class="form-label">Salário R$</label><input class="form-input" id="dp-salario" placeholder="R$ 0.000,00"></div>
+          </div>
+          <div class="form-section-title" style="margin-top:20px">Numeração de EPIs / Tamanhos</div>
+          <div class="form-grid">
+            <div class="form-group"><label class="form-label">Camisa</label><input class="form-input" id="dp-epi-camisa"></div>
+            <div class="form-group"><label class="form-label">Calça</label><input class="form-input" id="dp-epi-calca"></div>
+            <div class="form-group"><label class="form-label">Botina</label><input class="form-input" id="dp-epi-botina"></div>
+            <div class="form-group"><label class="form-label">Jaleco</label><input class="form-input" id="dp-epi-jaleco"></div>
+            <div class="form-group"><label class="form-label">Luva Raspa</label><input class="form-input" id="dp-epi-luva-raspa"></div>
+            <div class="form-group"><label class="form-label">Luva Lavagem</label><input class="form-input" id="dp-epi-luva-lavagem"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn" onclick="document.getElementById('dados-pessoais-modal').style.display='none'">Cancelar</button>
+          <button type="button" class="btn btn-primary" onclick="salvarDadosPessoaisEpi()">Salvar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  const selectColab = document.getElementById('dp-colaborador');
+  selectColab.innerHTML = '<option value="">— Selecione —</option>' +
+    (_colaboradoresSupabase || []).map(c => `<option value="${c.id_colaborador || c.id || c.codigo}">${c.nome_colaborador || c.nome || c.name}</option>`).join('');
+
+  const campos = ['cpf','rg','nascimento','telefone','email','endereco','tel-emergencia','estado-civil','escolaridade','pix','funcao','salario','epi-camisa','epi-calca','epi-botina','epi-jaleco','epi-luva-raspa','epi-luva-lavagem'];
+
+  if (id) {
+    const registro = (window._dadosPessoaisEpi || []).find(d => d.id === id);
+    document.getElementById('dados-pessoais-modal-title').textContent = `Editar Registro — ${registro ? registro.nome_colaborador : ''}`;
+    selectColab.value = registro ? (registro.id_colaborador || '') : '';
+    document.getElementById('dp-cpf').value = registro?.cpf || '';
+    document.getElementById('dp-rg').value = registro?.rg || '';
+    document.getElementById('dp-nascimento').value = registro?.data_nascimento || '';
+    document.getElementById('dp-telefone').value = registro?.telefone || '';
+    document.getElementById('dp-email').value = registro?.email || '';
+    document.getElementById('dp-endereco').value = registro?.endereco || '';
+    document.getElementById('dp-tel-emergencia').value = registro?.telefone_emergencia || '';
+    document.getElementById('dp-estado-civil').value = registro?.estado_civil || '';
+    document.getElementById('dp-escolaridade').value = registro?.escolaridade || '';
+    document.getElementById('dp-pix').value = registro?.pix || '';
+    document.getElementById('dp-funcao').value = registro?.funcao || '';
+    document.getElementById('dp-salario').value = registro?.salario !== null && registro?.salario !== undefined ? String(registro.salario) : '';
+    document.getElementById('dp-epi-camisa').value = registro?.epi_camisa || '';
+    document.getElementById('dp-epi-calca').value = registro?.epi_calca || '';
+    document.getElementById('dp-epi-botina').value = registro?.epi_botina || '';
+    document.getElementById('dp-epi-jaleco').value = registro?.epi_jaleco || '';
+    document.getElementById('dp-epi-luva-raspa').value = registro?.epi_luva_raspa || '';
+    document.getElementById('dp-epi-luva-lavagem').value = registro?.epi_luva_lavagem || '';
+  } else {
+    document.getElementById('dados-pessoais-modal-title').textContent = 'Novo Registro';
+    selectColab.value = '';
+    campos.forEach(c => { const el = document.getElementById(`dp-${c}`); if (el) el.value = ''; });
+  }
+
+  document.getElementById('dados-pessoais-modal').style.display = 'flex';
+};
+
+window.salvarDadosPessoaisEpi = async function() {
+  const idColaborador = document.getElementById('dp-colaborador').value;
+  if (!idColaborador) return showToast('Selecione o colaborador.');
+  const nomeColaborador = document.querySelector('#dp-colaborador option:checked')?.textContent || '';
+
+  const salarioRaw = document.getElementById('dp-salario').value;
+  const salarioNum = salarioRaw ? parseFloat(String(salarioRaw).replace(/\./g,'').replace(/,/g,'.').replace(/[^0-9.\-]/g,'')) : null;
+
+  const payload = {
+    id_colaborador: idColaborador,
+    nome_colaborador: nomeColaborador,
+    cpf: document.getElementById('dp-cpf').value || null,
+    rg: document.getElementById('dp-rg').value || null,
+    data_nascimento: document.getElementById('dp-nascimento').value || null,
+    telefone: document.getElementById('dp-telefone').value || null,
+    email: document.getElementById('dp-email').value || null,
+    endereco: document.getElementById('dp-endereco').value || null,
+    telefone_emergencia: document.getElementById('dp-tel-emergencia').value || null,
+    estado_civil: document.getElementById('dp-estado-civil').value || null,
+    escolaridade: document.getElementById('dp-escolaridade').value || null,
+    pix: document.getElementById('dp-pix').value || null,
+    funcao: document.getElementById('dp-funcao').value || null,
+    salario: (salarioNum !== null && !isNaN(salarioNum)) ? salarioNum : null,
+    epi_camisa: document.getElementById('dp-epi-camisa').value || null,
+    epi_calca: document.getElementById('dp-epi-calca').value || null,
+    epi_botina: document.getElementById('dp-epi-botina').value || null,
+    epi_jaleco: document.getElementById('dp-epi-jaleco').value || null,
+    epi_luva_raspa: document.getElementById('dp-epi-luva-raspa').value || null,
+    epi_luva_lavagem: document.getElementById('dp-epi-luva-lavagem').value || null,
+  };
+
+  try {
+    const id = window._editingDadosPessoaisId;
+    const { error } = id
+      ? await supaClient.from('dados_pessoais_epi').update(payload).eq('id', id)
+      : await supaClient.from('dados_pessoais_epi').insert([payload]);
+    if (error) throw error;
+    await loadDadosPessoaisEpiForApp();
+    if (window._renderDadosPessoaisEpi) window._renderDadosPessoaisEpi();
+    document.getElementById('dados-pessoais-modal').style.display = 'none';
+    showToast(id ? 'Registro atualizado!' : 'Registro criado!');
+  } catch (e) {
+    console.error('Erro ao salvar dados pessoais/EPIs:', e);
+    showToast('Erro ao salvar registro: ' + (e.message || e));
+  }
+};
+
+window.excluirDadosPessoaisEpi = async function(id) {
+  if (!confirm('Excluir este registro?')) return;
+  try {
+    const { error } = await supaClient.from('dados_pessoais_epi').delete().eq('id', id);
+    if (error) throw error;
+    await loadDadosPessoaisEpiForApp();
+    if (window._renderDadosPessoaisEpi) window._renderDadosPessoaisEpi();
+    showToast('Registro excluído.');
+  } catch (e) {
+    console.error('Erro ao excluir registro:', e);
+    showToast('Erro ao excluir registro: ' + (e.message || e));
+  }
 };
 // ------------------------------------------------------------
 // HISTÓRICO DE CARREIRA
@@ -4543,7 +4694,6 @@ if (supaClient) {
   if (!window._cargosDescricao) window._cargosDescricao = [];
   if (!window._historicoCarreira) window._historicoCarreira = [];
   if (!window._documentosPorColab) window._documentosPorColab = {};
-  if (!window._dadosPessoais) window._dadosPessoais = {};
   if (!window._ocorrencias) window._ocorrencias = [];
   if (!window._vagas) window._vagas = [];
   if (!window._candidaturas) window._candidaturas = []; // Já existe, mas bom reforçar
