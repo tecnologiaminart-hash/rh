@@ -1147,6 +1147,19 @@ async function loadColaboradoresFromSupabase() {
   }
 }
 
+// Formata uma data "YYYY-MM-DD" (coluna `date` do Postgres) para DD/MM/AAAA sem o bug
+// de fuso horário do `new Date(string)`: esse construtor interpreta a string como UTC
+// e, em fusos negativos como o do Brasil, o toLocaleDateString acaba exibindo o dia
+// anterior ao que está salvo no banco. Aqui a data é montada direto dos números, sem
+// passar por conversão de fuso.
+function formatarDataBR(dataStr) {
+  if (!dataStr) return null;
+  const m = String(dataStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return new Date(dataStr).toLocaleDateString('pt-BR');
+  const [, ano, mes, dia] = m;
+  return `${dia}/${mes}/${ano}`;
+}
+
 function renderStatusTable() {
   const tbody = document.getElementById('status-table-body');
   if (!tbody) return;
@@ -1172,7 +1185,7 @@ function renderStatusTable() {
       <tr>
         <td>${colab.nome_colaborador}</td>
         <td>${cargoNome}</td>
-        <td>${colab.desde ? new Date(colab.desde).toLocaleDateString('pt-BR') : 'N/A'}</td>
+        <td>${formatarDataBR(colab.desde) || 'N/A'}</td>
         <td>${salarioBase}</td>
         <td><span class="badge ${statusBadgeClass}">${colab.status_colaborador}</span></td>
         <td>
@@ -1423,7 +1436,7 @@ function viewStatusEmployee(colabId) {
     Nome: ${colab.nome_colaborador}
     Cargo: ${cargoNome}
     Salário Base: ${salarioBase}
-    Desde: ${colab.desde ? new Date(colab.desde).toLocaleDateString('pt-BR') : 'N/A'}
+    Desde: ${formatarDataBR(colab.desde) || 'N/A'}
     Status: ${colab.status_colaborador}
   `, 'info', 5000); // Exibe por 5 segundos
 }
@@ -1449,7 +1462,7 @@ function printStatusRow(colabId) {
     <p><strong>Cargo:</strong> ${cargoNome}</p>
     <p><strong>Salário Base:</strong> ${salarioBase}</p>
     <p><strong>Status:</strong> ${colab.status_colaborador}</p>
-    <p><strong>Desde:</strong> ${colab.desde ? new Date(colab.desde).toLocaleDateString('pt-BR') : 'N/A'}</p>
+    <p><strong>Desde:</strong> ${formatarDataBR(colab.desde) || 'N/A'}</p>
     <p style="margin-top:30px;color:#888;font-size:12px">Impresso em: ${new Date().toLocaleDateString('pt-BR')}</p>
   </body></html>`);
   w.print();
@@ -2798,7 +2811,8 @@ function pageCandidatosAprovados() {
             </span>
           </div>
         </div>
-        <table>
+        <div style="overflow-x:auto">
+        <table style="white-space:nowrap">
           <thead>
             <tr>
               <th>Nome</th>
@@ -2806,11 +2820,11 @@ function pageCandidatosAprovados() {
               <th>Número</th>
               <th>Instagram</th>
               <th>Currículo</th>
-              <th>Data de Envio</th>
-              <th>Status Avaliação</th>
+              <th>Envio</th>
+              <th>Avaliação</th>
               <th>Respondido em</th>
               <th>Perfil DISC</th>
-              <th>Competências</th>
+              <th>Compet.</th>
               <th>Entrevista</th>
               <th>Ações</th>
             </tr>
@@ -2855,17 +2869,18 @@ function pageCandidatosAprovados() {
                        <a class="action-btn" title="Baixar" href="${driveDownloadUrl(teste.url_respostas_entrevista)}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">⬇</a>`
                     : `<span class="badge badge-gray">—</span>`}
                 </td>
-                <td style="white-space:nowrap">
+                <td>
                   <button class="action-btn" onclick="verCandidato(${c.id_candidaturas})" title="Ver dados completos">👁</button>
                   ${linkWhats
-                    ? `<a class="action-btn" title="Chamar no WhatsApp" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block" href="${linkWhats}">💬 Chamar no WhatsApp</a>`
-                    : `<span class="badge badge-gray" title="Cadastre o número ou aguarde a geração do link da avaliação">Sem WhatsApp</span>`}
+                    ? `<a class="action-btn" title="Chamar no WhatsApp" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block" href="${linkWhats}">💬</a>`
+                    : `<span class="action-btn" style="opacity:.4;cursor:default" title="Cadastre o número ou aguarde a geração do link da avaliação">💬</span>`}
                   <button class="action-btn" title="Remover da avaliação" onclick="removerCandidatoAvaliacao(${c.id_candidaturas})">↩</button>
                 </td>
               </tr>`;
             }).join('')}
           </tbody>
         </table>
+        </div>
       </div>
     `;
     }).join('');
