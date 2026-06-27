@@ -725,6 +725,7 @@ const NAV = [
     subs: [
       { id: 'ficha-dados', label: 'Dados Pessoais' },
       { id: 'ficha-mapeamento', label: 'Mapeamento de Perfil' },
+      { id: 'ficha-relatorio', label: 'Relatórios e Impressão' },
     ]
   },
   {
@@ -826,72 +827,177 @@ window.showAcoesEnvioBanner = function() {
 function pageDashboard() {
   const ta = document.getElementById('topbar-actions');
   ta.innerHTML = `<button class="btn btn-sm" onclick="showToast('Relatório gerado!')">📥 Exportar</button>`;
-  return `
-  <div class="kpi-grid">
-    <div class="kpi-card">
-      <div class="kpi-label">Total de Colaboradores</div>
-      <div class="kpi-value">34</div>
-      <div class="kpi-delta delta-up">Base atualizada</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Admissões no Mês</div>
-      <div class="kpi-value">7</div>
-      <div class="kpi-delta delta-up">↑ 2 vs mês anterior</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Desligamentos</div>
-      <div class="kpi-value">4</div>
-      <div class="kpi-delta delta-down">↑ 1 vs mês anterior</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Vagas</div>
-      <div class="kpi-value">11</div>
-      <div class="kpi-delta" style="color:var(--text3)">3 em processo final</div>
-    </div>
-  </div>
-  <div class="charts-grid">
-    <div class="chart-card">
-      <div class="chart-title">Admissões × Desligamentos — 2024</div>
-      <div class="mini-chart">
-        ${[['Jan',6,2],['Fev',4,3],['Mar',8,1],['Abr',5,4],['Mai',9,2],['Jun',7,4]].map(([m,a,d]) => `
-          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
-            <div style="width:100%;display:flex;gap:2px;align-items:flex-end;height:70px">
-              <div class="bar" style="height:${a*7}px;background:#111" title="Admissões: ${a}"></div>
-              <div class="bar" style="height:${d*7}px;background:#ccc" title="Desligamentos: ${d}"></div>
-            </div>
-            <div style="font-size:10px;color:var(--text3)">${m}</div>
-          </div>`).join('')}
+
+  const render = () => {
+    const container = document.getElementById('dashboard-container');
+    if (!container) return;
+
+    const colaboradores = _colaboradoresSupabase || [];
+    const ativos = colaboradores.filter(c => c.status_colaborador === 'Ativo').length;
+    const pendentesDoc = colaboradores.filter(c => c.status_colaborador === 'Pendente Documentação');
+    const vagas = window._vagas || [];
+    const vagasAbertas = vagas.filter(v => v.status === 'aberta').length;
+    const candidaturas = window._candidaturas || [];
+    const testes = window._testesAvaliacoes || [];
+    const avaliacoesConcluidas = testes.filter(t => t.status_realizacao === 'concluido').length;
+    const avaliacoesPendentes = testes.length - avaliacoesConcluidas;
+
+    // Distribuição por status
+    const statusCores = { 'Ativo': '#1a7a3c', 'Inativo': '#a03030', 'Férias': '#2050a0', 'Afastado': '#9a6800', 'Pendente Documentação': '#9a6800' };
+    const statusCount = {};
+    colaboradores.forEach(c => { const s = c.status_colaborador || 'Não definido'; statusCount[s] = (statusCount[s] || 0) + 1; });
+
+    // Distribuição por cargo (top 6)
+    const cargoCount = {};
+    colaboradores.forEach(c => { const nome = c.cargos ? c.cargos.nome_cargo : 'Sem cargo'; cargoCount[nome] = (cargoCount[nome] || 0) + 1; });
+    const cargoEntries = Object.entries(cargoCount).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    const maxCargo = Math.max(1, ...cargoEntries.map(([, n]) => n));
+
+    // Admissões por mês (últimos 6 meses), a partir de colaboradores.desde
+    const hoje = new Date();
+    const meses = Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() - (5 - i), 1);
+      return { label: d.toLocaleDateString('pt-BR', { month: 'short' }), ano: d.getFullYear(), mes: d.getMonth() };
+    });
+    const admissoesPorMes = meses.map(m => ({
+      ...m,
+      count: colaboradores.filter(c => {
+        if (!c.desde) return false;
+        const partes = String(c.desde).match(/^(\d{4})-(\d{2})/);
+        return partes && parseInt(partes[1], 10) === m.ano && (parseInt(partes[2], 10) - 1) === m.mes;
+      }).length
+    }));
+    const maxAdm = Math.max(1, ...admissoesPorMes.map(m => m.count));
+
+    // Vagas com mais candidatos
+    const vagasComCandidatos = vagas.map(v => ({
+      vaga: v,
+      total: candidaturas.filter(c => c.id_vagas === v.id_vagas).length
+    })).filter(v => v.total > 0).sort((a, b) => b.total - a.total).slice(0, 6);
+
+    const avaliacoesEmAndamento = testes.filter(t => t.status_realizacao !== 'concluido').slice(0, 8);
+
+    container.innerHTML = `
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Colaboradores Ativos</div>
+        <div class="kpi-value">${ativos}</div>
+        <div class="kpi-delta" style="color:var(--text3)">${colaboradores.length} no total</div>
       </div>
-      <div style="display:flex;gap:16px;margin-top:12px;font-size:11px">
-        <span><span style="display:inline-block;width:10px;height:10px;background:#111;border-radius:2px;margin-right:4px"></span>Admissões</span>
-        <span><span style="display:inline-block;width:10px;height:10px;background:#ccc;border-radius:2px;margin-right:4px"></span>Desligamentos</span>
+      <div class="kpi-card">
+        <div class="kpi-label">Admissões Pendentes</div>
+        <div class="kpi-value">${pendentesDoc.length}</div>
+        <div class="kpi-delta" style="color:var(--text3)">aguardando documentação</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Vagas Abertas</div>
+        <div class="kpi-value">${vagasAbertas}</div>
+        <div class="kpi-delta" style="color:var(--text3)">${vagas.length} no total</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Avaliações Concluídas</div>
+        <div class="kpi-value">${avaliacoesConcluidas}</div>
+        <div class="kpi-delta" style="color:var(--text3)">${avaliacoesPendentes} pendentes</div>
       </div>
     </div>
-    <div class="chart-card">
-      <div class="chart-title">Distribuição por Departamento</div>
-      ${[['Operações','#111',40],['Comercial','#555',28],['TI','#888',18],['Administrativo','#aaa',14]].map(([n,c,p]) => `
-        <div class="pie-row">
-          <div class="pie-dot" style="background:${c}"></div>
-          <div class="pie-name">${n}</div>
-          <div class="pie-bar-wrap"><div class="pie-bar-fill" style="width:${p}%;background:${c}"></div></div>
-          <div class="pie-pct">${p}%</div>
-        </div>`).join('')}
+    <div class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-title">Admissões por Mês (últimos 6 meses)</div>
+        <div class="mini-chart">
+          ${admissoesPorMes.map(m => `
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+              <div style="width:100%;display:flex;justify-content:center;align-items:flex-end;height:70px">
+                <div class="bar" style="height:${m.count ? (m.count / maxAdm) * 70 : 2}px" title="${m.count} admissão(ões)"></div>
+              </div>
+              <div style="font-size:10px;color:var(--text3)">${m.label}</div>
+            </div>`).join('')}
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Colaboradores por Status</div>
+        ${Object.keys(statusCount).length === 0 ? '<div style="font-size:13px;color:var(--text3)">Sem colaboradores cadastrados.</div>' :
+          Object.entries(statusCount).map(([nome, qtd]) => {
+            const pct = colaboradores.length ? Math.round((qtd / colaboradores.length) * 100) : 0;
+            const cor = statusCores[nome] || '#888';
+            return `<div class="pie-row">
+              <div class="pie-dot" style="background:${cor}"></div>
+              <div class="pie-name">${nome}</div>
+              <div class="pie-bar-wrap"><div class="pie-bar-fill" style="width:${pct}%;background:${cor}"></div></div>
+              <div class="pie-pct">${qtd}</div>
+            </div>`;
+          }).join('')}
+      </div>
     </div>
-  </div>
-  <div class="charts-grid">
-    <div class="chart-card">
-      <div class="chart-title">Próximas Férias</div>
-      <table style="width:100%">
-        <thead><tr><th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Colaborador</th><th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Período</th><th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Dias</th></tr></thead>
-        <tbody>${[['Carlos Souza','01/08 – 15/08',15],['Ana Lima','10/08 – 25/08',15],['Pedro Silva','20/08 – 05/09',16],['Maria Costa','01/09 – 30/09',30]].map(([n,p,d])=>`<tr><td style="padding:8px 0;font-size:13px">${n}</td><td style="padding:8px 0;font-size:12px;color:var(--text3)">${p}</td><td style="padding:8px 0"><span class="badge badge-info">${d}d</span></td></tr>`).join('')}</tbody>
-      </table>
+    <div class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-title">Colaboradores por Cargo</div>
+        ${cargoEntries.length === 0 ? '<div style="font-size:13px;color:var(--text3)">Sem colaboradores cadastrados.</div>' :
+          cargoEntries.map(([nome, qtd]) => {
+            const pct = Math.round((qtd / maxCargo) * 100);
+            return `<div class="pie-row">
+              <div class="pie-dot" style="background:#111"></div>
+              <div class="pie-name">${nome}</div>
+              <div class="pie-bar-wrap"><div class="pie-bar-fill" style="width:${pct}%;background:#111"></div></div>
+              <div class="pie-pct">${qtd}</div>
+            </div>`;
+          }).join('')}
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Vagas com Mais Candidatos</div>
+        ${vagasComCandidatos.length === 0 ? '<div style="font-size:13px;color:var(--text3)">Nenhuma vaga com candidatos ainda.</div>' : `
+        <table style="width:100%">
+          <thead><tr><th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Vaga</th><th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Status</th><th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Candidatos</th></tr></thead>
+          <tbody>${vagasComCandidatos.map(({ vaga, total }) => `
+            <tr>
+              <td style="padding:8px 0;font-size:13px">${nomeCargoPorId(vaga.id_cargos)}</td>
+              <td style="padding:8px 0;font-size:12px"><span class="badge ${vaga.status === 'aberta' ? 'badge-active' : 'badge-inactive'}">${vaga.status}</span></td>
+              <td style="padding:8px 0"><span class="badge badge-info">${total}</span></td>
+            </tr>`).join('')}</tbody>
+        </table>`}
+      </div>
     </div>
-    <div class="chart-card">
-      <div class="chart-title">Atestados Recentes</div>
-      <table style="width:100%">
-        <thead><tr><th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Colaborador</th><th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Data</th><th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Dias</th></tr></thead>
-        <tbody>${[['João Pereira','18/06/2024',3],['Lucia Ramos','15/06/2024',1],['Felipe Neto','12/06/2024',5]].map(([n,d,ds])=>`<tr><td style="padding:8px 0;font-size:13px">${n}</td><td style="padding:8px 0;font-size:12px;color:var(--text3)">${d}</td><td style="padding:8px 0"><span class="badge badge-pending">${ds}d</span></td></tr>`).join('')}</tbody>
-      </table>
+    <div class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-title">Admissões Pendentes de Documentação</div>
+        ${pendentesDoc.length === 0 ? '<div style="font-size:13px;color:var(--text3)">Nenhuma admissão pendente.</div>' : `
+        <table style="width:100%">
+          <thead><tr><th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Colaborador</th><th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Cargo</th><th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Desde</th></tr></thead>
+          <tbody>${pendentesDoc.slice(0, 8).map(c => `
+            <tr>
+              <td style="padding:8px 0;font-size:13px">${c.nome_colaborador}</td>
+              <td style="padding:8px 0;font-size:12px;color:var(--text3)">${c.cargos ? c.cargos.nome_cargo : '—'}</td>
+              <td style="padding:8px 0;font-size:12px;color:var(--text3)">${formatarDataBR(c.desde) || '—'}</td>
+            </tr>`).join('')}</tbody>
+        </table>`}
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Avaliações em Andamento</div>
+        ${avaliacoesEmAndamento.length === 0 ? '<div style="font-size:13px;color:var(--text3)">Nenhuma avaliação em andamento.</div>' : `
+        <table style="width:100%">
+          <thead><tr><th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Candidato</th><th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Cargo</th><th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Status</th></tr></thead>
+          <tbody>${avaliacoesEmAndamento.map(t => `
+            <tr>
+              <td style="padding:8px 0;font-size:13px">${t.nome_candidato || '—'}</td>
+              <td style="padding:8px 0;font-size:12px;color:var(--text3)">${nomeCargoPorId(t.id_cargo)}</td>
+              <td style="padding:8px 0"><span class="badge badge-pending">${t.status_realizacao || 'pendente'}</span></td>
+            </tr>`).join('')}</tbody>
+        </table>`}
+      </div>
+    </div>`;
+  };
+
+  window._renderDashboard = render;
+  Promise.all([
+    loadColaboradoresFromSupabase(),
+    loadVagasForApp(),
+    loadCandidaturasForApp(),
+    loadTestesAvaliacoesForApp(),
+  ]).then(render);
+
+  return `<div id="dashboard-container">
+    <div class="empty-state">
+      <div class="empty-state-icon">📊</div>
+      <div class="empty-state-title">Carregando dados...</div>
     </div>
   </div>`;
 }
@@ -2157,6 +2263,7 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
     'aval-perguntas-competencias': pagePerguntasCompetencias,
     'ficha-dados':     pageDadosPessoais,
     'ficha-mapeamento': pageMapeamentoPerfil,
+    'ficha-relatorio': pageRelatorioColaborador,
     'bon-regras':      pageBonRegras,
     'bon-historico':   pageBonHistorico,
     'int-cultura':     pageCultura,
@@ -4628,6 +4735,291 @@ window.excluirMapeamentoPerfil = async function(id) {
     showToast('Erro ao excluir registro: ' + (e.message || e));
   }
 };
+
+// ------------------------------------------------------------
+// RELATÓRIOS E IMPRESSÃO (Ficha e EPIs) — cruza Colaboradores, Histórico,
+// Dados Pessoais/EPIs, Mapeamento de Perfil e Documentos por colaborador.
+// ------------------------------------------------------------
+function pageRelatorioColaborador() {
+  document.getElementById('topbar-actions').innerHTML = '';
+
+  const popularSelect = () => {
+    const sel = document.getElementById('rel-colaborador');
+    if (!sel) return;
+    const selecionado = sel.value;
+    sel.innerHTML = '<option value="">— Selecione um colaborador —</option>' +
+      (_colaboradoresSupabase || []).map(c => `<option value="${c.id_colaborador}">${c.nome_colaborador}</option>`).join('');
+    if (selecionado) sel.value = selecionado;
+  };
+
+  Promise.all([
+    loadColaboradoresFromSupabase(),
+    loadColaboradorHistoricoForApp(),
+    loadDadosPessoaisEpiForApp(),
+    loadMapeamentoPerfilForApp(),
+    loadDocumentosFromSupabase(),
+  ]).then(popularSelect);
+
+  return `
+  <div class="form-card" style="margin-bottom:16px">
+    <div class="form-group">
+      <label class="form-label">Selecionar Colaborador</label>
+      <select class="form-select" id="rel-colaborador" onchange="gerarRelatorioColaborador(this.value)">
+        <option value="">— Selecione um colaborador —</option>
+      </select>
+    </div>
+  </div>
+  <div id="relatorio-colaborador-view"></div>`;
+}
+
+window.gerarRelatorioColaborador = function(idColaborador) {
+  const view = document.getElementById('relatorio-colaborador-view');
+  if (!view) return;
+  if (!idColaborador) { view.innerHTML = ''; window._relatorioAtual = null; return; }
+
+  const colab = (_colaboradoresSupabase || []).find(c => String(c.id_colaborador) === String(idColaborador));
+  if (!colab) {
+    view.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🤔</div><div class="empty-state-title">Colaborador não encontrado</div></div>`;
+    return;
+  }
+
+  const historico = (window._colaboradorHistorico || [])
+    .filter(h => String(h.id_colaborador) === String(idColaborador))
+    .sort((a, b) => new Date(b.periodo_inicio || 0) - new Date(a.periodo_inicio || 0));
+  const dadosPessoais = (window._dadosPessoaisEpi || []).find(d => String(d.id_colaborador) === String(idColaborador));
+  const perfil = (window._mapeamentoPerfil || []).find(m => String(m.id_colaborador) === String(idColaborador));
+  const documentos = window._documentosPorColab[idColaborador] || window._documentosPorColab[colab.id_colaborador] || [];
+
+  window._relatorioAtual = { colab, historico, dadosPessoais, perfil, documentos };
+
+  const linha = (label, valor) => `<div style="display:flex;padding:6px 0;border-bottom:1px solid var(--bg2);font-size:13px"><div style="width:240px;color:var(--text3);flex-shrink:0">${label}</div><div style="flex:1">${valor || '—'}</div></div>`;
+  const salarioNum = salarioBaseDoColaborador(colab);
+  const salarioFmt = salarioNum !== null ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(salarioNum) : '—';
+
+  view.innerHTML = `
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">Relatório Completo — ${colab.nome_colaborador}</span>
+      <div class="table-actions">
+        <button class="btn btn-primary" onclick="baixarRelatorioColaboradorPdf()">⬇ Baixar PDF</button>
+      </div>
+    </div>
+    <div style="padding:24px">
+      <div class="form-section-title">Dados Contratuais</div>
+      ${linha('Nome', colab.nome_colaborador)}
+      ${linha('Cargo', colab.cargos ? colab.cargos.nome_cargo : '—')}
+      ${linha('Status', colab.status_colaborador)}
+      ${linha('Tipo de Contrato', colab.tipo_de_contrato)}
+      ${colab.tipo_de_contrato === 'Temporária' ? linha('Período do Contrato', colab.periodo_contrato) : ''}
+      ${colab.tipo_de_contrato === 'Temporária' ? linha('Prorrogação', colab.prorrogacao_contrato) : ''}
+      ${linha('Salário Base', salarioFmt)}
+      ${linha('Data de Admissão', formatarDataBR(colab.desde))}
+
+      <div class="form-section-title" style="margin-top:24px">Histórico de Carreira</div>
+      ${historico.length === 0 ? '<div style="font-size:13px;color:var(--text3);padding:8px 0">Nenhum registro de histórico.</div>' : `
+      <table style="width:100%;margin-top:8px">
+        <thead><tr>
+          <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Período</th>
+          <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Cargo</th>
+          <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Salário</th>
+          <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Motivo</th>
+        </tr></thead>
+        <tbody>${historico.map(h => `
+          <tr>
+            <td style="padding:6px 0;font-size:13px">${formatarDataBR(h.periodo_inicio) || '—'} – ${formatarDataBR(h.periodo_fim) || 'Atual'}</td>
+            <td style="padding:6px 0;font-size:13px">${nomeCargoPorId(h.id_cargos)}</td>
+            <td style="padding:6px 0;font-size:13px">${h.salario_hist !== null && h.salario_hist !== undefined ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(h.salario_hist) : '—'}</td>
+            <td style="padding:6px 0;font-size:13px">${h.motivo || '—'}</td>
+          </tr>`).join('')}</tbody>
+      </table>`}
+
+      <div class="form-section-title" style="margin-top:24px">Dados Pessoais</div>
+      ${!dadosPessoais ? '<div style="font-size:13px;color:var(--text3);padding:8px 0">Nenhum registro de dados pessoais cadastrado.</div>' : `
+      ${linha('CPF', dadosPessoais.cpf)}
+      ${linha('RG', dadosPessoais.rg)}
+      ${linha('Data de Nascimento', formatarDataBR(dadosPessoais.data_nascimento))}
+      ${linha('Telefone', dadosPessoais.telefone)}
+      ${linha('E-mail', dadosPessoais.email)}
+      ${linha('Endereço', dadosPessoais.endereco)}
+      ${linha('Telefone Emergência', dadosPessoais.telefone_emergencia)}
+      ${linha('Estado Civil', dadosPessoais.estado_civil)}
+      ${linha('Escolaridade', dadosPessoais.escolaridade)}
+      ${linha('PIX', dadosPessoais.pix)}
+      ${linha('Optante por Vale-Transporte', dadosPessoais['vale-transporte'])}
+      `}
+
+      <div class="form-section-title" style="margin-top:24px">Numeração de EPIs / Tamanhos</div>
+      ${!dadosPessoais ? '<div style="font-size:13px;color:var(--text3);padding:8px 0">Sem dados de EPIs cadastrados.</div>' : `
+      ${linha('Camisa', dadosPessoais.epi_camisa)}
+      ${linha('Calça', dadosPessoais.epi_calca)}
+      ${linha('Botina', dadosPessoais.epi_botina)}
+      ${linha('Jaleco', dadosPessoais.epi_jaleco)}
+      ${linha('Luva Raspa', dadosPessoais.epi_luva_raspa)}
+      ${linha('Luva Lavagem', dadosPessoais.epi_luva_lavagem)}
+      `}
+
+      <div class="form-section-title" style="margin-top:24px">Mapeamento de Perfil</div>
+      ${!perfil ? '<div style="font-size:13px;color:var(--text3);padding:8px 0">Nenhum mapeamento de perfil cadastrado.</div>' : `
+      ${linha('Como gosta de ser chamado(a)', perfil.como_gosta_ser_chamado)}
+      ${linha('Hobbies', perfil.hobbies)}
+      ${linha('Prato/Doce preferido', perfil.prato_doce_preferido)}
+      ${linha('Pretende ter filhos?', perfil.pretende_ter_filhos)}
+      ${linha('Grande sonho pessoal', perfil.grande_sonho_pessoal)}
+      ${linha('Metas para o ano vigente', perfil.metas_ano_vigente)}
+      ${linha('Talentos e dons', perfil.talentos_dons)}
+      ${linha('Desafios pessoais', perfil.desafios_pessoais)}
+      ${linha('Expectativa na empresa', perfil.expectativa_empresa)}
+      ${linha('Pontos fortes', perfil.pontos_fortes)}
+      ${linha('A desenvolver', perfil.a_desenvolver)}
+      ${linha('Habilidades profissionais', perfil.habilidades_profissionais)}
+      ${linha('Perfil DISC (1ª)', perfil.perfil_disc_1)}
+      ${linha('Perfil DISC (2ª)', perfil.perfil_disc_2)}
+      ${linha('Comunicação ideal', perfil.comunicacao_ideal)}
+      ${linha('3 principais valores', perfil.valores_principais)}
+      `}
+
+      <div class="form-section-title" style="margin-top:24px">Documentos Enviados</div>
+      ${documentos.length === 0 ? '<div style="font-size:13px;color:var(--text3);padding:8px 0">Nenhum documento enviado.</div>' : `
+      <table style="width:100%;margin-top:8px">
+        <thead><tr>
+          <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Tipo</th>
+          <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Data de Envio</th>
+          <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Ações</th>
+        </tr></thead>
+        <tbody>${documentos.map(d => `
+          <tr>
+            <td style="padding:6px 0;font-size:13px">${d.tipo || '—'}</td>
+            <td style="padding:6px 0;font-size:13px">${d.data || '—'}</td>
+            <td style="padding:6px 0">${d.url ? `<button class="action-btn" title="Visualizar" onclick="visualizarDocumento('${d.url}')">👁</button>` : '—'}</td>
+          </tr>`).join('')}</tbody>
+      </table>`}
+    </div>
+  </div>`;
+};
+
+window.baixarRelatorioColaboradorPdf = function() {
+  if (!window.jspdf || !window._relatorioAtual) {
+    showToast('Gere o relatório de um colaborador antes de baixar o PDF.');
+    return;
+  }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const margemEsq = 14;
+  let y = 18;
+  const { colab, historico, dadosPessoais, perfil, documentos } = window._relatorioAtual;
+
+  const checarQuebra = (qtdLinhas) => { if (y + qtdLinhas * 6 > 280) { doc.addPage(); y = 18; } };
+
+  const titulo = (texto) => {
+    checarQuebra(2);
+    doc.setFont(undefined, 'bold');
+    doc.setFontSize(13);
+    doc.text(texto, margemEsq, y);
+    y += 8;
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(10);
+  };
+
+  const campo = (label, valor) => {
+    const linhasQuebradas = doc.splitTextToSize(`${label}: ${valor || '—'}`, 180);
+    checarQuebra(linhasQuebradas.length);
+    doc.text(linhasQuebradas, margemEsq, y);
+    y += linhasQuebradas.length * 6;
+  };
+
+  doc.setFontSize(16);
+  doc.setFont(undefined, 'bold');
+  doc.text(`Relatório Completo — ${colab.nome_colaborador}`, margemEsq, y);
+  y += 10;
+  doc.setFont(undefined, 'normal');
+  doc.setFontSize(10);
+
+  const salarioNum = salarioBaseDoColaborador(colab);
+  titulo('Dados Contratuais');
+  campo('Cargo', colab.cargos ? colab.cargos.nome_cargo : '—');
+  campo('Status', colab.status_colaborador);
+  campo('Tipo de Contrato', colab.tipo_de_contrato);
+  if (colab.tipo_de_contrato === 'Temporária') {
+    campo('Período do Contrato', colab.periodo_contrato);
+    campo('Prorrogação', colab.prorrogacao_contrato);
+  }
+  campo('Salário Base', salarioNum !== null ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(salarioNum) : '—');
+  campo('Data de Admissão', formatarDataBR(colab.desde));
+
+  titulo('Histórico de Carreira');
+  if (historico.length === 0) {
+    campo('Histórico', 'Nenhum registro.');
+  } else {
+    historico.forEach(h => {
+      campo('Período', `${formatarDataBR(h.periodo_inicio) || '—'} – ${formatarDataBR(h.periodo_fim) || 'Atual'}`);
+      campo('Cargo', nomeCargoPorId(h.id_cargos));
+      campo('Salário', h.salario_hist !== null && h.salario_hist !== undefined ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(h.salario_hist) : '—');
+      campo('Motivo', h.motivo);
+      y += 2;
+    });
+  }
+
+  titulo('Dados Pessoais');
+  if (!dadosPessoais) {
+    campo('Dados Pessoais', 'Nenhum registro cadastrado.');
+  } else {
+    campo('CPF', dadosPessoais.cpf);
+    campo('RG', dadosPessoais.rg);
+    campo('Data de Nascimento', formatarDataBR(dadosPessoais.data_nascimento));
+    campo('Telefone', dadosPessoais.telefone);
+    campo('E-mail', dadosPessoais.email);
+    campo('Endereço', dadosPessoais.endereco);
+    campo('Telefone Emergência', dadosPessoais.telefone_emergencia);
+    campo('Estado Civil', dadosPessoais.estado_civil);
+    campo('Escolaridade', dadosPessoais.escolaridade);
+    campo('PIX', dadosPessoais.pix);
+    campo('Optante por Vale-Transporte', dadosPessoais['vale-transporte']);
+  }
+
+  titulo('Numeração de EPIs / Tamanhos');
+  if (!dadosPessoais) {
+    campo('EPIs', 'Sem dados cadastrados.');
+  } else {
+    campo('Camisa', dadosPessoais.epi_camisa);
+    campo('Calça', dadosPessoais.epi_calca);
+    campo('Botina', dadosPessoais.epi_botina);
+    campo('Jaleco', dadosPessoais.epi_jaleco);
+    campo('Luva Raspa', dadosPessoais.epi_luva_raspa);
+    campo('Luva Lavagem', dadosPessoais.epi_luva_lavagem);
+  }
+
+  titulo('Mapeamento de Perfil');
+  if (!perfil) {
+    campo('Mapeamento de Perfil', 'Nenhum registro cadastrado.');
+  } else {
+    campo('Como gosta de ser chamado(a)', perfil.como_gosta_ser_chamado);
+    campo('Hobbies', perfil.hobbies);
+    campo('Prato/Doce preferido', perfil.prato_doce_preferido);
+    campo('Pretende ter filhos?', perfil.pretende_ter_filhos);
+    campo('Grande sonho pessoal', perfil.grande_sonho_pessoal);
+    campo('Metas para o ano vigente', perfil.metas_ano_vigente);
+    campo('Talentos e dons', perfil.talentos_dons);
+    campo('Desafios pessoais', perfil.desafios_pessoais);
+    campo('Expectativa na empresa', perfil.expectativa_empresa);
+    campo('Pontos fortes', perfil.pontos_fortes);
+    campo('A desenvolver', perfil.a_desenvolver);
+    campo('Habilidades profissionais', perfil.habilidades_profissionais);
+    campo('Perfil DISC (1ª)', perfil.perfil_disc_1);
+    campo('Perfil DISC (2ª)', perfil.perfil_disc_2);
+    campo('Comunicação ideal', perfil.comunicacao_ideal);
+    campo('3 principais valores', perfil.valores_principais);
+  }
+
+  titulo('Documentos Enviados');
+  if (documentos.length === 0) {
+    campo('Documentos', 'Nenhum documento enviado.');
+  } else {
+    documentos.forEach(d => campo(d.tipo || 'Documento', d.data || '—'));
+  }
+
+  doc.save(`relatorio-${(colab.nome_colaborador || 'colaborador').trim().replace(/\s+/g, '-').toLowerCase()}.pdf`);
+};
+
 // ------------------------------------------------------------
 // BONIFICAÇÃO
 // ------------------------------------------------------------
