@@ -2807,6 +2807,11 @@ function pageCandidatosAprovados() {
               <th>Instagram</th>
               <th>Currículo</th>
               <th>Data de Envio</th>
+              <th>Status Avaliação</th>
+              <th>Respondido em</th>
+              <th>Perfil DISC</th>
+              <th>Competências</th>
+              <th>Entrevista</th>
               <th>Ações</th>
             </tr>
           </thead>
@@ -2815,6 +2820,7 @@ function pageCandidatosAprovados() {
               const teste = (window._testesAvaliacoes || []).find(t => t.id_candidato === c.id_candidaturas);
               const linkAvaliacao = teste ? `${location.origin}${location.pathname}?avaliacao=${teste.token}` : null;
               const linkWhats = linkAvaliacao ? linkWhatsappAvaliacao(c.numero, c.nome_candidato, nomeCargoPorId(g.vaga.id_cargos), linkAvaliacao) : null;
+              const concluido = teste && teste.status_realizacao === 'concluido';
               return `
               <tr>
                 <td><strong>${c.nome_candidato || '—'}</strong></td>
@@ -2828,6 +2834,27 @@ function pageCandidatosAprovados() {
                     : `<span class="badge badge-gray">Não enviado</span>`}
                 </td>
                 <td style="color:var(--text3);font-size:12px">${c.data_envio_candidatura ? new Date(c.data_envio_candidatura).toLocaleDateString('pt-BR') : '—'}</td>
+                <td>
+                  ${!teste
+                    ? `<span class="badge badge-gray">—</span>`
+                    : concluido
+                      ? `<span class="badge badge-active">Concluído</span>`
+                      : `<span class="badge badge-pending">Pendente</span>`}
+                </td>
+                <td style="color:var(--text3);font-size:12px">${teste && teste.respondido_em ? new Date(teste.respondido_em).toLocaleString('pt-BR') : '—'}</td>
+                <td>${(teste && teste.resultado_perfil_disk) || '—'}</td>
+                <td>
+                  ${teste && teste.url_respostas_competencias
+                    ? `<button class="action-btn" title="Visualizar" onclick="visualizarDocumento('${teste.url_respostas_competencias}')">👁</button>
+                       <a class="action-btn" title="Baixar" href="${driveDownloadUrl(teste.url_respostas_competencias)}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">⬇</a>`
+                    : `<span class="badge badge-gray">—</span>`}
+                </td>
+                <td>
+                  ${teste && teste.url_respostas_entrevista
+                    ? `<button class="action-btn" title="Visualizar" onclick="visualizarDocumento('${teste.url_respostas_entrevista}')">👁</button>
+                       <a class="action-btn" title="Baixar" href="${driveDownloadUrl(teste.url_respostas_entrevista)}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">⬇</a>`
+                    : `<span class="badge badge-gray">—</span>`}
+                </td>
                 <td style="white-space:nowrap">
                   <button class="action-btn" onclick="verCandidato(${c.id_candidaturas})" title="Ver dados completos">👁</button>
                   ${linkWhats
