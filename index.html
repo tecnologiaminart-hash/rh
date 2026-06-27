@@ -828,8 +828,7 @@ window.showAcoesEnvioBanner = function() {
 // DASHBOARD
 // ------------------------------------------------------------
 function pageDashboard() {
-  const ta = document.getElementById('topbar-actions');
-  ta.innerHTML = `<button class="btn btn-sm" onclick="showToast('Relatório gerado!')">📥 Exportar</button>`;
+  document.getElementById('topbar-actions').innerHTML = '';
 
   const render = () => {
     const container = document.getElementById('dashboard-container');
@@ -3941,9 +3940,6 @@ function pageCargosTabela() {
         <option value="salario-desc" ${window._cargosOrdem === 'salario-desc' ? 'selected' : ''}>Salário (maior → menor)</option>
         <option value="salario-asc" ${window._cargosOrdem === 'salario-asc' ? 'selected' : ''}>Salário (menor → maior)</option>
       </select>
-      <div class="table-actions">
-        <button class="btn btn-sm btn-print" onclick="printCargosTabela()">🖨 Imprimir</button>
-      </div>
     </div>
     <table>
       <thead><tr><th>Cargo</th><th>Salário Base</th><th>Ações</th></tr></thead>
@@ -4014,20 +4010,6 @@ window.saveCargo=async function(){
     showToast('Erro ao salvar cargo.');
   }
 };
-window.printCargosTabela=function(){
-  const rows=(window._cargos||[]).map(cargo=>{
-    const nome = cargo[window._cargoNameField] || cargo.nome_cargo || cargo.nome || '';
-    const sal = cargo.salario_base !== undefined && cargo.salario_base !== null ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(cargo.salario_base)) : '';
-    return `<tr><td>${nome}</td><td>${sal}</td></tr>`;
-  }).join('');
-  const w=window.open('','_blank');
-  w.document.write(`<html><head><title>Tabela Salarial</title><style>body{font-family:sans-serif;padding:40px}h2{margin-bottom:20px}table{width:100%;border-collapse:collapse}th,td{padding:8px 12px;border:1px solid #ddd;font-size:13px}th{background:#f5f5f5;font-weight:600;text-align:left}</style></head><body>
-    <h2>Minart Móveis — Tabela Salarial Atual</h2>
-    <table><thead><tr><th>Cargo</th><th>Salário Base</th></tr></thead><tbody>${rows}</tbody></table>
-    <p style="margin-top:24px;color:#888;font-size:12px">Impresso em: ${new Date().toLocaleDateString('pt-BR')}</p>
-  </body></html>`);w.print();
-};
-
 // ------------------------------------------------------------
 // HISTÓRICO DEPARTAMENTO
 // ------------------------------------------------------------
