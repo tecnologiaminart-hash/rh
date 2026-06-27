@@ -690,6 +690,8 @@ const NAV = [
     id: 'colaboradores', label: 'Colaboradores', icon: '◉',
     subs: [
       { id: 'col-status', label: 'Informações Contratuais' },
+      { id: 'col-temporarios', label: 'Colaboradores Temporários' },
+      { id: 'col-experiencia', label: 'Colaboradores em Experiência' },
       { id: 'col-documentos', label: 'Documentos' },
       { id: 'col-historico', label: 'Histórico' },
     ]
@@ -1096,6 +1098,29 @@ function formatarDataBR(dataStr) {
   return `${dia}/${mes}/${ano}`;
 }
 
+// Soma "dias" a uma data "YYYY-MM-DD" e devolve em DD/MM/AAAA. Usa o construtor
+// Date(ano, mes, dia) (sem passar por string ISO) para não sofrer o mesmo bug de
+// fuso horário tratado em formatarDataBR.
+function adicionarDiasDataBR(dataStr, dias) {
+  if (!dataStr) return null;
+  const m = String(dataStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  const [, ano, mes, dia] = m;
+  const d = new Date(parseInt(ano, 10), parseInt(mes, 10) - 1, parseInt(dia, 10));
+  d.setDate(d.getDate() + dias);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${dd}/${mm}/${d.getFullYear()}`;
+}
+
+// Filtro de busca genérico reutilizado pelas tabelas simples (sem paginação/contador).
+window.filtrarTabelaGenerica = function(tbodyId, query) {
+  const q = String(query || '').trim().toLowerCase();
+  document.querySelectorAll(`#${tbodyId} tr`).forEach(row => {
+    row.style.display = !q || row.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+};
+
 function renderStatusTable() {
   const tbody = document.getElementById('status-table-body');
   if (!tbody) return;
@@ -1368,6 +1393,108 @@ async function saveStatusEmployee() {
       loadColaboradoresFromSupabase(); // Recarrega a lista
     }
   }
+}
+
+// ------------------------------------------------------------
+// COLABORADORES TEMPORÁRIOS
+// ------------------------------------------------------------
+function pageColaboradoresTemporarios() {
+  document.getElementById('topbar-actions').innerHTML = '';
+
+  const renderTabela = () => {
+    const tbody = document.getElementById('col-temporarios-tbody');
+    if (!tbody) return;
+    const lista = (_colaboradoresSupabase || []).filter(c => c.tipo_de_contrato === 'Temporária');
+    tbody.innerHTML = lista.length === 0
+      ? '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum colaborador temporário encontrado.</td></tr>'
+      : lista.map(c => {
+          const cargoNome = c.cargos ? c.cargos.nome_cargo : '—';
+          return `
+          <tr>
+            <td><strong>${c.nome_colaborador}</strong></td>
+            <td>${cargoNome}</td>
+            <td>${formatarDataBR(c.desde) || '—'}</td>
+            <td>${c.periodo_contrato || '—'}</td>
+            <td>${c.prorrogacao_contrato || '—'}</td>
+          </tr>`;
+        }).join('');
+  };
+
+  window._renderColTemporarios = renderTabela;
+  loadColaboradoresFromSupabase().then(renderTabela);
+
+  return `
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">Colaboradores Temporários</span>
+      <input class="search-input" placeholder="Buscar colaborador..." oninput="filtrarTabelaGenerica('col-temporarios-tbody', this.value)" style="margin-left:12px">
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Cargo</th>
+          <th>Desde</th>
+          <th>Período do Contrato</th>
+          <th>Prorrogação</th>
+        </tr>
+      </thead>
+      <tbody id="col-temporarios-tbody">
+        <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>`;
+}
+
+// ------------------------------------------------------------
+// COLABORADORES EM EXPERIÊNCIA
+// ------------------------------------------------------------
+function pageColaboradoresExperiencia() {
+  document.getElementById('topbar-actions').innerHTML = '';
+
+  const renderTabela = () => {
+    const tbody = document.getElementById('col-experiencia-tbody');
+    if (!tbody) return;
+    const lista = (_colaboradoresSupabase || []).filter(c => c.tipo_de_contrato === 'Experiência');
+    tbody.innerHTML = lista.length === 0
+      ? '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum colaborador em experiência encontrado.</td></tr>'
+      : lista.map(c => {
+          const cargoNome = c.cargos ? c.cargos.nome_cargo : '—';
+          return `
+          <tr>
+            <td><strong>${c.nome_colaborador}</strong></td>
+            <td>${cargoNome}</td>
+            <td>${formatarDataBR(c.desde) || '—'}</td>
+            <td>${adicionarDiasDataBR(c.desde, 20) || '—'}</td>
+            <td>${adicionarDiasDataBR(c.desde, 70) || '—'}</td>
+          </tr>`;
+        }).join('');
+  };
+
+  window._renderColExperiencia = renderTabela;
+  loadColaboradoresFromSupabase().then(renderTabela);
+
+  return `
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">Colaboradores em Experiência</span>
+      <input class="search-input" placeholder="Buscar colaborador..." oninput="filtrarTabelaGenerica('col-experiencia-tbody', this.value)" style="margin-left:12px">
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Cargo</th>
+          <th>Desde</th>
+          <th>Primeira Avaliação de Experiência</th>
+          <th>Segunda Avaliação de Experiência</th>
+        </tr>
+      </thead>
+      <tbody id="col-experiencia-tbody">
+        <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>`;
 }
 
 function viewStatusEmployee(colabId) {
@@ -1873,6 +2000,8 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
     'dashboard':       pageDashboard,
     'col-documentos':  (typeof pageDocumentos === 'function') ? pageDocumentos : (function(){ console.error('pageDocumentos não está definida'); return function(){ return `<div class="empty-state"><div class="empty-state-icon">⚠</div><div class="empty-state-title">Página indisponível</div><div class="empty-state-desc">pageDocumentos não definida.</div></div>`; }; })(),
     'col-status':      pageStatus,
+    'col-temporarios': pageColaboradoresTemporarios,
+    'col-experiencia': pageColaboradoresExperiencia,
     'col-historico':   pageHistoricoCol,
     'col-historico-detalhe': pageHistoricoCarreiraDetalhe,
     'cont-candidatos': pageCandidatos,
