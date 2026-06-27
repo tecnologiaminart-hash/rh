@@ -40,8 +40,7 @@ Departamentos >
     background: #fff; border-radius: 4px; padding: 48px 40px; width: 360px;
     border: 1px solid #e0e0e0;
   }
-  .login-logo { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 8px; color: #111; }
-  .login-sub { font-size: 12px; color: #888; margin-bottom: 32px; text-transform: uppercase; letter-spacing: 1px; }
+  .login-logo-img { display: block; max-width: 220px; height: auto; margin-bottom: 32px; }
   .login-box label { display: block; font-size: 11px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
   .login-box input {
     width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 3px;
@@ -72,8 +71,7 @@ Departamentos >
   .sidebar-header {
     padding: 20px 16px 16px; border-bottom: 1px solid #222;
   }
-  .sidebar-logo { font-size: 16px; font-weight: 700; color: #fff; letter-spacing: -0.3px; }
-  .sidebar-tagline { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
+  .sidebar-logo-img { display: block; max-width: 170px; height: auto; }
   .sidebar-user { padding: 12px 16px; border-bottom: 1px solid #222; display: flex; align-items: center; gap: 10px; }
   .sidebar-avatar { width: 30px; height: 30px; border-radius: 50%; background: #333; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #aaa; flex-shrink: 0; }
   .sidebar-uname { font-size: 12px; color: #ccc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -303,8 +301,7 @@ Departamentos >
 <!-- LOGIN -->
 <div id="login-screen">
   <div class="login-box">
-    <div class="login-logo">MINART MÓVEIS</div>
-    <div class="login-sub">ERP Recursos Humanos</div>
+    <img src="assets/logo-minart.png" alt="Minart Móveis" class="login-logo-img">
     <label for="l-email">E-mail</label>
     <input id="l-email" type="email" placeholder="seu@email.com" autocomplete="email">
     <label for="l-pass">Senha</label>
@@ -326,8 +323,7 @@ Departamentos >
   <!-- SIDEBAR -->
   <nav class="sidebar">
     <div class="sidebar-header">
-      <div class="sidebar-logo">MINART MÓVEIS</div>
-      <div class="sidebar-tagline">ERP Recursos Humanos</div>
+      <img src="assets/logo-minart-white.png" alt="Minart Móveis" class="sidebar-logo-img">
     </div>
     <div class="sidebar-user">
       <div class="sidebar-avatar" id="user-avatar">U</div>
@@ -4915,6 +4911,16 @@ function construirHtmlSecoesColaborador(dadosColab, secoes) {
   return html;
 }
 
+// Cabeçalho com a logo e a data/hora de geração, repetido no topo da visualização
+// em tela (individual e de todos os colaboradores).
+function cabecalhoRelatorioHtml() {
+  return `
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding:0 4px">
+    <img src="assets/logo-minart.png" alt="Minart Móveis" style="max-width:160px;height:auto">
+    <div style="font-size:12px;color:var(--text3)">Impresso em: ${new Date().toLocaleString('pt-BR')}</div>
+  </div>`;
+}
+
 window.gerarRelatorioColaborador = function(idColaborador) {
   const view = document.getElementById('relatorio-colaborador-view');
   if (!view) return;
@@ -4930,6 +4936,7 @@ window.gerarRelatorioColaborador = function(idColaborador) {
   window._relatorioAtual = { tipo: 'individual', colaboradores: [dadosColab], secoes };
 
   view.innerHTML = `
+  ${cabecalhoRelatorioHtml()}
   <div class="table-card">
     <div class="table-header">
       <span class="table-title">Relatório Completo — ${dadosColab.colab.nome_colaborador}</span>
@@ -4961,6 +4968,7 @@ window.gerarRelatorioTodos = function() {
   window._relatorioAtual = { tipo: 'todos', colaboradores: colaboradoresDados, secoes };
 
   view.innerHTML = `
+  ${cabecalhoRelatorioHtml()}
   <div class="table-card" style="margin-bottom:16px">
     <div class="table-header">
       <span class="table-title">Relatório Completo — Todos os Colaboradores (${colaboradoresDados.length})</span>
@@ -5104,7 +5112,26 @@ function escreverColaboradorNoPdf(doc, state, dadosColab, secoes, margemEsq) {
   }
 }
 
-window.baixarRelatorioPdf = function() {
+// Carrega a logo como base64 (necessário pro jsPDF, que não busca URLs sozinho)
+// e guarda em cache para não converter de novo a cada PDF gerado.
+function obterLogoBase64() {
+  if (window._logoBase64) return Promise.resolve(window._logoBase64);
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      window._logoBase64 = canvas.toDataURL('image/png');
+      resolve(window._logoBase64);
+    };
+    img.onerror = reject;
+    img.src = 'assets/logo-minart.png';
+  });
+}
+
+window.baixarRelatorioPdf = async function() {
   if (!window.jspdf || !window._relatorioAtual || !window._relatorioAtual.colaboradores || window._relatorioAtual.colaboradores.length === 0) {
     showToast('Gere o relatório antes de baixar o PDF.');
     return;
@@ -5114,6 +5141,21 @@ window.baixarRelatorioPdf = function() {
   const margemEsq = 14;
   const state = { y: 18 };
   const { colaboradores, secoes, tipo } = window._relatorioAtual;
+
+  try {
+    const logoBase64 = await obterLogoBase64();
+    doc.addImage(logoBase64, 'PNG', margemEsq, state.y, 45, 10.85);
+    state.y += 16;
+  } catch (e) {
+    console.warn('Não foi possível incluir a logo no PDF:', e);
+  }
+
+  doc.setFontSize(9);
+  doc.setFont(undefined, 'normal');
+  doc.setTextColor(120);
+  doc.text(`Impresso em: ${new Date().toLocaleString('pt-BR')}`, margemEsq, state.y);
+  doc.setTextColor(0);
+  state.y += 10;
 
   colaboradores.forEach((dadosColab, idx) => {
     if (idx > 0) { doc.addPage(); state.y = 18; }
@@ -5273,7 +5315,7 @@ async function checkCandidaturaLink() {
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
     .pub-box { background: #fff; border-radius: 6px; padding: 40px; width: 480px; max-width: 100%; border: 1px solid #ddd; }
-    .pub-logo { font-size: 18px; font-weight: 700; color: #111; margin-bottom: 4px; }
+    .pub-logo-img { display: block; max-width: 200px; height: auto; margin-bottom: 12px; }
     .pub-sub { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 28px; }
     .pub-cargo { font-size: 20px; font-weight: 700; color: #111; margin-bottom: 4px; }
     .pub-depto { font-size: 13px; color: #888; margin-bottom: 28px; white-space: pre-wrap; }
@@ -5300,7 +5342,7 @@ async function checkCandidaturaLink() {
             <div style="font-size:16px;font-weight:600;color:#333;margin-bottom:8px">Vaga encerrada</div>
             <div style="font-size:13px">Esta vaga não está mais recebendo candidaturas.</div>
           </div>`
-        : `<div class="pub-logo">MINART MÓVEIS</div>
+        : `<img src="assets/logo-minart.png" alt="Minart Móveis" class="pub-logo-img">
            <div class="pub-sub">Candidatura Online</div>
            <div class="pub-cargo">${cargoNome}</div>
            <div class="pub-depto">${cargoDescricao || 'Minart Móveis'}</div>
@@ -5395,7 +5437,7 @@ function renderAvaliacaoShell(innerHtml) {
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; min-height: 100vh; padding: 24px; margin: 0; }
     .aval-wrap { max-width: 760px; margin: 0 auto; }
     .aval-header { text-align: center; margin-bottom: 8px; }
-    .aval-logo { font-size: 18px; font-weight: 700; color: #111; }
+    .aval-logo-img { display: inline-block; max-width: 200px; height: auto; }
     .aval-sub { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
     .aval-steps { display: flex; justify-content: center; gap: 8px; margin: 18px 0 28px; flex-wrap: wrap; }
     .aval-step { font-size: 11px; font-weight: 600; padding: 6px 12px; border-radius: 20px; background: #eee; color: #888; }
@@ -5404,7 +5446,7 @@ function renderAvaliacaoShell(innerHtml) {
   </style>
   <div class="aval-wrap">
     <div class="aval-header">
-      <div class="aval-logo">MINART MÓVEIS</div>
+      <img src="assets/logo-minart.png" alt="Minart Móveis" class="aval-logo-img">
       <div class="aval-sub">Avaliação de Candidato</div>
     </div>
     ${innerHtml}
