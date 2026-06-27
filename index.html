@@ -8,6 +8,7 @@ Departamentos >
 <title>Minart Móveis - RH</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js"></script>
 <style>
   :root {
     --bg: #ffffff;
@@ -282,6 +283,13 @@ Departamentos >
   #toast.show { display: block; animation: slideUp 0.2s ease; }
   @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
+  /* ACTION BANNER */
+  #action-banner { position: fixed; left: 24px; bottom: 24px; max-width: 480px; background: #fff; border: 1px solid var(--border); border-left: 4px solid #1a7a3c; border-radius: 6px; box-shadow: 0 8px 30px rgba(0,0,0,.15); padding: 16px 20px; display: none; align-items: flex-start; gap: 12px; z-index: 1000; }
+  #action-banner.show { display: flex; animation: slideUp 0.2s ease; }
+  .action-banner-title { font-weight: 700; font-size: 14px; margin-bottom: 6px; }
+  .action-banner-line { font-size: 12.5px; color: var(--text2); margin-top: 4px; line-height: 1.4; }
+  .action-banner-close { background: none; border: none; cursor: pointer; color: var(--text3); font-size: 14px; flex-shrink: 0; }
+
   /* RESPONSIVE */
   @media (max-width: 900px) {
     .kpi-grid { grid-template-columns: repeat(2, 1fr); }
@@ -376,6 +384,15 @@ const N8N_CHECK_WEBHOOK_URL = 'https://automatiza.minart.com.br/webhook/check-do
 // Drive e a credencial do Google Drive nos nodes, ativar o workflow e copiar a
 // "Production URL" do node Webhook para cá.
 const N8N_CURRICULO_WEBHOOK_URL = 'https://automatiza.minart.com.br/webhook/upload-curriculo-drive';
+// Webhook do n8n que envia o e-mail de convite para a avaliação (DISC + Competências +
+// Entrevista) ao candidato aprovado. Após importar n8n/enviar-email-avaliacao.workflow.json,
+// configurar a credencial de e-mail, ativar o workflow e colar a "Production URL" abaixo.
+const N8N_EMAIL_AVALIACAO_WEBHOOK_URL = 'https://automatiza.minart.com.br/webhook/enviar-email-avaliacao';
+// Webhook do n8n dedicado ao upload dos arquivos .docx gerados na avaliação pública
+// (Competências e Entrevista) para uma pasta fixa do Drive. Após importar
+// n8n/upload-documento-avaliacao-drive.workflow.json, preencher o folderId do Drive e a
+// credencial do Google Drive, ativar o workflow e colar a "Production URL" abaixo.
+const N8N_AVALIACAO_DOC_WEBHOOK_URL = 'https://automatiza.minart.com.br/webhook/upload-documento-avaliacao-drive';
 
 let _colaboradoresSupabase = [];
 let _editingStatusColabId = null;
@@ -497,6 +514,31 @@ async function loadCandidaturasForApp() {
 function candidatoAprovado(c) {
   const v = c.aprovado_avaliacao;
   return v === true || v === 't' || v === 1 || v === '1' || v === 'true';
+}
+
+async function loadTestesAvaliacoesForApp() {
+  if (!supaClient) {
+    console.error('Supabase client não inicializado para testes_avaliacoes.');
+    window._testesAvaliacoes = [];
+    return;
+  }
+  const { data, error } = await supaClient.from('testes_avaliacoes').select('*');
+  if (error) {
+    console.error('Erro ao carregar testes de avaliação:', error.message);
+    window._testesAvaliacoes = [];
+  } else {
+    window._testesAvaliacoes = data;
+  }
+}
+
+// Monta o link de WhatsApp (wa.me) com o número do candidato e uma mensagem
+// pronta convidando-o a responder a avaliação.
+function linkWhatsappAvaliacao(numero, nomeCandidato, cargoNome, link) {
+  let digits = String(numero || '').replace(/\D/g, '');
+  if (!digits) return null;
+  if (!digits.startsWith('55')) digits = '55' + digits;
+  const mensagem = `Olá, ${nomeCandidato || ''}! Tudo bem? Para seguir no seu processo seletivo para a vaga de ${cargoNome || ''} na Minart Móveis, acesse o link abaixo e responda a avaliação (Perfil DISC, Competências e Entrevista) em um único acesso — o link só pode ser respondido uma vez:\n${link}`;
+  return `https://wa.me/${digits}?text=${encodeURIComponent(mensagem)}`;
 }
 
 function saveConfig() {
@@ -755,6 +797,25 @@ function showToast(msg, dur=2500) {
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), dur);
 }
+
+window.showAcoesEnvioBanner = function() {
+  let el = document.getElementById('action-banner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'action-banner';
+    el.innerHTML = `
+      <div>
+        <div class="action-banner-title">✔️ Ações de Envio Concluídas</div>
+        <div class="action-banner-line"><strong>E-mail:</strong> O link para as avaliações (DISC, Competências e Entrevista) já está na caixa de entrada do candidato.</div>
+        <div class="action-banner-line"><strong>WhatsApp:</strong> Se desejar agilizar o processo, acesse o botão "Chamar no WhatsApp" em Ações, na aba Candidatos para Avaliação. Uma mensagem pronta com o link já está preparada.</div>
+      </div>
+      <button class="action-banner-close" title="Fechar" onclick="document.getElementById('action-banner').classList.remove('show')">✕</button>`;
+    document.body.appendChild(el);
+  }
+  el.classList.add('show');
+  clearTimeout(window._actionBannerTimeout);
+  window._actionBannerTimeout = setTimeout(() => el.classList.remove('show'), 10000);
+};
 
 // ------------------------------------------------------------
 // DASHBOARD
@@ -1709,6 +1770,53 @@ window.enviarCurriculoParaDrive = async function(file, { nomeCandidato, vagaCarg
   return result.url || result.webViewLink || result.link || null;
 };
 
+// Gera um arquivo .docx (Word) a partir de uma lista de perguntas e respostas,
+// usado pela avaliação pública (Competências e Entrevista). Retorna um Blob.
+window.gerarDocxPerguntasRespostas = async function(titulo, perguntasRespostas) {
+  const { Document, Packer, Paragraph, TextRun, HeadingLevel } = window.docx;
+  const children = [new Paragraph({ text: titulo, heading: HeadingLevel.HEADING_1 })];
+  perguntasRespostas.forEach((item, i) => {
+    children.push(new Paragraph({
+      spacing: { before: 240 },
+      children: [new TextRun({ text: `${i + 1}. ${item.pergunta}`, bold: true })]
+    }));
+    children.push(new Paragraph({ text: item.resposta || '(sem resposta)' }));
+  });
+  const doc = new Document({ sections: [{ properties: {}, children }] });
+  return await Packer.toBlob(doc);
+};
+
+// Envia o .docx gerado na avaliação pública para o webhook do n8n, que grava o
+// arquivo numa pasta fixa do Drive e devolve { url }.
+window.enviarDocxAvaliacaoParaDrive = async function(blob, nomeArquivo) {
+  if (!N8N_AVALIACAO_DOC_WEBHOOK_URL || N8N_AVALIACAO_DOC_WEBHOOK_URL.startsWith('COLE_AQUI')) {
+    throw new Error('Webhook de documentos de avaliação não configurado: defina N8N_AVALIACAO_DOC_WEBHOOK_URL no index.html.');
+  }
+
+  const formData = new FormData();
+  formData.append('file', blob, nomeArquivo);
+  formData.append('nome_arquivo', nomeArquivo);
+  formData.append('token', N8N_WEBHOOK_TOKEN);
+
+  const res = await fetch(N8N_AVALIACAO_DOC_WEBHOOK_URL, {
+    method: 'POST',
+    body: formData
+  });
+
+  if (!res.ok) {
+    throw new Error(`Webhook respondeu com status ${res.status}`);
+  }
+
+  let result = {};
+  try { result = await res.json(); } catch (e) { /* resposta sem corpo JSON */ }
+
+  if (result.success === false) {
+    throw new Error(result.error || 'Falha reportada pelo webhook do n8n.');
+  }
+
+  return result.url || result.webViewLink || result.link || null;
+};
+
 window.salvarDocumento = async function() {
   const cid = document.getElementById('enviar-doc-colab').value;
   const tipo = document.getElementById('enviar-doc-tipo').value;
@@ -2576,7 +2684,47 @@ window.aprovarCandidatoAvaliacao = async function(idCandidatura) {
     if (!data || data.length === 0) throw new Error('Nenhuma linha foi atualizada (verifique a policy de UPDATE da tabela candidaturas no Supabase).');
     await loadCandidaturasForApp();
     if (window._renderCandidatos) window._renderCandidatos();
-    showToast('Candidato aprovado para avaliação!');
+
+    const cand = data[0];
+    const vaga = (window._vagas || []).find(v => v.id_vagas === cand.id_vagas);
+    const idCargo = cand.id_cargos || (vaga ? vaga.id_cargos : null);
+    const cargoNome = idCargo ? nomeCargoPorId(idCargo) : '—';
+
+    // Cria o registro da avaliação (token de acesso único, sem login) já existente
+    // ou cria um novo caso ainda não exista para este candidato.
+    const { data: existente } = await supaClient.from('testes_avaliacoes').select('token').eq('id_candidato', cand.id_candidaturas).limit(1).maybeSingle();
+    let token = existente?.token;
+    if (!token) {
+      token = crypto.randomUUID();
+      const { error: insertError } = await supaClient.from('testes_avaliacoes').insert([{
+        token,
+        id_candidato: cand.id_candidaturas,
+        id_cargo: idCargo,
+        status_realizacao: 'pendente'
+      }]);
+      if (insertError) throw insertError;
+    }
+
+    const link = `${location.origin}${location.pathname}?avaliacao=${token}`;
+
+    if (cand.email_candidato) {
+      try {
+        const formData = new FormData();
+        formData.append('email', cand.email_candidato);
+        formData.append('nome_candidato', cand.nome_candidato || '');
+        formData.append('cargo', cargoNome);
+        formData.append('link', link);
+        formData.append('token', N8N_WEBHOOK_TOKEN);
+        const res = await fetch(N8N_EMAIL_AVALIACAO_WEBHOOK_URL, { method: 'POST', body: formData });
+        if (!res.ok) throw new Error(`Webhook respondeu com status ${res.status}`);
+      } catch (emailError) {
+        console.error('Erro ao enviar e-mail de avaliação:', emailError);
+        showToast('Candidato aprovado, mas houve falha ao enviar o e-mail. Verifique o webhook do n8n.');
+        return;
+      }
+    }
+
+    window.showAcoesEnvioBanner();
   } catch (e) {
     console.error('Erro ao aprovar candidato para avaliação:', e);
     showToast('Erro ao aprovar candidato: ' + (e.message || e));
@@ -2636,7 +2784,11 @@ function pageCandidatosAprovados() {
             </tr>
           </thead>
           <tbody>
-            ${g.cands.map((c) => `
+            ${g.cands.map((c) => {
+              const teste = (window._testesAvaliacoes || []).find(t => t.id_candidato === c.id_candidaturas);
+              const linkAvaliacao = teste ? `${location.origin}${location.pathname}?avaliacao=${teste.token}` : null;
+              const linkWhats = linkAvaliacao ? linkWhatsappAvaliacao(c.numero, c.nome_candidato, nomeCargoPorId(g.vaga.id_cargos), linkAvaliacao) : null;
+              return `
               <tr>
                 <td><strong>${c.nome_candidato || '—'}</strong></td>
                 <td>${c.email_candidato || '—'}</td>
@@ -2651,9 +2803,13 @@ function pageCandidatosAprovados() {
                 <td style="color:var(--text3);font-size:12px">${c.data_envio_candidatura ? new Date(c.data_envio_candidatura).toLocaleDateString('pt-BR') : '—'}</td>
                 <td style="white-space:nowrap">
                   <button class="action-btn" onclick="verCandidato(${c.id_candidaturas})" title="Ver dados completos">👁</button>
+                  ${linkWhats
+                    ? `<a class="action-btn" title="Chamar no WhatsApp" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block" href="${linkWhats}">💬 Chamar no WhatsApp</a>`
+                    : `<span class="badge badge-gray" title="Cadastre o número ou aguarde a geração do link da avaliação">Sem WhatsApp</span>`}
                   <button class="action-btn" title="Remover da avaliação" onclick="removerCandidatoAvaliacao(${c.id_candidaturas})">↩</button>
                 </td>
-              </tr>`).join('')}
+              </tr>`;
+            }).join('')}
           </tbody>
         </table>
       </div>
@@ -2662,7 +2818,7 @@ function pageCandidatosAprovados() {
   };
 
   window._renderCandidatosAprovados = renderAprovados;
-  Promise.all([loadVagasForApp(), loadCandidaturasForApp()]).then(renderAprovados);
+  Promise.all([loadVagasForApp(), loadCandidaturasForApp(), loadTestesAvaliacoesForApp()]).then(renderAprovados);
 
   return `
   <!-- Modal de detalhe do candidato -->
@@ -4301,6 +4457,338 @@ window.enviarCandidatura = async function(token) {
     </div>`;
 };
 
+// ============================================================
+// FORMULÁRIO PÚBLICO DE AVALIAÇÃO (sem autenticação, link de uso único)
+// ============================================================
+function renderAvaliacaoShell(innerHtml) {
+  document.body.innerHTML = `
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; min-height: 100vh; padding: 24px; margin: 0; }
+    .aval-wrap { max-width: 760px; margin: 0 auto; }
+    .aval-header { text-align: center; margin-bottom: 8px; }
+    .aval-logo { font-size: 18px; font-weight: 700; color: #111; }
+    .aval-sub { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
+    .aval-steps { display: flex; justify-content: center; gap: 8px; margin: 18px 0 28px; flex-wrap: wrap; }
+    .aval-step { font-size: 11px; font-weight: 600; padding: 6px 12px; border-radius: 20px; background: #eee; color: #888; }
+    .aval-step.active { background: #111; color: #fff; }
+    .aval-step.done { background: #e8f5ec; color: #1a7a3c; }
+  </style>
+  <div class="aval-wrap">
+    <div class="aval-header">
+      <div class="aval-logo">MINART MÓVEIS</div>
+      <div class="aval-sub">Avaliação de Candidato</div>
+    </div>
+    ${innerHtml}
+  </div>`;
+}
+
+function avaliacaoStepsHtml(atual) {
+  const steps = ['Perfil DISC', 'Competências', 'Entrevista'];
+  return `<div class="aval-steps">${steps.map((s, i) => {
+    const n = i + 1;
+    const cls = n < atual ? 'done' : (n === atual ? 'active' : '');
+    return `<div class="aval-step ${cls}">${n}. ${s}</div>`;
+  }).join('')}</div>`;
+}
+
+async function checkAvaliacaoLink() {
+  const params = new URLSearchParams(location.search);
+  const token = params.get('avaliacao');
+  if (!token) return; // não é link de avaliação, carrega normalmente
+
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'none';
+
+  if (!supaClient) {
+    renderAvaliacaoShell(`<div class="empty-state"><div class="empty-state-icon">🔒</div><div class="empty-state-title">Erro de configuração</div><div class="empty-state-desc">Supabase não inicializado.</div></div>`);
+    return;
+  }
+
+  const { data: teste, error } = await supaClient
+    .from('testes_avaliacoes')
+    .select('*')
+    .eq('token', token)
+    .maybeSingle();
+
+  if (error || !teste) {
+    renderAvaliacaoShell(`<div class="empty-state"><div class="empty-state-icon">🔒</div><div class="empty-state-title">Link inválido</div><div class="empty-state-desc">Este link de avaliação não foi encontrado ou está incorreto.</div></div>`);
+    return;
+  }
+
+  if (teste.status_realizacao === 'concluido' || teste.respondido_em) {
+    renderAvaliacaoShell(`<div class="empty-state"><div class="empty-state-icon">✅</div><div class="empty-state-title">Avaliação já respondida</div><div class="empty-state-desc">Esta avaliação já foi concluída anteriormente e não pode ser respondida novamente.</div></div>`);
+    return;
+  }
+
+  let cargo = null;
+  if (teste.id_cargo) {
+    const { data: cargoData, error: cargoError } = await supaClient
+      .from('cargos')
+      .select('id_cargos,nome_cargo,formulario_entrevista')
+      .eq('id_cargos', teste.id_cargo)
+      .maybeSingle();
+    if (cargoError) console.error('Erro ao carregar cargo da avaliação:', cargoError.message);
+    cargo = cargoData;
+  }
+
+  window._pubAval = {
+    token: teste.token,
+    idCargo: teste.id_cargo,
+    cargoNome: (cargo && cargo.nome_cargo) || '—',
+    formularioEntrevista: (cargo && cargo.formulario_entrevista) || '',
+  };
+
+  renderAvaliacaoEtapaDisc();
+}
+
+// --- Etapa 1: Perfil DISC (mesma estrutura do teste interno, sem revelar o resultado) ---
+function renderAvaliacaoEtapaDisc() {
+  const pa = window._pubAval;
+  renderAvaliacaoShell(`
+    ${avaliacaoStepsHtml(1)}
+    <div id="aval-disc-intro" class="form-card" style="margin-bottom:16px">
+      <div style="font-size:18px;font-weight:700;margin-bottom:12px">Etapa 1 de 3 — Perfil Comportamental (DISC)</div>
+      <p style="margin-bottom:12px">Seja bem-vindo(a) à sua avaliação para a vaga de <strong>${pa.cargoNome}</strong>.</p>
+      <p style="margin-bottom:16px">Este questionário ajuda a identificar suas principais características comportamentais. Não existem respostas certas ou erradas; seja o mais sincero possível com quem você é hoje.</p>
+      <div style="background:#fff8e1;border:1px solid #f1c40f;border-radius:6px;padding:16px 20px;margin-bottom:16px">
+        <div style="font-weight:700;margin-bottom:10px">⚠️ Como preencher (leia com atenção):</div>
+        <p style="margin-bottom:10px">O teste tem 10 linhas, cada uma com 4 blocos de palavras. Em cada linha, distribua as notas de 1 a 4 sem repetir:</p>
+        <ul style="margin:0 0 10px 18px;padding:0">
+          <li><strong>4</strong> = O bloco que <strong>MAIS</strong> tem a ver com você.</li>
+          <li><strong>3</strong> = O segundo que mais tem a ver com você.</li>
+          <li><strong>2</strong> = O terceiro que mais tem a ver com você.</li>
+          <li><strong>1</strong> = O bloco que <strong>MENOS</strong> tem a ver com você.</li>
+        </ul>
+        <p style="margin:0"><strong>Regra de ouro:</strong> não dá para repetir a mesma nota na mesma linha.</p>
+      </div>
+      <button class="btn btn-primary" onclick="iniciarAvaliacaoDisc()">+ Iniciar Teste</button>
+    </div>
+    <div id="aval-disc-quiz" style="display:none"></div>
+  `);
+}
+
+window.iniciarAvaliacaoDisc = function() {
+  const pa = window._pubAval;
+  pa.discMatriz = gerarMatrizDisc();
+  pa.discTeste = { tela: 0, respostas: Array.from({ length: 10 }, () => [null, null, null, null]) };
+  const intro = document.getElementById('aval-disc-intro');
+  const quiz = document.getElementById('aval-disc-quiz');
+  if (intro) intro.style.display = 'none';
+  if (quiz) quiz.style.display = '';
+  renderAvaliacaoDiscQuiz();
+};
+
+function renderAvaliacaoDiscQuiz() {
+  const pa = window._pubAval;
+  const container = document.getElementById('aval-disc-quiz');
+  if (!container) return;
+  const st = pa.discTeste;
+  const linha = pa.discMatriz[st.tela];
+  const respostasTela = st.respostas[st.tela];
+
+  const blocoHtml = linha.map((item, i) => `
+    <div class="table-card" style="display:flex;align-items:center;gap:16px;padding:14px 18px;margin-bottom:10px">
+      <div style="flex:1;font-size:14px">${item.texto}</div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        ${[1, 2, 3, 4].map(n => `
+          <button type="button" onclick="selecionarNotaAvaliacaoDisc(${i}, ${n})"
+            style="width:36px;height:36px;border-radius:4px;border:1px solid var(--border);font-weight:700;font-size:14px;cursor:pointer;background:${respostasTela[i] === n ? '#111' : '#fff'};color:${respostasTela[i] === n ? '#fff' : '#111'}">${n}</button>`).join('')}
+      </div>
+    </div>`).join('');
+
+  container.innerHTML = `
+    <div class="form-card">
+      <div style="font-size:16px;font-weight:700;margin-bottom:4px">Exibição ${st.tela + 1} de 10</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:16px">Atribua as notas de 1 a 4 sem repetir entre os 4 blocos abaixo.</div>
+      ${blocoHtml}
+      <div id="aval-disc-aviso" style="display:none;color:var(--danger);font-size:13px;font-weight:600;margin:12px 0"></div>
+      <div style="display:flex;justify-content:space-between;margin-top:16px">
+        <button class="btn" onclick="voltarAvaliacaoDisc()" ${st.tela === 0 ? 'disabled style="opacity:.4;cursor:not-allowed"' : ''}>← Voltar</button>
+        ${st.tela < 9
+          ? `<button class="btn btn-primary" onclick="avancarAvaliacaoDisc()">Próxima Exibição →</button>`
+          : `<button class="btn btn-primary" onclick="finalizarAvaliacaoDisc()">Concluir Etapa 1</button>`}
+      </div>
+    </div>`;
+}
+
+function validarTelaAvaliacaoDiscAtual() {
+  const pa = window._pubAval;
+  const respostas = pa.discTeste.respostas[pa.discTeste.tela];
+  const avisoEl = document.getElementById('aval-disc-aviso');
+  if (respostas.some(v => v === null)) {
+    if (avisoEl) { avisoEl.textContent = 'Preencha as 4 notas antes de continuar.'; avisoEl.style.display = ''; }
+    return false;
+  }
+  if (new Set(respostas).size !== 4) {
+    if (avisoEl) { avisoEl.textContent = 'Repetição de números não é permitido.'; avisoEl.style.display = ''; }
+    return false;
+  }
+  if (avisoEl) avisoEl.style.display = 'none';
+  return true;
+}
+
+window.selecionarNotaAvaliacaoDisc = function(blocoIdx, nota) {
+  const pa = window._pubAval;
+  pa.discTeste.respostas[pa.discTeste.tela][blocoIdx] = nota;
+  renderAvaliacaoDiscQuiz();
+};
+
+window.avancarAvaliacaoDisc = function() {
+  if (!validarTelaAvaliacaoDiscAtual()) return;
+  const pa = window._pubAval;
+  if (pa.discTeste.tela < 9) { pa.discTeste.tela++; renderAvaliacaoDiscQuiz(); }
+};
+
+window.voltarAvaliacaoDisc = function() {
+  const avisoEl = document.getElementById('aval-disc-aviso');
+  if (avisoEl) avisoEl.style.display = 'none';
+  const pa = window._pubAval;
+  if (pa.discTeste.tela > 0) { pa.discTeste.tela--; renderAvaliacaoDiscQuiz(); }
+};
+
+// Calcula o perfil, salva SOMENTE o resultado em testes_avaliacoes.resultado_perfil_disk
+// (sem nunca exibir o resultado na tela) e avança direto para a Etapa 2.
+window.finalizarAvaliacaoDisc = async function() {
+  if (!validarTelaAvaliacaoDiscAtual()) return;
+  const pa = window._pubAval;
+
+  const rotulos = ['Executor', 'Comunicador', 'Planejador', 'Analista'];
+  const somas = [0, 0, 0, 0];
+  pa.discTeste.respostas.forEach(respostasTela => { respostasTela.forEach((nota, i) => { somas[i] += (nota || 0); }); });
+  const ranking = rotulos.map((rotulo, i) => ({ rotulo, soma: somas[i] })).sort((a, b) => b.soma - a.soma);
+  const perfil = `${ranking[0].rotulo} + ${ranking[1].rotulo}`;
+
+  const container = document.getElementById('aval-disc-quiz');
+  if (container) container.innerHTML = `<div class="form-card" style="text-align:center;padding:48px 24px"><div style="font-size:40px;margin-bottom:16px">⏳</div><div style="font-size:15px;color:var(--text3)">Salvando e avançando para a próxima etapa...</div></div>`;
+
+  try {
+    const { error } = await supaClient.from('testes_avaliacoes').update({ resultado_perfil_disk: perfil }).eq('token', pa.token);
+    if (error) console.error('Erro ao salvar resultado do Perfil DISC:', error.message);
+  } catch (e) {
+    console.error('Erro ao salvar resultado do Perfil DISC:', e);
+  }
+
+  renderAvaliacaoEtapaCompetencias();
+};
+
+// --- Etapa 2: Perguntas por Competências (somente a coluna "Perguntas comportamentais") ---
+function renderAvaliacaoEtapaCompetencias() {
+  renderAvaliacaoShell(`
+    ${avaliacaoStepsHtml(2)}
+    <div class="form-card">
+      <div style="font-size:18px;font-weight:700;margin-bottom:8px">Etapa 2 de 3 — Perguntas por Competências</div>
+      <p style="font-size:13px;color:var(--text3);margin-bottom:20px">Responda as perguntas abaixo com a maior sinceridade possível.</p>
+      ${PERGUNTAS_COMPETENCIAS.map((item, i) => `
+        <div style="margin-bottom:18px">
+          <label class="form-label" style="display:block;margin-bottom:6px">${item.perguntas}</label>
+          <textarea class="form-input" id="aval-comp-resp-${i}" style="width:100%;min-height:80px;box-sizing:border-box"></textarea>
+        </div>`).join('')}
+      <div id="aval-comp-aviso" style="display:none;color:var(--danger);font-size:13px;font-weight:600;margin-bottom:12px"></div>
+      <button class="btn btn-primary" id="aval-comp-btn" onclick="finalizarAvaliacaoCompetencias()">Concluir Etapa 2</button>
+    </div>`);
+}
+
+window.finalizarAvaliacaoCompetencias = async function() {
+  const avisoEl = document.getElementById('aval-comp-aviso');
+  const respostas = PERGUNTAS_COMPETENCIAS.map((item, i) => ({
+    pergunta: item.perguntas,
+    resposta: (document.getElementById(`aval-comp-resp-${i}`)?.value || '').trim()
+  }));
+  if (respostas.some(r => !r.resposta)) {
+    if (avisoEl) { avisoEl.textContent = 'Responda todas as perguntas antes de continuar.'; avisoEl.style.display = ''; }
+    return;
+  }
+  if (avisoEl) avisoEl.style.display = 'none';
+
+  const btn = document.getElementById('aval-comp-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Enviando...'; }
+
+  try {
+    const blob = await window.gerarDocxPerguntasRespostas('Respostas — Perguntas por Competências', respostas);
+    const nomeArquivo = `competencias-${window._pubAval.token}.docx`;
+    const url = await window.enviarDocxAvaliacaoParaDrive(blob, nomeArquivo);
+    const { error } = await supaClient.from('testes_avaliacoes').update({ url_respostas_competencias: url }).eq('token', window._pubAval.token);
+    if (error) throw error;
+    renderAvaliacaoEtapaEntrevista();
+  } catch (e) {
+    console.error('Erro ao concluir etapa de competências:', e);
+    if (avisoEl) { avisoEl.textContent = 'Erro ao enviar suas respostas. Tente novamente.'; avisoEl.style.display = ''; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Concluir Etapa 2'; }
+  }
+};
+
+// --- Etapa 3: Formulário de Entrevista (a partir de cargos.formulario_entrevista) ---
+function renderAvaliacaoEtapaEntrevista() {
+  const pa = window._pubAval;
+  const perguntas = String(pa.formularioEntrevista || '').split('\n').map(l => l.trim()).filter(Boolean);
+  pa.entrevistaPerguntas = perguntas;
+
+  renderAvaliacaoShell(`
+    ${avaliacaoStepsHtml(3)}
+    <div class="form-card">
+      <div style="font-size:18px;font-weight:700;margin-bottom:8px">Etapa 3 de 3 — Formulário de Entrevista</div>
+      <p style="font-size:13px;color:var(--text3);margin-bottom:20px">Última etapa! Responda as perguntas da entrevista para a vaga de <strong>${pa.cargoNome}</strong>.</p>
+      ${perguntas.length === 0
+        ? `<div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-title">Nenhuma pergunta cadastrada</div><div class="empty-state-desc">O RH ainda não cadastrou o formulário de entrevista para este cargo.</div></div>`
+        : perguntas.map((p, i) => `
+          <div style="margin-bottom:18px">
+            <label class="form-label" style="display:block;margin-bottom:6px">${p}</label>
+            <textarea class="form-input" id="aval-entr-resp-${i}" style="width:100%;min-height:80px;box-sizing:border-box"></textarea>
+          </div>`).join('')}
+      <div id="aval-entr-aviso" style="display:none;color:var(--danger);font-size:13px;font-weight:600;margin-bottom:12px"></div>
+      <button class="btn btn-primary" id="aval-entr-btn" onclick="finalizarAvaliacaoEntrevista()">Concluir Avaliação</button>
+    </div>`);
+}
+
+window.finalizarAvaliacaoEntrevista = async function() {
+  const pa = window._pubAval;
+  const perguntas = pa.entrevistaPerguntas || [];
+  const avisoEl = document.getElementById('aval-entr-aviso');
+  const respostas = perguntas.map((p, i) => ({
+    pergunta: p,
+    resposta: (document.getElementById(`aval-entr-resp-${i}`)?.value || '').trim()
+  }));
+  if (perguntas.length > 0 && respostas.some(r => !r.resposta)) {
+    if (avisoEl) { avisoEl.textContent = 'Responda todas as perguntas antes de continuar.'; avisoEl.style.display = ''; }
+    return;
+  }
+  if (avisoEl) avisoEl.style.display = 'none';
+
+  const btn = document.getElementById('aval-entr-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Enviando...'; }
+
+  try {
+    let url = null;
+    if (perguntas.length > 0) {
+      const blob = await window.gerarDocxPerguntasRespostas('Respostas — Formulário de Entrevista', respostas);
+      const nomeArquivo = `entrevista-${pa.token}.docx`;
+      url = await window.enviarDocxAvaliacaoParaDrive(blob, nomeArquivo);
+    }
+    const { error } = await supaClient.from('testes_avaliacoes').update({
+      url_respostas_entrevista: url,
+      status_realizacao: 'concluido',
+      respondido_em: new Date().toISOString()
+    }).eq('token', pa.token);
+    if (error) throw error;
+    renderAvaliacaoConcluida();
+  } catch (e) {
+    console.error('Erro ao concluir avaliação:', e);
+    if (avisoEl) { avisoEl.textContent = 'Erro ao enviar suas respostas. Tente novamente.'; avisoEl.style.display = ''; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Concluir Avaliação'; }
+  }
+};
+
+function renderAvaliacaoConcluida() {
+  renderAvaliacaoShell(`
+    ${avaliacaoStepsHtml(4)}
+    <div class="form-card" style="text-align:center;padding:48px 24px">
+      <div style="font-size:40px;margin-bottom:16px">✅</div>
+      <div style="font-size:18px;font-weight:700;margin-bottom:8px">Avaliação concluída!</div>
+      <div style="font-size:14px;color:var(--text3)">Obrigado por completar todas as etapas. Em breve entraremos em contato.</div>
+    </div>`);
+}
+
 // Executa ao carregar a página
 document.addEventListener('DOMContentLoaded', async () => {
   const sbUrlEl = document.getElementById('sb-url');
@@ -4351,6 +4839,7 @@ if (supaClient) {
   if (!window._candidaturas) window._candidaturas = []; // Já existe, mas bom reforçar
   
   await checkCandidaturaLink();
+  await checkAvaliacaoLink();
 });
 </script>
 </body>
