@@ -724,6 +724,7 @@ const NAV = [
     id: 'ficha', label: 'Ficha e EPIs', icon: '◐',
     subs: [
       { id: 'ficha-dados', label: 'Dados Pessoais' },
+      { id: 'ficha-mapeamento', label: 'Mapeamento de Perfil' },
       { id: 'ficha-ocorrencias', label: 'Ocorrências e Obs' },
     ]
   },
@@ -2018,6 +2019,7 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
     'aval-disc':       pagePerfilDisc,
     'aval-perguntas-competencias': pagePerguntasCompetencias,
     'ficha-dados':     pageDadosPessoais,
+    'ficha-mapeamento': pageMapeamentoPerfil,
     'ficha-ocorrencias': pageOcorrencias,
     'bon-regras':      pageBonRegras,
     'bon-historico':   pageBonHistorico,
@@ -4170,6 +4172,248 @@ window.excluirDadosPessoaisEpi = async function(id) {
     if (error) throw error;
     await loadDadosPessoaisEpiForApp();
     if (window._renderDadosPessoaisEpi) window._renderDadosPessoaisEpi();
+    showToast('Registro excluído.');
+  } catch (e) {
+    console.error('Erro ao excluir registro:', e);
+    showToast('Erro ao excluir registro: ' + (e.message || e));
+  }
+};
+
+// ------------------------------------------------------------
+// MAPEAMENTO DE PERFIL (Ficha e EPIs) — registros em Supabase (mapeamento_perfil)
+// ------------------------------------------------------------
+async function loadMapeamentoPerfilForApp() {
+  if (!supaClient) {
+    console.error('Supabase client não inicializado para mapeamento_perfil.');
+    window._mapeamentoPerfil = [];
+    return;
+  }
+  const { data, error } = await supaClient
+    .from('mapeamento_perfil')
+    .select('*')
+    .order('nome_colaborador', { ascending: true });
+  if (error) {
+    console.error('Erro ao carregar mapeamento de perfil:', error.message);
+    window._mapeamentoPerfil = [];
+  } else {
+    window._mapeamentoPerfil = data;
+  }
+}
+
+function pageMapeamentoPerfil() {
+  if (!window._mapeamentoPerfil) window._mapeamentoPerfil = [];
+
+  document.getElementById('topbar-actions').innerHTML =
+    `<button class="btn btn-primary" onclick="openMapeamentoPerfilModal()">+ Novo Registro</button>`;
+
+  const renderTabela = () => {
+    const tbody = document.getElementById('mapeamento-perfil-tbody');
+    if (!tbody) return;
+    const lista = window._mapeamentoPerfil || [];
+    tbody.innerHTML = lista.length === 0
+      ? '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro cadastrado.</td></tr>'
+      : lista.map(m => `
+          <tr>
+            <td><strong>${m.nome_colaborador || '—'}</strong></td>
+            <td>${m.como_gosta_ser_chamado || '—'}</td>
+            <td>${m.perfil_disc_1 || '—'}</td>
+            <td>${m.perfil_disc_2 || '—'}</td>
+            <td style="white-space:nowrap">
+              <button class="action-btn" title="Editar" onclick="openMapeamentoPerfilModal(${m.id})">✎</button>
+              <button class="action-btn" title="Excluir" onclick="excluirMapeamentoPerfil(${m.id})" style="color:var(--danger)">✕</button>
+            </td>
+          </tr>`).join('');
+  };
+
+  window._renderMapeamentoPerfil = renderTabela;
+  loadMapeamentoPerfilForApp().then(renderTabela);
+
+  return `
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">Mapeamento de Perfil</span>
+      <input class="search-input" placeholder="Buscar colaborador..." oninput="filtrarTabelaGenerica('mapeamento-perfil-tbody', this.value)" style="margin-left:12px">
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Nome Colaborador</th>
+          <th>Como gosta de ser chamado(a)</th>
+          <th>Perfil DISC (1ª)</th>
+          <th>Perfil DISC (2ª)</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="mapeamento-perfil-tbody">
+        <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>`;
+}
+
+window.openMapeamentoPerfilModal = async function(id = null) {
+  window._editingMapeamentoPerfilId = id;
+  if (!_colaboradoresSupabase || _colaboradoresSupabase.length === 0) {
+    await loadColaboradoresFromSupabase();
+  }
+
+  if (!document.getElementById('mapeamento-perfil-modal')) {
+    const modal = document.createElement('div');
+    modal.id = 'mapeamento-perfil-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:6px;width:760px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:15px;font-weight:700" id="mapeamento-perfil-modal-title">Novo Registro</div>
+          <button type="button" class="btn btn-sm" onclick="document.getElementById('mapeamento-perfil-modal').style.display='none'">✕</button>
+        </div>
+        <div style="padding:24px">
+          <div class="form-group form-full" style="margin-bottom:16px">
+            <label class="form-label">Nome Colaborador</label>
+            <select class="form-select" id="mp-colaborador"><option value="">— Selecione —</option></select>
+          </div>
+
+          <div class="form-section-title">Perfil e Hobbies (Minart)</div>
+          <div class="form-grid">
+            <div class="form-group"><label class="form-label">Como gosta de ser chamado(a)</label><input class="form-input" id="mp-apelido"></div>
+            <div class="form-group"><label class="form-label">Hobbies</label><input class="form-input" id="mp-hobbies"></div>
+            <div class="form-group"><label class="form-label">Prato/Doce preferido</label><input class="form-input" id="mp-prato-doce"></div>
+            <div class="form-group"><label class="form-label">Pretende ter filhos?</label><input class="form-input" id="mp-filhos"></div>
+            <div class="form-group form-full"><label class="form-label">Grande sonho pessoal</label><input class="form-input" id="mp-sonho"></div>
+          </div>
+
+          <div class="form-section-title" style="margin-top:20px">Metas do Colaborador</div>
+          <div class="form-grid">
+            <div class="form-group form-full"><label class="form-label">Metas para o ano vigente</label><textarea class="form-textarea" id="mp-metas" placeholder="Ex: Adquirir certificação técnica, otimizar rotinas..."></textarea></div>
+          </div>
+
+          <div class="form-section-title" style="margin-top:20px">Competências &amp; Perfil DISC</div>
+          <div class="form-grid">
+            <div class="form-group"><label class="form-label">Talentos e dons</label><input class="form-input" id="mp-talentos"></div>
+            <div class="form-group"><label class="form-label">Desafios pessoais</label><input class="form-input" id="mp-desafios"></div>
+            <div class="form-group"><label class="form-label">Expectativa na empresa</label><input class="form-input" id="mp-expectativa"></div>
+            <div class="form-group"><label class="form-label">Pontos fortes</label><input class="form-input" id="mp-pontos-fortes"></div>
+            <div class="form-group"><label class="form-label">A desenvolver</label><input class="form-input" id="mp-a-desenvolver"></div>
+            <div class="form-group"><label class="form-label">Habilidades profissionais</label><input class="form-input" id="mp-habilidades"></div>
+            <div class="form-group">
+              <label class="form-label">Perfil DISC (1ª)</label>
+              <select class="form-select" id="mp-disc1">
+                <option value="Não Definido">Não Definido</option>
+                <option value="Executor">Executor</option>
+                <option value="Comunicador">Comunicador</option>
+                <option value="Planejador">Planejador</option>
+                <option value="Analista">Analista</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Perfil DISC (2ª)</label>
+              <select class="form-select" id="mp-disc2">
+                <option value="Nenhum (Único)">Nenhum (Único)</option>
+                <option value="Executor">Executor</option>
+                <option value="Comunicador">Comunicador</option>
+                <option value="Planejador">Planejador</option>
+                <option value="Analista">Analista</option>
+              </select>
+            </div>
+            <div class="form-group"><label class="form-label">Comunicação ideal</label><input class="form-input" id="mp-comunicacao" placeholder="Ex: Conversa Direta, E-mail"></div>
+            <div class="form-group"><label class="form-label">3 principais valores</label><input class="form-input" id="mp-valores" placeholder="Ex: Respeito, Foco, Honestidade"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn" onclick="document.getElementById('mapeamento-perfil-modal').style.display='none'">Cancelar</button>
+          <button type="button" class="btn btn-primary" onclick="salvarMapeamentoPerfil()">Salvar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  const selectColab = document.getElementById('mp-colaborador');
+  selectColab.innerHTML = '<option value="">— Selecione —</option>' +
+    (_colaboradoresSupabase || []).map(c => `<option value="${c.id_colaborador || c.id || c.codigo}">${c.nome_colaborador || c.nome || c.name}</option>`).join('');
+
+  const campos = ['apelido','hobbies','prato-doce','filhos','sonho','metas','talentos','desafios','expectativa','pontos-fortes','a-desenvolver','habilidades','comunicacao','valores'];
+
+  if (id) {
+    const registro = (window._mapeamentoPerfil || []).find(m => m.id === id);
+    document.getElementById('mapeamento-perfil-modal-title').textContent = `Editar Registro — ${registro ? registro.nome_colaborador : ''}`;
+    selectColab.value = registro ? (registro.id_colaborador || '') : '';
+    document.getElementById('mp-apelido').value = registro?.como_gosta_ser_chamado || '';
+    document.getElementById('mp-hobbies').value = registro?.hobbies || '';
+    document.getElementById('mp-prato-doce').value = registro?.prato_doce_preferido || '';
+    document.getElementById('mp-filhos').value = registro?.pretende_ter_filhos || '';
+    document.getElementById('mp-sonho').value = registro?.grande_sonho_pessoal || '';
+    document.getElementById('mp-metas').value = registro?.metas_ano_vigente || '';
+    document.getElementById('mp-talentos').value = registro?.talentos_dons || '';
+    document.getElementById('mp-desafios').value = registro?.desafios_pessoais || '';
+    document.getElementById('mp-expectativa').value = registro?.expectativa_empresa || '';
+    document.getElementById('mp-pontos-fortes').value = registro?.pontos_fortes || '';
+    document.getElementById('mp-a-desenvolver').value = registro?.a_desenvolver || '';
+    document.getElementById('mp-habilidades').value = registro?.habilidades_profissionais || '';
+    document.getElementById('mp-disc1').value = registro?.perfil_disc_1 || 'Não Definido';
+    document.getElementById('mp-disc2').value = registro?.perfil_disc_2 || 'Nenhum (Único)';
+    document.getElementById('mp-comunicacao').value = registro?.comunicacao_ideal || '';
+    document.getElementById('mp-valores').value = registro?.valores_principais || '';
+  } else {
+    document.getElementById('mapeamento-perfil-modal-title').textContent = 'Novo Registro';
+    selectColab.value = '';
+    campos.forEach(c => { const el = document.getElementById(`mp-${c}`); if (el) el.value = ''; });
+    document.getElementById('mp-disc1').value = 'Não Definido';
+    document.getElementById('mp-disc2').value = 'Nenhum (Único)';
+  }
+
+  document.getElementById('mapeamento-perfil-modal').style.display = 'flex';
+};
+
+window.salvarMapeamentoPerfil = async function() {
+  const idColaborador = document.getElementById('mp-colaborador').value;
+  if (!idColaborador) return showToast('Selecione o colaborador.');
+  const nomeColaborador = document.querySelector('#mp-colaborador option:checked')?.textContent || '';
+
+  const payload = {
+    id_colaborador: idColaborador,
+    nome_colaborador: nomeColaborador,
+    como_gosta_ser_chamado: document.getElementById('mp-apelido').value || null,
+    hobbies: document.getElementById('mp-hobbies').value || null,
+    prato_doce_preferido: document.getElementById('mp-prato-doce').value || null,
+    pretende_ter_filhos: document.getElementById('mp-filhos').value || null,
+    grande_sonho_pessoal: document.getElementById('mp-sonho').value || null,
+    metas_ano_vigente: document.getElementById('mp-metas').value || null,
+    talentos_dons: document.getElementById('mp-talentos').value || null,
+    desafios_pessoais: document.getElementById('mp-desafios').value || null,
+    expectativa_empresa: document.getElementById('mp-expectativa').value || null,
+    pontos_fortes: document.getElementById('mp-pontos-fortes').value || null,
+    a_desenvolver: document.getElementById('mp-a-desenvolver').value || null,
+    habilidades_profissionais: document.getElementById('mp-habilidades').value || null,
+    perfil_disc_1: document.getElementById('mp-disc1').value || null,
+    perfil_disc_2: document.getElementById('mp-disc2').value || null,
+    comunicacao_ideal: document.getElementById('mp-comunicacao').value || null,
+    valores_principais: document.getElementById('mp-valores').value || null,
+  };
+
+  try {
+    const id = window._editingMapeamentoPerfilId;
+    const { data, error } = id
+      ? await supaClient.from('mapeamento_perfil').update(payload).eq('id', id).select()
+      : await supaClient.from('mapeamento_perfil').insert([payload]).select();
+    if (error) throw error;
+    if (!data || data.length === 0) throw new Error('Nenhuma linha foi salva (verifique as policies da tabela mapeamento_perfil no Supabase).');
+    await loadMapeamentoPerfilForApp();
+    if (window._renderMapeamentoPerfil) window._renderMapeamentoPerfil();
+    document.getElementById('mapeamento-perfil-modal').style.display = 'none';
+    showToast(id ? 'Registro atualizado!' : 'Registro criado!');
+  } catch (e) {
+    console.error('Erro ao salvar mapeamento de perfil:', e);
+    showToast('Erro ao salvar registro: ' + (e.message || e));
+  }
+};
+
+window.excluirMapeamentoPerfil = async function(id) {
+  if (!confirm('Excluir este registro?')) return;
+  try {
+    const { error } = await supaClient.from('mapeamento_perfil').delete().eq('id', id);
+    if (error) throw error;
+    await loadMapeamentoPerfilForApp();
+    if (window._renderMapeamentoPerfil) window._renderMapeamentoPerfil();
     showToast('Registro excluído.');
   } catch (e) {
     console.error('Erro ao excluir registro:', e);
