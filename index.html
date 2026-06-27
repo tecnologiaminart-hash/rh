@@ -2720,9 +2720,16 @@ window.aprovarCandidatoAvaliacao = async function(idCandidatura) {
         token,
         id_candidato: cand.id_candidaturas,
         id_cargo: idCargo,
+        nome_candidato: cand.nome_candidato || null,
         status_realizacao: 'pendente'
       }]);
       if (insertError) throw insertError;
+    } else {
+      // Registro já existia (ex.: criado antes desta coluna existir): garante que
+      // nome_candidato/id_cargo fiquem preenchidos para a geração dos .docx.
+      await supaClient.from('testes_avaliacoes')
+        .update({ nome_candidato: cand.nome_candidato || null, id_cargo: idCargo })
+        .eq('token', token);
     }
 
     const link = `${location.origin}${location.pathname}?avaliacao=${token}`;
@@ -4558,23 +4565,15 @@ async function checkAvaliacaoLink() {
     cargo = cargoData;
   }
 
-  let candidato = null;
-  if (teste.id_candidato) {
-    const { data: candidatoData, error: candidatoError } = await supaClient
-      .from('candidaturas')
-      .select('id_candidaturas,nome_candidato')
-      .eq('id_candidaturas', teste.id_candidato)
-      .maybeSingle();
-    if (candidatoError) console.error('Erro ao carregar candidato da avaliação:', candidatoError.message);
-    candidato = candidatoData;
-  }
-
   window._pubAval = {
     token: teste.token,
     idCargo: teste.id_cargo,
     cargoNome: (cargo && cargo.nome_cargo) || '—',
     formularioEntrevista: (cargo && cargo.formulario_entrevista) || '',
-    nomeCandidato: (candidato && candidato.nome_candidato) || 'Candidato',
+    // Nome vem direto de testes_avaliacoes (gravado no momento da aprovação) em vez
+    // de consultar candidaturas, porque o anon normalmente só tem permissão de
+    // INSERT nessa tabela (usada pelo formulário público), não de SELECT.
+    nomeCandidato: teste.nome_candidato || 'Candidato',
   };
 
   renderAvaliacaoEtapaDisc();
