@@ -692,10 +692,6 @@ const NAV = [
       { id: 'col-status', label: 'Informações Contratuais' },
       { id: 'col-documentos', label: 'Documentos' },
       { id: 'col-historico', label: 'Histórico' },
-      
-      { id: 'col-ferias', label: 'Férias' },
-      { id: 'col-atestados', label: 'Atestados' },
-      { id: 'col-exames', label: 'Exames' },
     ]
   },
   {
@@ -724,10 +720,8 @@ const NAV = [
   {
     id: 'ficha', label: 'Ficha e EPIs', icon: '◐',
     subs: [
-      { id: 'ficha-perfil', label: 'Perfil e Hobbies (Minart)' },
       { id: 'ficha-dados', label: 'Dados Pessoais' },
       { id: 'ficha-ocorrencias', label: 'Ocorrências e Obs' },
-      { id: 'ficha-relatorio', label: 'Relatório e Impressão' },
     ]
   },
   {
@@ -736,15 +730,6 @@ const NAV = [
       { id: 'bon-regras', label: 'Regras de Bonificação' },
       { id: 'bon-historico', label: 'Histórico de Pagamentos' },
       { id: 'bon-relatorio', label: 'Relatório e Impressão' },
-    ]
-  },
-  {
-    id: 'treinamentos', label: 'Treinamentos', icon: '◱',
-    subs: [
-      { id: 'trei-cargo', label: 'Treinamentos por Cargo' },
-      { id: 'trei-status', label: 'Status por Colaborador' },
-      { id: 'trei-cronograma', label: 'Cronograma' },
-      { id: 'trei-alterar', label: 'Alterar Treinamentos' },
     ]
   },
   {
@@ -1069,56 +1054,6 @@ function pageHistoricoCarreiraDetalhe(colabIdx) {
 }
 
 
-
-// ------------------------------------------------------------
-// FÉRIAS
-// ------------------------------------------------------------
-function pageFerias() {
-  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" data-toast="Abrindo solicitação de férias">+ Solicitar Férias</button>`;
-  return `
-  <div class="stat-row">
-    <div class="stat-box"><div class="stat-box-label">Em férias</div><div class="stat-box-value">8</div></div>
-    <div class="stat-box"><div class="stat-box-label">Agendadas</div><div class="stat-box-value">14</div></div>
-    <div class="stat-box"><div class="stat-box-label">Vencendo em 30d</div><div class="stat-box-value">5</div></div>
-    <div class="stat-box"><div class="stat-box-label">Vencidas</div><div class="stat-box-value" style="color:var(--danger)">2</div></div>
-  </div>
-  <div class="table-card">
-    <div class="table-header"><span class="table-title">Controle de Férias</span></div>
-    <table>
-      <thead><tr><th>Colaborador</th><th>Admissão</th><th>Período Aquisitivo</th><th>Início Gozo</th><th>Fim Gozo</th><th>Dias</th><th>Status</th></tr></thead>
-      <tbody>
-        ${[
-        ].map(([n,a,pa,ig,fg,d,st]) => `
-          <tr>
-            <td>${n}</td><td>${a}</td><td>${pa}</td><td>${ig}</td><td>${fg}</td>
-            <td><span class="badge badge-info">${d}d</span></td>
-            <td><span class="badge ${st==='Em Gozo'?'badge-active':st==='Agendado'?'badge-info':'badge-pending'}">${st}</span></td>
-          </tr>`).join('')}
-      </tbody>
-    </table>
-  </div>`;
-}
-
-// ------------------------------------------------------------
-// ATESTADOS
-// ------------------------------------------------------------
-function pageAtestados() {
-  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" data-toast="Cadastrando atestado">+ Registrar Atestado</button>`;
-  return `
-  <div class="table-card">
-    <div class="table-header"><span class="table-title">Controle de Atestados</span><input class="search-input" placeholder="Buscar..."></div>
-    <table>
-      <thead><tr><th>Colaborador</th><th>CID</th><th>Motivo</th><th>Data</th><th>Dias</th><th>Médico</th><th>Status</th></tr></thead>
-      <tbody>
-        ${[
-        ].map(([n,cid,mot,dt,d,med,st])=>`
-          <tr><td>${n}</td><td><span class="badge badge-gray">${cid}</span></td><td>${mot}</td><td>${dt}</td>
-          <td>${d}</td><td>${med}</td>
-          <td><span class="badge ${st==='Aprovado'?'badge-active':'badge-pending'}">${st}</span></td></tr>`).join('')}
-      </tbody>
-    </table>
-  </div>`;
-}
 
 // ------------------------------------------------------------
 // Informações Contratuais
@@ -1922,10 +1857,7 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
   const pages = {
     'dashboard':       pageDashboard,
     'col-documentos':  (typeof pageDocumentos === 'function') ? pageDocumentos : (function(){ console.error('pageDocumentos não está definida'); return function(){ return `<div class="empty-state"><div class="empty-state-icon">⚠</div><div class="empty-state-title">Página indisponível</div><div class="empty-state-desc">pageDocumentos não definida.</div></div>`; }; })(),
-    'col-ferias':      pageFerias,
-    'col-atestados':   pageAtestados,
     'col-status':      pageStatus,
-    'col-exames':      pageExames,
     'col-historico':   pageHistoricoCol,
     'col-historico-detalhe': pageHistoricoCarreiraDetalhe,
     'cont-candidatos': pageCandidatos,
@@ -1939,17 +1871,11 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
     'dep-relatorio':   pageRelatorio,
     'aval-disc':       pagePerfilDisc,
     'aval-perguntas-competencias': pagePerguntasCompetencias,
-    'ficha-perfil':    pagePerfil,
     'ficha-dados':     pageDadosPessoais,
     'ficha-ocorrencias': pageOcorrencias,
-    'ficha-relatorio': pageRelatorio,
     'bon-regras':      pageBonRegras,
     'bon-historico':   pageBonHistorico,
     'bon-relatorio':   pageRelatorio,
-    'trei-cargo':      pageTreiCargo,
-    'trei-status':     pageTreiStatus,
-    'trei-cronograma': pageCronograma,
-    'trei-alterar':    pageTreiAlterar,
     'int-cultura':     pageCultura,
     'int-regulamento': pageRegulamento,
   };
@@ -2497,27 +2423,6 @@ window.filtrarPerguntasCompetencias = function(query) {
   const pag = document.querySelector('#perguntas-competencias-pagination span');
   if (pag) pag.textContent = `${count} competência${count !== 1 ? 's' : ''}`;
 };
-
-// ------------------------------------------------------------
-// EXAMES
-// ------------------------------------------------------------
-function pageExames() {
-  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-primary" data-toast="Agendando exame">+ Agendar Exame</button>`;
-  return `
-  <div class="table-card">
-    <div class="table-header"><span class="table-title">Controle de Exames Ocupacionais</span></div>
-    <table>
-      <thead><tr><th>Colaborador</th><th>Tipo</th><th>Data Realização</th><th>Validade</th><th>Resultado</th><th>Status</th></tr></thead>
-      <tbody>
-        ${[
-        ].map(([n,tipo,dt,val,res,st])=>`
-          <tr><td>${n}</td><td>${tipo}</td><td>${dt}</td><td>${val}</td>
-          <td>${res}</td>
-          <td><span class="badge ${st==='Vigente'?'badge-active':'badge-inactive'}">${st}</span></td></tr>`).join('')}
-      </tbody>
-    </table>
-  </div>`;
-}
 
 // ------------------------------------------------------------
 // COLABORADORES — HISTÓRICO (LISTA DE COLABORADORES COM BOTÃO PARA VER HISTÓRICO INDIVIDUAL)
@@ -3502,126 +3407,6 @@ window.preencherCargoAtual = function(idx) {
   document.getElementById('alt-salario-atual').value = emp[4] || '—';
 };
 // ------------------------------------------------------------
-// PERFIL / MINART
-// ------------------------------------------------------------
-function pagePerfil() {
-  const emp = window._statusEmployees || [];
-  if (!window._perfisPorColab) window._perfisPorColab = {};
-
-  return `
-  <div class="form-card" style="margin-bottom:16px">
-    <div class="form-group">
-      <label class="form-label">Selecionar Colaborador</label>
-      <select class="form-select" id="perfil-select" onchange="carregarPerfil(this.value)">
-        <option value="">— Selecione um colaborador —</option>
-        ${emp.map((e,i) => `<option value="${i}">${e[0]}</option>`).join('')}
-      </select>
-    </div>
-  </div>
-  <div id="perfil-form-wrap" style="display:none">
-    <div class="profile-header">
-      <div class="profile-avatar" id="perfil-avatar">?</div>
-      <div>
-        <div class="profile-name" id="perfil-nome"></div>
-        <div class="profile-role" id="perfil-cargo"></div>
-        <div class="profile-meta">
-          <div class="profile-meta-item"><strong>Status:</strong> <span class="badge badge-active">Ativo</span></div>
-        </div>
-      </div>
-    </div>
-    <div class="form-card">
-      <div class="form-section-title">Perfil e Hobbies — Metodologia Minart</div>
-      <div class="form-grid">
-        <div class="form-group">
-          <label class="form-label">Animal de Identificação</label>
-          <select class="form-select" id="perfil-animal">
-            <option value="">— Selecione —</option>
-            <option value="Águia (Visionário)">🦅 Águia (Visionário)</option>
-            <option value="Gato (Analítico)">🐱 Gato (Analítico)</option>
-            <option value="Cão (Colaborativo)">🐶 Cão (Colaborativo)</option>
-            <option value="Leão (Dominante)">🦁 Leão (Dominante)</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Cor de Personalidade</label>
-          <select class="form-select" id="perfil-cor">
-            <option value="">— Selecione —</option>
-            <option value="Azul (Analítico)">🔵 Azul (Analítico)</option>
-            <option value="Vermelho (Dominante)">🔴 Vermelho (Dominante)</option>
-            <option value="Verde (Estável)">🟢 Verde (Estável)</option>
-            <option value="Amarelo (Influente)">🟡 Amarelo (Influente)</option>
-          </select>
-        </div>
-        <div class="form-group form-full">
-          <label class="form-label">Hobbies e Interesses</label>
-          <input class="form-input" id="perfil-hobbies" placeholder="Ex: Fotografia, Ciclismo, Leitura...">
-        </div>
-        <div class="form-group form-full">
-          <label class="form-label">Pontos Fortes (autopercebidos)</label>
-          <textarea class="form-textarea" id="perfil-pontos" placeholder="O que o colaborador acredita que faz bem..."></textarea>
-        </div>
-        <div class="form-group form-full">
-          <label class="form-label">Aspirações de Carreira</label>
-          <textarea class="form-textarea" id="perfil-aspiracoes" placeholder="Onde o colaborador quer chegar..."></textarea>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Estilo de Aprendizagem</label>
-          <select class="form-select" id="perfil-aprendizagem">
-            <option value="Visual">Visual</option>
-            <option value="Auditivo">Auditivo</option>
-            <option value="Cinestésico">Cinestésico</option>
-            <option value="Leitura/Escrita">Leitura/Escrita</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Preferência de Feedback</label>
-          <select class="form-select" id="perfil-feedback">
-            <option value="Público">Público</option>
-            <option value="Privado">Privado</option>
-            <option value="Escrito">Escrito</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-footer">
-        <button class="btn btn-primary" onclick="salvarPerfil()">Salvar Perfil</button>
-      </div>
-    </div>
-  </div>`;
-}
-
-window.carregarPerfil = function(idx) {
-  const wrap = document.getElementById('perfil-form-wrap');
-  if (idx === '') { wrap.style.display = 'none'; return; }
-  const emp = window._statusEmployees[parseInt(idx)];
-  document.getElementById('perfil-avatar').textContent = emp[0][0].toUpperCase();
-  document.getElementById('perfil-nome').textContent   = emp[0];
-  document.getElementById('perfil-cargo').textContent  = emp[1];
-  const p = window._perfisPorColab[idx] || {};
-  document.getElementById('perfil-animal').value        = p.animal        || '';
-  document.getElementById('perfil-cor').value           = p.cor           || '';
-  document.getElementById('perfil-hobbies').value       = p.hobbies       || '';
-  document.getElementById('perfil-pontos').value        = p.pontos        || '';
-  document.getElementById('perfil-aspiracoes').value    = p.aspiracoes    || '';
-  document.getElementById('perfil-aprendizagem').value  = p.aprendizagem  || 'Visual';
-  document.getElementById('perfil-feedback').value      = p.feedback      || 'Público';
-  wrap.style.display = '';
-};
-
-window.salvarPerfil = function() {
-  const idx = document.getElementById('perfil-select').value;
-  if (!idx) return showToast('Selecione um colaborador.');
-  window._perfisPorColab[idx] = {
-    animal:       document.getElementById('perfil-animal').value,
-    cor:          document.getElementById('perfil-cor').value,
-    hobbies:      document.getElementById('perfil-hobbies').value,
-    pontos:       document.getElementById('perfil-pontos').value,
-    aspiracoes:   document.getElementById('perfil-aspiracoes').value,
-    aprendizagem: document.getElementById('perfil-aprendizagem').value,
-    feedback:     document.getElementById('perfil-feedback').value,
-  };
-  showToast('Perfil salvo com sucesso!');
-};
-// ------------------------------------------------------------
 // DADOS PESSOAIS
 // ------------------------------------------------------------
 function pageDadosPessoais() {
@@ -3947,29 +3732,6 @@ if (document.getElementById('carreira-tbody-detalhe')) { // Se estiver na págin
 };
   
 // ------------------------------------------------------------
-// TREINAMENTOS DO COLABORADOR
-// ------------------------------------------------------------
-function pageTreinamentosCol() {
-  return `
-  <div class="table-card">
-    <div class="table-header"><span class="table-title">Treinamentos — Carlos Souza</span></div>
-    <table>
-      <thead><tr><th>Treinamento</th><th>Categoria</th><th>Carga Horária</th><th>Data</th><th>Status</th><th>Certificado</th></tr></thead>
-      <tbody>
-        ${[
-          ['AWS Solutions Architect','Técnico','40h','10/01/2024','Concluído','Sim'],
-          ['NR-35 Trabalho em Altura','Segurança','8h','05/03/2024','Concluído','Sim'],
-          ['Comunicação não-violenta','Comportamental','16h','15/07/2024','Agendado','—'],
-        ].map(([t,c,ch,dt,st,cert])=>`
-          <tr><td>${t}</td><td><span class="badge badge-gray">${c}</span></td><td>${ch}</td><td>${dt}</td>
-          <td><span class="badge ${st==='Concluído'?'badge-active':'badge-info'}">${st}</span></td>
-          <td>${cert==='Sim'?'<button class="btn btn-sm" data-toast="Download do certificado">⬇ PDF</button>':'—'}</td></tr>`).join('')}
-      </tbody>
-    </table>
-  </div>`;
-}
-
-// ------------------------------------------------------------
 // OCORRÊNCIAS
 // ------------------------------------------------------------
 function pageOcorrencias() {
@@ -4131,34 +3893,6 @@ window.deletarOcorrencia = function(i) {
   showToast('Ocorrência removida.');
 };
 // ------------------------------------------------------------
-// CRONOGRAMA
-// ------------------------------------------------------------
-function pageCronograma() {
-  const meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-  const eventos = [
-    {nome:'Avaliação 20 dias',mes:0,col:'#2980b9'},
-    {nome:'Avaliação 90 dias',mes:2,col:'#27ae60'},
-    {nome:'DISC — Perfil Comportamental',mes:3,col:'#8e44ad'},
-    {nome:'Avaliação Semestral',mes:5,col:'#e67e22'},
-    {nome:'Treinamento NR-35',mes:1,col:'#c0392b'},
-    {nome:'Avaliação DISC Follow-up',mes:8,col:'#8e44ad'},
-    {nome:'Avaliação Anual',mes:11,col:'#e67e22'},
-  ];
-  return `
-  <div class="chart-card">
-    <div class="chart-title">Cronograma Anual 2024</div>
-    <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:4px;margin-bottom:8px">
-      ${meses.map(m=>`<div style="text-align:center;font-size:10px;color:var(--text3);padding:4px 0;font-weight:600">${m}</div>`).join('')}
-    </div>
-    <div style="position:relative;height:180px;background:var(--bg2);border-radius:3px">
-      ${eventos.map((e,i)=>`
-        <div style="position:absolute;left:${(e.mes/12)*100}%;top:${i*24+8}px;background:${e.col};color:#fff;font-size:11px;padding:3px 8px;border-radius:2px;white-space:nowrap">${e.nome}</div>`).join('')}
-    </div>
-    <div style="font-size:11px;color:var(--text3);margin-top:8px">* Cronograma ilustrativo — datas ajustáveis conforme admissão</div>
-  </div>`;
-}
-
-// ------------------------------------------------------------
 // BONIFICAÇÃO
 // ------------------------------------------------------------
 function pageBonRegras() {
@@ -4204,103 +3938,13 @@ function pageBonHistorico() {
 }
 
 // ------------------------------------------------------------
-// TREINAMENTOS POR CARGO
-// ------------------------------------------------------------
-function pageTreiCargo() {
-  return `
-  <div class="table-card">
-    <div class="table-header"><span class="table-title">Matriz de Treinamentos por Cargo</span>
-      <div class="table-actions"><button class="btn btn-primary btn-sm" data-toast="Adicionando treinamento obrigatório">+ Adicionar</button></div>
-    </div>
-    <table>
-      <thead><tr><th>Cargo</th><th>Treinamento</th><th>Categoria</th><th>Carga Horária</th><th>Periodicidade</th><th>Obrigatório</th></tr></thead>
-      <tbody>
-        ${[
-          ['Analista de Sistemas','AWS Cloud','Técnico','40h','Única vez','Sim'],
-          ['Analista de Sistemas','LGPD e Segurança','Compliance','8h','Anual','Sim'],
-          ['Operador de Produção','NR-10 Elétrica','Segurança','40h','Bienal','Sim'],
-          ['Operador de Produção','NR-35 Altura','Segurança','8h','Anual','Sim'],
-          ['Todos os Cargos','Integração Empresarial','Cultura','16h','Admissão','Sim'],
-          ['Gestor','Feedback e Liderança','Comportamental','24h','Bienal','Não'],
-        ].map(([c,t,cat,ch,p,o])=>`
-          <tr><td>${c}</td><td>${t}</td><td><span class="badge badge-gray">${cat}</span></td>
-          <td>${ch}</td><td>${p}</td>
-          <td><span class="badge ${o==='Sim'?'badge-active':'badge-gray'}">${o}</span></td></tr>`).join('')}
-      </tbody>
-    </table>
-  </div>`;
-}
-
-// ------------------------------------------------------------
-// STATUS TREINAMENTOS POR COLABORADOR
-// ------------------------------------------------------------
-function pageTreiStatus() {
-  return `
-  <div class="table-card">
-    <div class="table-header"><span class="table-title">Status de Treinamentos por Colaborador</span><input class="search-input" placeholder="Buscar..."></div>
-    <table>
-      <thead><tr><th>Colaborador</th><th>Cargo</th><th>Obrigatórios</th><th>Concluídos</th><th>Pendentes</th><th>% Conclusão</th></tr></thead>
-      <tbody>
-        ${[['Carlos Souza','Analista',5,4,1,80],['Ana Lima','Coordenadora',4,4,0,100],['Pedro Silva','Operador',6,2,4,33],['Maria Costa','Assistente',3,3,0,100]].map(([n,c,o,cc,p,pct])=>`
-          <tr><td>${n}</td><td>${c}</td><td>${o}</td><td style="color:var(--success);font-weight:600">${cc}</td><td style="color:${p>0?'var(--danger)':'var(--text3)'};font-weight:600">${p}</td>
-          <td>
-            <div style="display:flex;align-items:center;gap:8px">
-              <div style="flex:1;background:var(--bg3);border-radius:2px;height:6px;overflow:hidden"><div style="width:${pct}%;background:${pct===100?'#1a7a3c':'#111'};height:100%"></div></div>
-              <span style="font-size:12px;font-weight:600;min-width:32px">${pct}%</span>
-            </div>
-          </td></tr>`).join('')}
-      </tbody>
-    </table>
-  </div>`;
-}
-
-// ------------------------------------------------------------
-// ALTERAR TREINAMENTOS
-// ------------------------------------------------------------
-function pageTreiAlterar() {
-  return `
-  <div class="form-card">
-    <div class="form-section-title">Alterar / Registrar Treinamento</div>
-    <form>
-      <div class="form-grid">
-        <div class="form-group"><label class="form-label">Colaborador</label><select class="form-select"><option>Carlos Souza</option><option>Ana Lima</option></select></div>
-        <div class="form-group"><label class="form-label">Treinamento</label><select class="form-select"><option>AWS Cloud</option><option>NR-35</option><option>LGPD</option></select></div>
-        <div class="form-group"><label class="form-label">Data de Realização</label><input class="form-input" type="date"></div>
-        <div class="form-group"><label class="form-label">Nota / Resultado</label><input class="form-input" type="number" placeholder="0-10"></div>
-        <div class="form-group"><label class="form-label">Status</label><select class="form-select"><option>Concluído</option><option>Em Andamento</option><option>Não Iniciado</option><option>Cancelado</option></select></div>
-        <div class="form-group"><label class="form-label">Certificado</label><input class="form-input" type="file"></div>
-        <div class="form-group form-full"><label class="form-label">Observações</label><textarea class="form-textarea"></textarea></div>
-      </div>
-      <div class="form-footer"><button type="submit" class="btn btn-primary">Salvar</button></div>
-    </form>
-  </div>`;
-}
-
-// ------------------------------------------------------------
 // CULTURA
 // ------------------------------------------------------------
 function pageCultura() {
   return `
-  <div class="form-card">
-    <div class="form-section-title">Cultura Organizacional</div>
-    <div class="form-grid" style="margin-bottom:20px">
-      ${[['Missão','Entregar soluções que transformam a vida das pessoas e organizações com inovação e responsabilidade.'],
-         ['Visão','Ser reconhecida como referência de excelência e cultura forte no Brasil até 2030.'],
-         ['Valores','Integridade · Colaboração · Inovação · Respeito · Resultados']].map(([t,v])=>`
-        <div class="chart-card">
-          <div class="chart-title">${t}</div>
-          <p style="font-size:14px;color:var(--text2);line-height:1.6">${v}</p>
-        </div>`).join('')}
-    </div>
-    <div style="margin-bottom:16px">
-      <div class="form-section-title">Editar Conteúdo</div>
-      <div class="form-grid">
-        <div class="form-group form-full"><label class="form-label">Missão</label><textarea class="form-textarea">Entregar soluções que transformam a vida das pessoas e organizações com inovação e responsabilidade.</textarea></div>
-        <div class="form-group form-full"><label class="form-label">Visão</label><textarea class="form-textarea">Ser reconhecida como referência de excelência e cultura forte no Brasil até 2030.</textarea></div>
-        <div class="form-group form-full"><label class="form-label">Valores</label><textarea class="form-textarea">Integridade · Colaboração · Inovação · Respeito · Resultados</textarea></div>
-      </div>
-    </div>
-    <div class="form-footer"><button class="btn btn-primary" data-toast="Cultura atualizada!">Salvar</button><button class="btn btn-print">🖨 Imprimir</button></div>
+  <div class="table-card">
+    <div class="table-header"><span class="table-title">Cultura</span></div>
+    <iframe src="https://drive.google.com/file/d/1vYuonaRuQx3Ma6JmrhycusjpFFb4fOJh/preview" style="width:100%;height:80vh;border:none;display:block"></iframe>
   </div>`;
 }
 
@@ -4309,48 +3953,9 @@ function pageCultura() {
 // ------------------------------------------------------------
 function pageRegulamento() {
   return `
-  <div class="form-card">
-    <div class="form-section-title">Regulamento Interno</div>
-    <div class="tabs">
-      <div class="tab active" data-target="reg-texto">Texto do Regulamento</div>
-      <div class="tab" data-target="reg-versoes">Versões</div>
-      <div class="tab" data-target="reg-aceites">Aceites</div>
-    </div>
-    <div data-panel id="reg-texto">
-      <textarea class="form-textarea" style="min-height:300px;font-family:inherit">REGULAMENTO INTERNO DA EMPRESA
-
-1. JORNADA DE TRABALHO
-1.1 A jornada de trabalho padrão é de 8 horas diárias, totalizando 44 horas semanais.
-1.2 O horário de entrada e saída deve ser registrado no sistema de ponto eletrônico.
-1.3 Horas extras devem ser previamente autorizadas pelo gestor imediato.
-
-2. CONDUTA E ÉTICA
-2.1 É vedado qualquer comportamento discriminatório, assédio moral ou sexual.
-2.2 O uso de redes sociais durante o expediente é permitido apenas em intervalos.
-
-3. USO DE EQUIPAMENTOS
-3.1 Os equipamentos da empresa devem ser utilizados exclusivamente para fins profissionais.
-3.2 Danos causados por negligência poderão ser descontados em folha.
-
-4. CONFIDENCIALIDADE
-4.1 Todo colaborador está sujeito ao Termo de Confidencialidade assinado na admissão.</textarea>
-      <div class="form-footer"><button class="btn btn-primary" data-toast="Regulamento salvo!">Salvar Versão</button><button class="btn btn-print">🖨 Imprimir</button></div>
-    </div>
-    <div data-panel id="reg-versoes" style="display:none">
-      <table><thead><tr><th>Versão</th><th>Data</th><th>Alterado por</th><th>Ações</th></tr></thead>
-      <tbody>
-        ${[['v3.0','01/01/2024','Ana Lima'],['v2.0','01/01/2023','Ana Lima'],['v1.0','01/01/2022','Dir. RH']].map(([v,d,r])=>`
-          <tr><td>${v}</td><td>${d}</td><td>${r}</td>
-          <td><button class="btn btn-sm" data-toast="Visualizando ${v}">Ver</button></td></tr>`).join('')}
-      </tbody></table>
-    </div>
-    <div data-panel id="reg-aceites" style="display:none">
-      <table><thead><tr><th>Colaborador</th><th>Data do Aceite</th><th>Versão</th><th>IP</th></tr></thead>
-      <tbody>
-        ${[['Carlos Souza','02/01/2024','v3.0','192.168.1.10'],['Ana Lima','02/01/2024','v3.0','192.168.1.11'],['Pedro Silva','15/01/2024','v3.0','192.168.1.15']].map(([c,d,v,ip])=>`
-          <tr><td>${c}</td><td>${d}</td><td>${v}</td><td style="font-size:12px;color:var(--text3)">${ip}</td></tr>`).join('')}
-      </tbody></table>
-    </div>
+  <div class="table-card">
+    <div class="table-header"><span class="table-title">Regulamento Interno</span></div>
+    <iframe src="https://drive.google.com/file/d/1z5snGNsSRfDGqesXodV-qelnciUlhfId/preview" style="width:100%;height:80vh;border:none;display:block"></iframe>
   </div>`;
 }
 
@@ -4938,7 +4543,6 @@ if (supaClient) {
   if (!window._cargosDescricao) window._cargosDescricao = [];
   if (!window._historicoCarreira) window._historicoCarreira = [];
   if (!window._documentosPorColab) window._documentosPorColab = {};
-  if (!window._perfisPorColab) window._perfisPorColab = {};
   if (!window._dadosPessoais) window._dadosPessoais = {};
   if (!window._ocorrencias) window._ocorrencias = [];
   if (!window._vagas) window._vagas = [];
