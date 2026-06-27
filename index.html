@@ -2413,13 +2413,13 @@ window.renderDiscTeste = function() {
 const PERGUNTAS_COMPETENCIAS = [
   { competencia: 'Administração do tempo', conceito: 'Capacidade de empregar o tempo necessário para cada atividade sem desperdício', perguntas: '1. Já foi solicitado, pela empresa onde você já trabalhou, tarefas a serem executadas com prazo apertado estipulado? (Se sim) Como fez para cumprir esse prazo apertado para entregar as tarefas solicitadas a você? 2. Alguma vez já entregou tarefas fora do prazo? Me conta uma situação.' },
   { competencia: 'Agilidade', conceito: 'Capacidade de otimizar as atribuições para cumprir metas de produtividade.', perguntas: '3. Conte sobre uma experiência sobre uma exigência que desafiou sua agilidade, e que por mais agil que tenha sido, não conseguiu evitar uma adversidade (ou seja, atraso na entrega do trabalho ou tarefa solicitada)' },
-  { competencia: 'Aplicação', conceito: 'Capacidade de aplicar aquilo que sabe, executa e realizar.', perguntas: '4. Dos principais curso que já fez, qual mais aplicou por onde já trabalhou? 2. Você considera que aplica os conhecimentos que possui? Me dá um exemplo.' },
-  { competencia: 'Atenção 1', conceito: 'Capacidade de concentrar atenção para evitar erros e defeitos', perguntas: '5. Conte quais as atribuições que exigiam mais atenção e como você administrou isso.' },
-  { competencia: 'Clareza', conceito: 'Capacidade de se comunicar claramente, de forma que o ouvinte compreenda com facilidade.', perguntas: '6.Conte sobre alguma situação em que tenha tido dificuldade para se fazer entender pelo cliente. 2. Conte sobre alguma vez em que teve de escrever o mesmo e-mail várias vezes para se fazer entender pelo cliente que o recebeu.' },
-  { competencia: 'Comportamento Ético', conceito: 'Capacidade de agir com integridade e transparência, priorizando a honestidade e a verdade nas interações pessoais e profissionais.', perguntas: '7.Relate alguma situação embaraçosa na qual precisou contestar alguém que faltava com a verdade.' },
-  { competencia: 'Comprometimento', conceito: 'Capacidade de desenvolver alto grau de compromisso com os resultados, de forma a tomar todas as providências necessárias para atingir o objetivo.', perguntas: '8.Você se considera uma pessoa comprometida? 9.Já houve uma situação que você até queria, mas não conseguiu se comprometer com uma meta específica ou tarefa? O que fez sobre isso (pediu mais um prazo ou procurou imediatamente formas de concluir e chegar a meta?' },
-  { competencia: 'Humildade', conceito: 'Capacidade de admitir e assumir os próprios erros e desculpar-se quando percebe que, de alguma forma, ofendeu alguém.', perguntas: '10.Conte alguma situação em que teve de admitir que estava errado e como foi. 2.Já houve alguma situação em que teve de pedir desculpas a alguém por um erro cometido? Como foi? Qual sensação você sentiu?' },
-  { competencia: 'Discrição', conceito: 'Capacidade de apresentar atitudes comedidas, sem se expor de forma negativa diante do ambiente profissional, preservando uma imagem positiva de si mesmo.', perguntas: '11. Você se considera uma pessoa discreta. 12. Você já trabalhou em um cargo de confiança em que tinha que manter sigilo sobre assuntos ligadas as funções que desempenhava?' },
+  { competencia: 'Aplicação', conceito: 'Capacidade de aplicar aquilo que sabe, executa e realizar.', perguntas: '4. Dos principais curso que já fez, qual mais aplicou por onde já trabalhou? 5. Você considera que aplica os conhecimentos que possui? Me dá um exemplo.' },
+  { competencia: 'Atenção 1', conceito: 'Capacidade de concentrar atenção para evitar erros e defeitos', perguntas: '6. Conte quais as atribuições que exigiam mais atenção e como você administrou isso.' },
+  { competencia: 'Clareza', conceito: 'Capacidade de se comunicar claramente, de forma que o ouvinte compreenda com facilidade.', perguntas: '7.Conte sobre alguma situação em que tenha tido dificuldade para se fazer entender pelo cliente. 8. Conte sobre alguma vez em que teve de escrever o mesmo e-mail várias vezes para se fazer entender pelo cliente que o recebeu.' },
+  { competencia: 'Comportamento Ético', conceito: 'Capacidade de agir com integridade e transparência, priorizando a honestidade e a verdade nas interações pessoais e profissionais.', perguntas: '9.Relate alguma situação embaraçosa na qual precisou contestar alguém que faltava com a verdade.' },
+  { competencia: 'Comprometimento', conceito: 'Capacidade de desenvolver alto grau de compromisso com os resultados, de forma a tomar todas as providências necessárias para atingir o objetivo.', perguntas: '10.Você se considera uma pessoa comprometida? 11.Já houve uma situação que você até queria, mas não conseguiu se comprometer com uma meta específica ou tarefa? O que fez sobre isso (pediu mais um prazo ou procurou imediatamente formas de concluir e chegar a meta?' },
+  { competencia: 'Humildade', conceito: 'Capacidade de admitir e assumir os próprios erros e desculpar-se quando percebe que, de alguma forma, ofendeu alguém.', perguntas: '12.Conte alguma situação em que teve de admitir que estava errado e como foi. 13.Já houve alguma situação em que teve de pedir desculpas a alguém por um erro cometido? Como foi? Qual sensação você sentiu?' },
+  { competencia: 'Discrição', conceito: 'Capacidade de apresentar atitudes comedidas, sem se expor de forma negativa diante do ambiente profissional, preservando uma imagem positiva de si mesmo.', perguntas: '14. Você se considera uma pessoa discreta. 15. Você já trabalhou em um cargo de confiança em que tinha que manter sigilo sobre assuntos ligadas as funções que desempenhava?' },
 ];
 
 function pagePerguntasCompetencias() {
@@ -4672,16 +4672,30 @@ window.finalizarAvaliacaoDisc = async function() {
   renderAvaliacaoEtapaCompetencias();
 };
 
+// Algumas linhas de "Perguntas comportamentais" trazem mais de uma pergunta numerada
+// na mesma célula (ex.: "1. ... 2. ..."). Quebra cada célula em perguntas individuais,
+// uma pergunta por campo de resposta na tela.
+function splitPerguntasComportamentais(texto) {
+  const partes = String(texto || '')
+    .split(/(?<!\d)(?=\d+\.\s*)/)
+    .map(p => p.trim())
+    .filter(Boolean);
+  return partes.length ? partes : [String(texto || '').trim()].filter(Boolean);
+}
+
 // --- Etapa 2: Perguntas por Competências (somente a coluna "Perguntas comportamentais") ---
 function renderAvaliacaoEtapaCompetencias() {
+  const perguntas = PERGUNTAS_COMPETENCIAS.flatMap(item => splitPerguntasComportamentais(item.perguntas));
+  window._pubAval.competenciasPerguntas = perguntas;
+
   renderAvaliacaoShell(`
     ${avaliacaoStepsHtml(2)}
     <div class="form-card">
       <div style="font-size:18px;font-weight:700;margin-bottom:8px">Etapa 2 de 3 — Perguntas por Competências</div>
       <p style="font-size:13px;color:var(--text3);margin-bottom:20px">Responda as perguntas abaixo com a maior sinceridade possível.</p>
-      ${PERGUNTAS_COMPETENCIAS.map((item, i) => `
+      ${perguntas.map((p, i) => `
         <div style="margin-bottom:18px">
-          <label class="form-label" style="display:block;margin-bottom:6px">${item.perguntas}</label>
+          <label class="form-label" style="display:block;margin-bottom:6px">${p}</label>
           <textarea class="form-input" id="aval-comp-resp-${i}" style="width:100%;min-height:80px;box-sizing:border-box"></textarea>
         </div>`).join('')}
       <div id="aval-comp-aviso" style="display:none;color:var(--danger);font-size:13px;font-weight:600;margin-bottom:12px"></div>
@@ -4691,8 +4705,9 @@ function renderAvaliacaoEtapaCompetencias() {
 
 window.finalizarAvaliacaoCompetencias = async function() {
   const avisoEl = document.getElementById('aval-comp-aviso');
-  const respostas = PERGUNTAS_COMPETENCIAS.map((item, i) => ({
-    pergunta: item.perguntas,
+  const perguntas = window._pubAval.competenciasPerguntas || [];
+  const respostas = perguntas.map((p, i) => ({
+    pergunta: p,
     resposta: (document.getElementById(`aval-comp-resp-${i}`)?.value || '').trim()
   }));
   if (respostas.some(r => !r.resposta)) {
