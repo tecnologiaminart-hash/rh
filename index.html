@@ -1021,9 +1021,6 @@ async function loadColaboradorHistoricoForApp() {
 }
 
 function pageHistoricoCarreiraDetalhe(idColaborador) {
-  const somenteVisualizacao = !!window._historicoModoVisualizacao;
-  window._historicoModoVisualizacao = false;
-
   const colaborador = (_colaboradoresSupabase || []).find(c => String(c.id_colaborador) === String(idColaborador));
   if (!colaborador) {
     return `<div class="empty-state">
@@ -1034,9 +1031,8 @@ function pageHistoricoCarreiraDetalhe(idColaborador) {
             </div>`;
   }
 
-  document.getElementById('topbar-actions').innerHTML = somenteVisualizacao
-    ? ''
-    : `<button class="btn btn-primary" onclick="openHistoricoModal('${idColaborador}')">+ Adicionar Registro</button>`;
+  document.getElementById('topbar-actions').innerHTML =
+    `<button class="btn btn-primary" onclick="openHistoricoModal('${idColaborador}')">+ Adicionar Registro</button>`;
 
   const renderTabela = () => {
     const tbody = document.getElementById('carreira-tbody-detalhe');
@@ -1055,9 +1051,9 @@ function pageHistoricoCarreiraDetalhe(idColaborador) {
             <td>${nomeCargoPorId(reg.id_cargos)}</td>
             <td>${reg.salario_hist !== null && reg.salario_hist !== undefined ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(reg.salario_hist)) : '—'}</td>
             <td>${reg.motivo || '—'}</td>
-            <td style="white-space:nowrap">${somenteVisualizacao ? '—' : `
+            <td style="white-space:nowrap">
               <button class="action-btn" title="Editar" onclick="openHistoricoModal('${idColaborador}', ${reg.id_cargos_hist})">✎</button>
-              <button class="action-btn" title="Excluir" style="color:var(--danger)" onclick="excluirHistoricoCarreira(${reg.id_cargos_hist})">✕</button>`}
+              <button class="action-btn" title="Excluir" style="color:var(--danger)" onclick="excluirHistoricoCarreira(${reg.id_cargos_hist})">✕</button>
             </td>
           </tr>`).join('');
   };
@@ -1068,7 +1064,7 @@ function pageHistoricoCarreiraDetalhe(idColaborador) {
   return `
   <div class="table-card">
     <div class="table-header">
-      <span class="table-title">Histórico de Carreira de ${colaborador.nome_colaborador}${somenteVisualizacao ? ' (Visualização)' : ''}</span>
+      <span class="table-title">Histórico de Carreira de ${colaborador.nome_colaborador}</span>
       <div class="table-actions">
         <button class="btn" onclick="navigate('col-historico', 'Histórico', 'Colaboradores')">← Voltar</button>
       </div>
@@ -1090,6 +1086,61 @@ function pageHistoricoCarreiraDetalhe(idColaborador) {
     </table>
   </div>`;
 }
+
+window.verHistoricoCarreiraModal = function(idColaborador) {
+  const colaborador = (_colaboradoresSupabase || []).find(c => String(c.id_colaborador) === String(idColaborador));
+  const nomeColaborador = colaborador ? colaborador.nome_colaborador : '';
+
+  if (!document.getElementById('historico-view-modal')) {
+    const modal = document.createElement('div');
+    modal.id = 'historico-view-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:6px;padding:32px;width:720px;max-width:95vw;max-height:85vh;overflow:auto;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+        <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="historico-view-modal-title">Histórico de Carreira</div>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Período Início</th>
+              <th>Período Fim</th>
+              <th>Cargo</th>
+              <th>Salário</th>
+              <th>Motivo</th>
+            </tr>
+          </thead>
+          <tbody id="historico-view-modal-tbody"></tbody>
+        </table>
+        <div style="display:flex;justify-content:flex-end;margin-top:16px">
+          <button class="btn" onclick="document.getElementById('historico-view-modal').style.display='none'">Fechar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  document.getElementById('historico-view-modal-title').textContent = `Histórico de Carreira de ${nomeColaborador}`;
+
+  const renderLista = () => {
+    const tbody = document.getElementById('historico-view-modal-tbody');
+    if (!tbody) return;
+    const registros = (window._colaboradorHistorico || [])
+      .filter(h => String(h.id_colaborador) === String(idColaborador))
+      .sort((a, b) => new Date(b.periodo_inicio || 0) - new Date(a.periodo_inicio || 0));
+
+    tbody.innerHTML = registros.length === 0
+      ? `<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro de carreira para ${nomeColaborador}.</td></tr>`
+      : registros.map(reg => `
+          <tr>
+            <td>${formatarDataBR(reg.periodo_inicio) || '—'}</td>
+            <td>${formatarDataBR(reg.periodo_fim) || 'Atual'}</td>
+            <td>${nomeCargoPorId(reg.id_cargos)}</td>
+            <td>${reg.salario_hist !== null && reg.salario_hist !== undefined ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(reg.salario_hist)) : '—'}</td>
+            <td>${reg.motivo || '—'}</td>
+          </tr>`).join('');
+  };
+
+  document.getElementById('historico-view-modal').style.display = 'flex';
+  loadColaboradorHistoricoForApp().then(renderLista);
+};
 
 window.openHistoricoModal = async function(idColaborador, idRegistro = null) {
   window._editingHistoricoId = idRegistro;
@@ -2836,8 +2887,8 @@ function pageHistoricoCol() {
             <td>${formatarDataBR(c.desde) || '—'}</td>
             <td>
               <span class="badge badge-info" style="margin-right:6px">${qtd} registro${qtd !== 1 ? 's' : ''}</span>
-              <button class="action-btn" title="Editar Histórico de Carreira" onclick="window._historicoModoVisualizacao=false; navigate('col-historico-detalhe', 'Histórico de Carreira', 'Colaboradores', ${c.id_colaborador})">✎</button>
-              <button class="action-btn" title="Ver Histórico de Carreira" onclick="window._historicoModoVisualizacao=true; navigate('col-historico-detalhe', 'Histórico de Carreira', 'Colaboradores', ${c.id_colaborador})">👁️</button>
+              <button class="action-btn" title="Editar Histórico de Carreira" onclick="navigate('col-historico-detalhe', 'Histórico de Carreira', 'Colaboradores', ${c.id_colaborador})">✎</button>
+              <button class="action-btn" title="Ver Histórico de Carreira" onclick="verHistoricoCarreiraModal(${c.id_colaborador})">👁️</button>
             </td>
           </tr>`;
         }).join('');
