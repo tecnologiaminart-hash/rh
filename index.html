@@ -2071,11 +2071,32 @@ window.openDocColabModal = async function(colabId) {
           <td>
             ${d.url ? `<button class="action-btn" title="Visualizar" onclick="visualizarDocumento('${d.url}')">👁</button>
             <a class="action-btn" title="Baixar" href="${driveDownloadUrl(d.url)}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">⬇</a>` : '<span style="color:var(--text3);font-size:12px">Sem arquivo</span>'}
+            ${d.id_doc ? `<button class="action-btn" title="Excluir" style="color:var(--danger)" onclick="excluirDocumento(${d.id_doc}, '${colabId}')">✕</button>` : ''}
           </td>
         </tr>`).join('')}</tbody></table>`;
 
   document.getElementById('doc-colab-title').textContent = `Documentos — ${nome}`;
   document.getElementById('doc-colab-body').innerHTML = body;
+};
+
+window.excluirDocumento = async function(idDoc, colabId) {
+  if (!confirm('Tem certeza que deseja excluir este documento? Esta ação não pode ser desfeita.')) return;
+
+  if (supaClient) {
+    const { error } = await supaClient.from('documentos').delete().eq('id_doc', idDoc);
+    if (error) {
+      console.error('Erro ao excluir documento:', error);
+      return showToast('Erro ao excluir documento.', 'danger');
+    }
+  }
+
+  if (window._documentosPorColab[colabId]) {
+    window._documentosPorColab[colabId] = window._documentosPorColab[colabId].filter(d => String(d.id_doc) !== String(idDoc));
+  }
+
+  showToast('Documento excluído com sucesso.');
+  window.renderDocColabTable();
+  await window.openDocColabModal(colabId);
 };
 
 window.openEnviarDocModal = function(prefillColabId='') {
