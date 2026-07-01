@@ -2268,17 +2268,17 @@ window.salvarDocumento = async function() {
   };
   if (urlArquivo) payload.url_arquivo = urlArquivo;
 
-  const { data: insertedDoc, error: insertError } = await supaClient
+  const { data: insertedRows, error: insertError } = await supaClient
     .from('documentos')
     .insert([payload])
-    .select()
-    .single();
+    .select();
 
   if (insertError) {
-    console.error('Erro ao inserir documento:', insertError);
-    return showToast('Erro ao salvar registro de documento.', 'danger');
+    console.error('Erro ao inserir documento:', insertError.message, '| code:', insertError.code, '| details:', insertError.details);
+    return showToast('Erro ao salvar registro de documento: ' + (insertError.message || 'verifique o console.'), 'danger');
   }
 
+  const insertedDoc = insertedRows?.[0];
   if (!window._documentosPorColab[cid]) window._documentosPorColab[cid] = [];
   window._documentosPorColab[cid].push({
     id_doc: insertedDoc?.id_doc,
