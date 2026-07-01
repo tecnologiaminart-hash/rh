@@ -744,6 +744,7 @@ const NAV = [
     subs: [
       { id: 'int-cultura', label: 'Cultura' },
       { id: 'int-regulamento', label: 'Regulamento Interno' },
+      { id: 'int-convencao', label: 'Convenção Siman' },
     ]
   },
 ];
@@ -2375,10 +2376,14 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
     'bon-historico':   pageBonHistorico,
     'int-cultura':     pageCultura,
     'int-regulamento': pageRegulamento,
+    'int-convencao':   pageConvencao,
   };
   const fn = pages[id];
   el.innerHTML = fn ? fn(param) : pageGeneric(id);
   postRender(id);
+  if (['int-cultura', 'int-regulamento', 'int-convencao'].includes(id)) {
+    loadInternosIframe(id);
+  }
   if (id === 'col-status') {
     // Garante que os cargos estejam carregados antes de tentar preencher o modal
     loadCargosForApp().then(() => {
@@ -5324,25 +5329,69 @@ function pageBonHistorico() {
 }
 
 // ------------------------------------------------------------
+// INTERNOS — helper compartilhado
+// ------------------------------------------------------------
+function _internosPageHtml(pageId, titulo) {
+  return `
+  <div class="table-card">
+    <div class="table-header"><span class="table-title">${titulo}</span></div>
+    <div id="${pageId}-loading" style="padding:20px;text-align:center;color:#888">Carregando...</div>
+    <iframe id="${pageId}-iframe" src="" style="width:100%;height:80vh;border:none;display:none"></iframe>
+  </div>`;
+}
+
+function toDrivePreviewUrl(url) {
+  if (!url) return '';
+  const m = url.match(/drive\.google\.com\/file\/d\/([^\/\?]+)/);
+  if (m) return `https://drive.google.com/file/d/${m[1]}/preview`;
+  return url;
+}
+
+async function loadInternosIframe(pageId) {
+  const nomeMap = {
+    'int-cultura':     'Manual de Cultura',
+    'int-regulamento': 'Regulamento interno',
+    'int-convencao':   'Convenção Siman',
+  };
+  const loading = document.getElementById(`${pageId}-loading`);
+  const iframe  = document.getElementById(`${pageId}-iframe`);
+  if (!iframe || !supaClient) return;
+  try {
+    const { data, error } = await supaClient.from('internos').select('id_drive').eq('nome', nomeMap[pageId]).maybeSingle();
+    if (error) throw error;
+    const url = toDrivePreviewUrl(data?.id_drive || '');
+    if (url) {
+      iframe.src = url;
+      iframe.style.display = 'block';
+      if (loading) loading.style.display = 'none';
+    } else {
+      if (loading) loading.textContent = 'Documento não encontrado.';
+    }
+  } catch(e) {
+    if (loading) loading.textContent = 'Erro ao carregar documento.';
+    console.error('Erro ao carregar internos:', e);
+  }
+}
+
+// ------------------------------------------------------------
 // CULTURA
 // ------------------------------------------------------------
 function pageCultura() {
-  return `
-  <div class="table-card">
-    <div class="table-header"><span class="table-title">Cultura</span></div>
-    <iframe src="https://drive.google.com/file/d/1vYuonaRuQx3Ma6JmrhycusjpFFb4fOJh/preview" style="width:100%;height:80vh;border:none;display:block"></iframe>
-  </div>`;
+  return _internosPageHtml('int-cultura', 'Cultura');
 }
 
 // ------------------------------------------------------------
 // REGULAMENTO INTERNO
 // ------------------------------------------------------------
 function pageRegulamento() {
-  return `
-  <div class="table-card">
-    <div class="table-header"><span class="table-title">Regulamento Interno</span></div>
-    <iframe src="https://drive.google.com/file/d/1z5snGNsSRfDGqesXodV-qelnciUlhfId/preview" style="width:100%;height:80vh;border:none;display:block"></iframe>
-  </div>`;
+  return _internosPageHtml('int-regulamento', 'Regulamento Interno');
+}
+
+// ------------------------------------------------------------
+// CONVENÇÃO SIMAN
+// ------------------------------------------------------------
+function pageConvencao() {
+  return _internosPageHtml('int-convencao', 'Convenção Siman');
 }
 
 // ------------------------------------------------------------
