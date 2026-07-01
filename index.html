@@ -2099,13 +2099,14 @@ window.obterDriveFolderIdParaColaborador = async function(cid) {
   if (!supaClient) throw new Error('Supabase não inicializado.');
   const { data, error } = await supaClient
     .from('mapeamento_pasta_doc_drive.colaborador')
-    .select('drive_folder_id')
+    .select('id_colaborador, drive_folder_id')
     .eq('id_colaborador', cid)
     .limit(1)
     .single();
   if (error) {
     throw error;
   }
+  console.log('[Drive] cid buscado:', cid, '| linha retornada:', data);
   return data?.drive_folder_id || null;
 };
 
@@ -2260,13 +2261,17 @@ window.salvarDocumento = async function() {
     return showToast('Falha ao enviar arquivo para o Drive.', 'danger');
   }
 
+  if (!urlArquivo) {
+    return showToast('O arquivo foi enviado mas o Drive não retornou a URL. Verifique o workflow do n8n ou a pasta do colaborador.', 'danger');
+  }
+
   const hoje = new Date().toISOString().slice(0, 10); // data_envio_doc é coluna "date"
   const payload = {
     id_colaborador: cid,
     tipo_doc: tipo,
     data_envio_doc: hoje,
+    url_arquivo: urlArquivo,
   };
-  if (urlArquivo) payload.url_arquivo = urlArquivo;
 
   const { data: insertedRows, error: insertError } = await supaClient
     .from('documentos')
