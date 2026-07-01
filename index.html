@@ -1941,7 +1941,25 @@ function pageDocumentos() {
   // Atualiza a contagem de documentos por colaborador com dados reais do Supabase.
   loadDocumentosFromSupabase().then(() => { if (activeId === 'col-documentos') window.renderDocColabTable(); });
 
+  const sucesso = window._docEnviadoSucesso || null;
+  window._docEnviadoSucesso = null;
+  if (sucesso) {
+    setTimeout(() => {
+      const banner = document.getElementById('doc-sucesso-banner');
+      if (banner) { banner.style.transition = 'opacity 0.6s'; banner.style.opacity = '0'; setTimeout(() => banner.remove(), 600); }
+    }, 6000);
+  }
+
   return `
+    ${sucesso ? `
+    <div id="doc-sucesso-banner" style="background:#e8f5ec;border:1px solid #a8d5b5;border-radius:8px;padding:14px 20px;margin-bottom:16px;display:flex;align-items:center;gap:14px;">
+      <span style="font-size:22px;line-height:1">✅</span>
+      <div style="flex:1">
+        <div style="font-size:14px;font-weight:700;color:#1a7a3c">Documento enviado com sucesso!</div>
+        <div style="font-size:13px;color:#2e7d52;margin-top:2px"><strong>${sucesso.tipo}</strong> já está listado nos documentos de <strong>${sucesso.nome}</strong>.</div>
+      </div>
+      <button onclick="document.getElementById('doc-sucesso-banner').remove()" style="background:none;border:none;cursor:pointer;font-size:16px;color:#1a7a3c;line-height:1;padding:0 4px">✕</button>
+    </div>` : ''}
     <div class="table-card">
       <div class="table-header">
         <span class="table-title">Documentos por Colaborador</span>
@@ -2315,7 +2333,11 @@ window.salvarDocumento = async function() {
   });
 
   document.getElementById('enviar-doc-modal').style.display='none';
-  showToast('Documento enviado com sucesso!');
+  const _colabInfo = (_colaboradoresSupabase || []).find(c => String(c.id_colaborador || c.id || c.codigo) === String(cid));
+  window._docEnviadoSucesso = {
+    nome: _colabInfo ? (_colabInfo.nome_colaborador || _colabInfo.nome || 'colaborador') : 'colaborador',
+    tipo
+  };
   navigate('col-documentos','Documentos','Colaboradores');
 };
 
