@@ -1413,7 +1413,8 @@ function renderStatusTable() {
       ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(salarioNum)
       : 'N/A';
     const statusBadgeClass = colab.status_colaborador === 'Ativo' ? 'badge-active'
-      : colab.status_colaborador === 'Pendente Documentação' ? 'badge-pending'
+      : colab.status_colaborador === 'Pendente Documentação' ? 'badge-inactive'
+      : colab.status_colaborador === 'Inativo' ? 'badge-gray'
       : 'badge-inactive';
 
     return `
@@ -1912,7 +1913,7 @@ function renderDocColabRows() {
       <tr onclick="openDocColabModal('${cid}')">
         <td>${nome}</td>
         <td>${cargo}</td>
-        <td><span class="badge ${String(status).toLowerCase().includes('ativo') ? 'badge-active' : 'badge-inactive'}">${status}</span></td>
+        <td><span class="badge ${status === 'Ativo' ? 'badge-active' : status === 'Inativo' ? 'badge-gray' : 'badge-inactive'}">${status}</span></td>
         <td>${qtd>0?`<span class="badge badge-info">${qtd} doc${qtd>1?'s':''}</span>`:'<span style="color:var(--text3);font-size:12px">Nenhum</span>'}</td>
         <td><button class="btn btn-sm" onclick="event.stopPropagation();openDocColabModal('${cid}')">Ver</button></td>
       </tr>`;
