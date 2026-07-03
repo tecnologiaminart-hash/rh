@@ -3035,7 +3035,7 @@ function pageCandidatos() {
             <thead>
               <tr>
                 <th>Nome</th>
-                <th>E-mail</th>
+                <th>CPF</th>
                 <th>Número</th>
                 <th>Instagram</th>
                 <th>Currículo</th>
@@ -3047,7 +3047,7 @@ function pageCandidatos() {
               ${g.cands.map((c) => `
                 <tr>
                   <td><strong>${c.nome_candidato || '—'}</strong></td>
-                  <td>${c.email_candidato || '—'}</td>
+                  <td>${c.cpf || '—'}</td>
                   <td>${c.numero || '—'}</td>
                   <td>${c.instagram || '—'}</td>
                   <td>
@@ -3118,7 +3118,9 @@ window.verCandidato = function(idCandidatura) {
   document.getElementById('candidato-detalhe-body').innerHTML = `
     <div style="display:flex;flex-direction:column;gap:12px;font-size:13px">
       <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Nome</span><div style="margin-top:4px">${cand.nome_candidato || '—'}</div></div>
-      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">E-mail</span><div style="margin-top:4px">${cand.email_candidato || '—'}</div></div>
+      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">CPF</span><div style="margin-top:4px">${cand.cpf || '—'}</div></div>
+      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Data de Nascimento</span><div style="margin-top:4px">${cand.data_nascimento ? new Date(cand.data_nascimento).toLocaleDateString('pt-BR') : '—'}</div></div>
+      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Nome da Mãe</span><div style="margin-top:4px">${cand.nome_da_mae || '—'}</div></div>
       <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Número</span><div style="margin-top:4px">${cand.numero || '—'}</div></div>
       <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Instagram</span><div style="margin-top:4px">${cand.instagram || '—'}</div></div>
       <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Vaga</span><div style="margin-top:4px">${vaga ? nomeCargoPorId(vaga.id_cargos) : '—'}</div></div>
@@ -3221,7 +3223,7 @@ function pageCandidatosAprovados() {
           <thead>
             <tr>
               <th>Nome</th>
-              <th>E-mail</th>
+              <th>CPF</th>
               <th>Número</th>
               <th>Instagram</th>
               <th>Currículo</th>
@@ -3243,7 +3245,7 @@ function pageCandidatosAprovados() {
               return `
               <tr>
                 <td><strong>${c.nome_candidato || '—'}</strong></td>
-                <td>${c.email_candidato || '—'}</td>
+                <td>${c.cpf || '—'}</td>
                 <td>${c.numero || '—'}</td>
                 <td>${c.instagram || '—'}</td>
                 <td>
@@ -3613,7 +3615,8 @@ window.preencherAdmissaoDoCandidato = function(idTeste) {
   }
   if (cand) {
     document.getElementById('adm-telefone').value = cand.numero || '';
-    document.getElementById('adm-email').value = cand.email_candidato || '';
+    document.getElementById('adm-cpf').value = cand.cpf || '';
+    document.getElementById('adm-nascimento').value = cand.data_nascimento || '';
   }
 };
 
@@ -5487,8 +5490,12 @@ async function checkCandidaturaLink() {
            <div class="pub-depto">${cargoDescricao || 'Minart Móveis'}</div>
            <label class="pub-label">Nome Completo *</label>
            <input class="pub-input" id="pub-nome" placeholder="Seu nome completo">
-           <label class="pub-label">E-mail *</label>
-           <input class="pub-input" id="pub-email" type="email" placeholder="seu@email.com">
+           <label class="pub-label">CPF *</label>
+           <input class="pub-input" id="pub-cpf" placeholder="000.000.000-00">
+           <label class="pub-label">Data de Nascimento *</label>
+           <input class="pub-input" id="pub-nascimento" type="date">
+           <label class="pub-label">Nome da Mãe *</label>
+           <input class="pub-input" id="pub-nome-mae" placeholder="Nome completo da sua mãe">
            <label class="pub-label">Número</label>
            <input class="pub-input" id="pub-numero" placeholder="(00) 00000-0000">
            <label class="pub-label">Instagram</label>
@@ -5501,17 +5508,21 @@ async function checkCandidaturaLink() {
 }
 
 window.enviarCandidatura = async function(token) {
-  const nome      = (document.getElementById('pub-nome')?.value || '').trim();
-  const email     = (document.getElementById('pub-email')?.value || '').trim();
-  const numero    = (document.getElementById('pub-numero')?.value || '').trim();
-  const instagram = (document.getElementById('pub-instagram')?.value || '').trim();
-  const currFile  = document.getElementById('pub-curriculo')?.files[0];
-  const msgEl     = document.getElementById('pub-msg');
-  const btnEl     = document.getElementById('pub-submit-btn');
+  const nome          = (document.getElementById('pub-nome')?.value || '').trim();
+  const cpf           = (document.getElementById('pub-cpf')?.value || '').trim();
+  const dataNascimento = (document.getElementById('pub-nascimento')?.value || '').trim();
+  const nomeMae       = (document.getElementById('pub-nome-mae')?.value || '').trim();
+  const numero        = (document.getElementById('pub-numero')?.value || '').trim();
+  const instagram      = (document.getElementById('pub-instagram')?.value || '').trim();
+  const currFile      = document.getElementById('pub-curriculo')?.files[0];
+  const msgEl         = document.getElementById('pub-msg');
+  const btnEl         = document.getElementById('pub-submit-btn');
 
-  if (!nome)     { msgEl.textContent = 'Informe seu nome.'; msgEl.className = 'pub-msg pub-error'; return; }
-  if (!email)    { msgEl.textContent = 'Informe seu e-mail.'; msgEl.className = 'pub-msg pub-error'; return; }
-  if (!currFile) { msgEl.textContent = 'Anexe seu currículo.'; msgEl.className = 'pub-msg pub-error'; return; }
+  if (!nome)           { msgEl.textContent = 'Informe seu nome.'; msgEl.className = 'pub-msg pub-error'; return; }
+  if (!cpf)            { msgEl.textContent = 'Informe seu CPF.'; msgEl.className = 'pub-msg pub-error'; return; }
+  if (!dataNascimento) { msgEl.textContent = 'Informe sua data de nascimento.'; msgEl.className = 'pub-msg pub-error'; return; }
+  if (!nomeMae)        { msgEl.textContent = 'Informe o nome da sua mãe.'; msgEl.className = 'pub-msg pub-error'; return; }
+  if (!currFile)       { msgEl.textContent = 'Anexe seu currículo.'; msgEl.className = 'pub-msg pub-error'; return; }
 
   if (!window._vagas) window._vagas = [];
   const vaga = window._vagas.find(v => v['link-token'] === token);
@@ -5538,7 +5549,9 @@ window.enviarCandidatura = async function(token) {
     id_vagas: vaga.id_vagas,
     id_cargos: vaga.id_cargos,
     nome_candidato: nome,
-    email_candidato: email,
+    cpf: cpf,
+    data_nascimento: dataNascimento,
+    nome_da_mae: nomeMae,
     numero: numero || null,
     instagram: instagram || null,
     url_curriculo: urlCurriculo,
