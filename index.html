@@ -2979,9 +2979,109 @@ function pageHistoricoCol() {
 // ------------------------------------------------------------
 // CANDIDATOS
 // ------------------------------------------------------------
+function aplicarFiltrosCandidatos(lista, filtro) {
+  if (!filtro) return lista;
+  return lista.filter(c => {
+    if (filtro.busca) {
+      const q = filtro.busca.trim().toLowerCase();
+      if (q && !(c.nome_candidato || '').toLowerCase().includes(q)) return false;
+    }
+    if (filtro.vaga && String(c.id_vagas) !== String(filtro.vaga)) return false;
+    if (filtro.status) {
+      const valor = c.status_antecedente || '';
+      if (filtro.status === '__sem_status__') {
+        if (valor) return false;
+      } else if (filtro.status === 'Outro') {
+        if (!valor || valor === 'Nada Consta') return false;
+      } else if (valor !== filtro.status) {
+        return false;
+      }
+    }
+    if (filtro.dataIni) {
+      const d = c.data_envio_candidatura ? new Date(c.data_envio_candidatura) : null;
+      if (!d || d < new Date(filtro.dataIni)) return false;
+    }
+    if (filtro.dataFim) {
+      const d = c.data_envio_candidatura ? new Date(c.data_envio_candidatura) : null;
+      if (!d || d > new Date(filtro.dataFim + 'T23:59:59')) return false;
+    }
+    return true;
+  });
+}
+
+function filtrosCandidatosBarHtml(prefix, escopo, filtro) {
+  const vagas = window._vagas || [];
+  return `
+  <div class="table-card" style="padding:14px 16px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
+    <div style="flex:1;min-width:180px">
+      <label class="form-label">Buscar por nome</label>
+      <input class="form-input" id="${prefix}-busca" placeholder="Nome do candidato..." value="${(filtro.busca || '').replace(/"/g, '&quot;')}" oninput="atualizarFiltroCandidatos('${escopo}','busca',this.value)">
+    </div>
+    <div style="min-width:180px">
+      <label class="form-label">Vaga</label>
+      <select class="form-select" id="${prefix}-vaga" onchange="atualizarFiltroCandidatos('${escopo}','vaga',this.value)">
+        <option value="">Todas as vagas</option>
+        ${vagas.map(v => `<option value="${v.id_vagas}" ${String(filtro.vaga) === String(v.id_vagas) ? 'selected' : ''}>${nomeCargoPorId(v.id_cargos)}</option>`).join('')}
+      </select>
+    </div>
+    <div style="min-width:160px">
+      <label class="form-label">Status do antecedente</label>
+      <select class="form-select" id="${prefix}-status" onchange="atualizarFiltroCandidatos('${escopo}','status',this.value)">
+        <option value="" ${!filtro.status ? 'selected' : ''}>Todos</option>
+        <option value="Nada Consta" ${filtro.status === 'Nada Consta' ? 'selected' : ''}>Nada Consta</option>
+        <option value="Outro" ${filtro.status === 'Outro' ? 'selected' : ''}>Outro</option>
+        <option value="__sem_status__" ${filtro.status === '__sem_status__' ? 'selected' : ''}>Sem status</option>
+      </select>
+    </div>
+    <div style="min-width:140px">
+      <label class="form-label">Envio de</label>
+      <input class="form-input" type="date" id="${prefix}-data-ini" value="${filtro.dataIni || ''}" onchange="atualizarFiltroCandidatos('${escopo}','dataIni',this.value)">
+    </div>
+    <div style="min-width:140px">
+      <label class="form-label">Envio até</label>
+      <input class="form-input" type="date" id="${prefix}-data-fim" value="${filtro.dataFim || ''}" onchange="atualizarFiltroCandidatos('${escopo}','dataFim',this.value)">
+    </div>
+    <div>
+      <button class="btn btn-sm" onclick="limparFiltrosCandidatos('${escopo}')">✕ Limpar filtros</button>
+    </div>
+  </div>`;
+}
+
+window.atualizarFiltroCandidatos = function(escopo, campo, valor) {
+  const filtro = escopo === 'aprovados' ? window._candidatosAprovadosFiltro : window._candidatosFiltro;
+  if (!filtro) return;
+  filtro[campo] = valor;
+  if (escopo === 'aprovados') {
+    if (window._renderCandidatosAprovados) window._renderCandidatosAprovados();
+  } else {
+    if (window._renderCandidatos) window._renderCandidatos();
+  }
+};
+
+window.limparFiltrosCandidatos = function(escopo) {
+  const filtro = escopo === 'aprovados' ? window._candidatosAprovadosFiltro : window._candidatosFiltro;
+  if (!filtro) return;
+  filtro.busca = '';
+  filtro.vaga = '';
+  filtro.status = '';
+  filtro.dataIni = '';
+  filtro.dataFim = '';
+  const prefix = escopo === 'aprovados' ? 'cand-aprov-filtro' : 'cand-filtro';
+  ['busca', 'vaga', 'status', 'data-ini', 'data-fim'].forEach(campo => {
+    const el = document.getElementById(`${prefix}-${campo}`);
+    if (el) el.value = '';
+  });
+  if (escopo === 'aprovados') {
+    if (window._renderCandidatosAprovados) window._renderCandidatosAprovados();
+  } else {
+    if (window._renderCandidatos) window._renderCandidatos();
+  }
+};
+
 function pageCandidatos() {
   if (!window._vagas) window._vagas = [];
   if (!window._candidaturas) window._candidaturas = [];
+  if (!window._candidatosFiltro) window._candidatosFiltro = { busca: '', vaga: '', status: '', dataIni: '', dataFim: '' };
   if (!window._candidatosOrdem) window._candidatosOrdem = 'recentes';
 
   document.getElementById('topbar-actions').innerHTML =
@@ -2996,7 +3096,9 @@ function pageCandidatos() {
     const container = document.getElementById('candidatos-container');
     if (!container) return;
 
-    const candidaturasOrdenadas = [...window._candidaturas].sort((a, b) => {
+    const candidaturasFiltradas = aplicarFiltrosCandidatos(window._candidaturas, window._candidatosFiltro);
+
+    const candidaturasOrdenadas = [...candidaturasFiltradas].sort((a, b) => {
       const da = a.data_envio_candidatura ? new Date(a.data_envio_candidatura) : new Date(0);
       const db = b.data_envio_candidatura ? new Date(b.data_envio_candidatura) : new Date(0);
       return window._candidatosOrdem === 'antigas' ? da - db : db - da;
@@ -3009,10 +3111,11 @@ function pageCandidatos() {
     }).filter(g => g.cands.length > 0);
 
     if (grupos.length === 0) {
+      const filtroAtivo = window._candidatosFiltro && (window._candidatosFiltro.busca || window._candidatosFiltro.vaga || window._candidatosFiltro.status || window._candidatosFiltro.dataIni || window._candidatosFiltro.dataFim);
       container.innerHTML = `<div class="empty-state">
         <div class="empty-state-icon">📋</div>
-        <div class="empty-state-title">Nenhum candidato ainda</div>
-        <div class="empty-state-desc">Quando alguém preencher o formulário de uma vaga, aparecerá aqui agrupado por vaga.</div>
+        <div class="empty-state-title">${filtroAtivo ? 'Nenhum candidato encontrado' : 'Nenhum candidato ainda'}</div>
+        <div class="empty-state-desc">${filtroAtivo ? 'Ajuste ou limpe os filtros para ver outros candidatos.' : 'Quando alguém preencher o formulário de uma vaga, aparecerá aqui agrupado por vaga.'}</div>
       </div>`;
       return;
     }
@@ -3096,10 +3199,9 @@ function pageCandidatos() {
         <button class="btn btn-sm" onclick="document.getElementById('emitir-antecedente-modal').style.display='none'">✕ Fechar</button>
       </div>
       <div style="padding:24px">
-        <label class="form-label">Selecione o Candidato</label>
-        <select class="form-select" id="emitir-antecedente-select" onchange="onSelecionarCandidatoAntecedente(this.value)">
-          <option value="">— Selecione —</option>
-        </select>
+        <label class="form-label">Buscar Candidato</label>
+        <input class="form-input" id="emitir-antecedente-busca" placeholder="Digite o nome ou clique para ver todos..." autocomplete="off" oninput="filtrarCandidatosAntecedente(this.value)" onfocus="filtrarCandidatosAntecedente(this.value)">
+        <div id="emitir-antecedente-resultados" style="display:none;max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;margin-top:6px"></div>
         <div id="emitir-antecedente-dados" style="display:none;flex-direction:column;gap:10px;margin-top:20px;font-size:13px">
           <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Nome</span><div id="emitir-ant-nome" style="margin-top:4px"></div></div>
           <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">CPF</span><div id="emitir-ant-cpf" style="margin-top:4px"></div></div>
@@ -3109,6 +3211,8 @@ function pageCandidatos() {
       </div>
     </div>
   </div>
+
+  ${filtrosCandidatosBarHtml('cand-filtro', 'candidatos', window._candidatosFiltro)}
 
   <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
     <select class="form-select" style="width:auto" onchange="ordenarCandidatos(this.value)">
@@ -3126,7 +3230,7 @@ function pageCandidatos() {
 }
 
 function statusAntecedenteCellHtml(c) {
-  const valor = c.status_antecente || '';
+  const valor = c.status_antecedente || '';
   const isOutro = valor && valor !== 'Nada Consta';
   const valorEscapado = valor.replace(/"/g, '&quot;');
   return `
@@ -3156,10 +3260,10 @@ window.salvarStatusAntecedenteOutro = async function(idCandidatura, texto) {
 
 async function salvarStatusAntecedente(idCandidatura, valor) {
   try {
-    const { error } = await supaClient.from('candidaturas').update({ status_antecente: valor }).eq('id_candidaturas', idCandidatura);
+    const { error } = await supaClient.from('candidaturas').update({ status_antecedente: valor }).eq('id_candidaturas', idCandidatura);
     if (error) throw error;
     const cand = (window._candidaturas || []).find(c => c.id_candidaturas === idCandidatura);
-    if (cand) cand.status_antecente = valor;
+    if (cand) cand.status_antecedente = valor;
     showToast('Status de antecedente salvo.');
   } catch (e) {
     console.error('Erro ao salvar status de antecedente:', e);
@@ -3168,23 +3272,36 @@ async function salvarStatusAntecedente(idCandidatura, valor) {
 }
 
 window.abrirModalEmitirAntecedente = function() {
-  const sel = document.getElementById('emitir-antecedente-select');
-  if (sel) {
-    sel.innerHTML = '<option value="">— Selecione —</option>' +
-      (window._candidaturas || []).map(c => `<option value="${c.id_candidaturas}">${c.nome_candidato || 'Sem nome'}</option>`).join('');
-  }
+  const busca = document.getElementById('emitir-antecedente-busca');
+  if (busca) busca.value = '';
   const dados = document.getElementById('emitir-antecedente-dados');
   if (dados) dados.style.display = 'none';
   document.getElementById('emitir-antecedente-modal').style.display = 'flex';
+  window.filtrarCandidatosAntecedente('');
 };
 
-window.onSelecionarCandidatoAntecedente = async function(idCandidatura) {
-  const dados = document.getElementById('emitir-antecedente-dados');
-  if (!idCandidatura) { if (dados) dados.style.display = 'none'; return; }
+window.filtrarCandidatosAntecedente = function(query) {
+  const resultados = document.getElementById('emitir-antecedente-resultados');
+  if (!resultados) return;
+  const q = String(query || '').trim().toLowerCase();
+  const todos = [...(window._candidaturas || [])].sort((a, b) => (a.nome_candidato || '').localeCompare(b.nome_candidato || '', 'pt-BR'));
+  const matches = q ? todos.filter(c => (c.nome_candidato || '').toLowerCase().includes(q)) : todos;
+  resultados.innerHTML = matches.length
+    ? matches.map(c => `<div style="padding:8px 12px;cursor:pointer;font-size:13px" onmouseover="this.style.background='var(--bg2, #f5f5f5)'" onmouseout="this.style.background=''" onclick="selecionarCandidatoAntecedente(${c.id_candidaturas})">${c.nome_candidato || 'Sem nome'}</div>`).join('')
+    : `<div style="padding:8px 12px;color:var(--text3);font-size:13px">Nenhum candidato encontrado.</div>`;
+  resultados.style.display = 'block';
+};
 
+window.selecionarCandidatoAntecedente = async function(idCandidatura) {
   const cand = (window._candidaturas || []).find(c => String(c.id_candidaturas) === String(idCandidatura));
   if (!cand) return;
 
+  const busca = document.getElementById('emitir-antecedente-busca');
+  if (busca) busca.value = cand.nome_candidato || '';
+  const resultados = document.getElementById('emitir-antecedente-resultados');
+  if (resultados) { resultados.style.display = 'none'; resultados.innerHTML = ''; }
+
+  const dados = document.getElementById('emitir-antecedente-dados');
   document.getElementById('emitir-ant-nome').textContent = cand.nome_candidato || '—';
   document.getElementById('emitir-ant-cpf').textContent = cand.cpf || '—';
   document.getElementById('emitir-ant-nascimento').textContent = cand.data_nascimento ? new Date(cand.data_nascimento).toLocaleDateString('pt-BR') : '—';
@@ -3285,6 +3402,7 @@ window.aprovarCandidatoAvaliacao = async function(idCandidatura) {
 function pageCandidatosAprovados() {
   if (!window._vagas) window._vagas = [];
   if (!window._candidaturas) window._candidaturas = [];
+  if (!window._candidatosAprovadosFiltro) window._candidatosAprovadosFiltro = { busca: '', vaga: '', status: '', dataIni: '', dataFim: '' };
 
   document.getElementById('topbar-actions').innerHTML = '';
 
@@ -3292,16 +3410,20 @@ function pageCandidatosAprovados() {
     const container = document.getElementById('candidatos-aprovados-container');
     if (!container) return;
 
+    const aprovados = window._candidaturas.filter(c => candidatoAprovado(c));
+    const aprovadosFiltrados = aplicarFiltrosCandidatos(aprovados, window._candidatosAprovadosFiltro);
+
     const grupos = window._vagas.map((v) => {
-      const cands = window._candidaturas.filter(c => c.id_vagas === v.id_vagas && candidatoAprovado(c));
+      const cands = aprovadosFiltrados.filter(c => c.id_vagas === v.id_vagas);
       return { vaga: v, cands };
     }).filter(g => g.cands.length > 0);
 
     if (grupos.length === 0) {
+      const filtroAtivo = window._candidatosAprovadosFiltro && (window._candidatosAprovadosFiltro.busca || window._candidatosAprovadosFiltro.vaga || window._candidatosAprovadosFiltro.status || window._candidatosAprovadosFiltro.dataIni || window._candidatosAprovadosFiltro.dataFim);
       container.innerHTML = `<div class="empty-state">
         <div class="empty-state-icon">✅</div>
-        <div class="empty-state-title">Nenhum candidato aprovado ainda</div>
-        <div class="empty-state-desc">Aprove candidatos na aba Candidatos para que apareçam aqui, agrupados por vaga.</div>
+        <div class="empty-state-title">${filtroAtivo ? 'Nenhum candidato encontrado' : 'Nenhum candidato aprovado ainda'}</div>
+        <div class="empty-state-desc">${filtroAtivo ? 'Ajuste ou limpe os filtros para ver outros candidatos.' : 'Aprove candidatos na aba Candidatos para que apareçam aqui, agrupados por vaga.'}</div>
       </div>`;
       return;
     }
@@ -3411,6 +3533,8 @@ function pageCandidatosAprovados() {
       <div style="padding:24px" id="candidato-detalhe-body"></div>
     </div>
   </div>
+
+  ${filtrosCandidatosBarHtml('cand-aprov-filtro', 'aprovados', window._candidatosAprovadosFiltro)}
 
   <div id="candidatos-aprovados-container">
     <div class="empty-state">
