@@ -2984,7 +2984,8 @@ function pageCandidatos() {
   if (!window._candidaturas) window._candidaturas = [];
   if (!window._candidatosOrdem) window._candidatosOrdem = 'recentes';
 
-  document.getElementById('topbar-actions').innerHTML = '';
+  document.getElementById('topbar-actions').innerHTML =
+    `<button class="btn btn-primary" onclick="abrirModalEmitirAntecedente()">+ Emitir Antecedente</button>`;
 
   window.ordenarCandidatos = function(valor) {
     window._candidatosOrdem = valor;
@@ -3035,11 +3036,11 @@ function pageCandidatos() {
             <thead>
               <tr>
                 <th>Nome</th>
-                <th>CPF</th>
                 <th>Número</th>
                 <th>Instagram</th>
                 <th>Currículo</th>
                 <th>Data de Envio</th>
+                <th>Status Antecedente</th>
                 <th>Ações</th>
               </tr>
             </thead>
@@ -3047,7 +3048,6 @@ function pageCandidatos() {
               ${g.cands.map((c) => `
                 <tr>
                   <td><strong>${c.nome_candidato || '—'}</strong></td>
-                  <td>${c.cpf || '—'}</td>
                   <td>${c.numero || '—'}</td>
                   <td>${c.instagram || '—'}</td>
                   <td>
@@ -3057,6 +3057,7 @@ function pageCandidatos() {
                       : `<span class="badge badge-gray">Não enviado</span>`}
                   </td>
                   <td style="color:var(--text3);font-size:12px">${c.data_envio_candidatura ? new Date(c.data_envio_candidatura).toLocaleDateString('pt-BR') : '—'}</td>
+                  <td>${statusAntecedenteCellHtml(c)}</td>
                   <td style="white-space:nowrap">
                     <button class="action-btn" onclick="verCandidato(${c.id_candidaturas})" title="Ver dados completos">👁</button>
                     ${candidatoAprovado(c)
@@ -3087,6 +3088,28 @@ function pageCandidatos() {
     </div>
   </div>
 
+  <!-- Modal de emissão de antecedente -->
+  <div id="emitir-antecedente-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+      <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:15px;font-weight:700">Emitir Antecedente</div>
+        <button class="btn btn-sm" onclick="document.getElementById('emitir-antecedente-modal').style.display='none'">✕ Fechar</button>
+      </div>
+      <div style="padding:24px">
+        <label class="form-label">Selecione o Candidato</label>
+        <select class="form-select" id="emitir-antecedente-select" onchange="onSelecionarCandidatoAntecedente(this.value)">
+          <option value="">— Selecione —</option>
+        </select>
+        <div id="emitir-antecedente-dados" style="display:none;flex-direction:column;gap:10px;margin-top:20px;font-size:13px">
+          <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Nome</span><div id="emitir-ant-nome" style="margin-top:4px"></div></div>
+          <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">CPF</span><div id="emitir-ant-cpf" style="margin-top:4px"></div></div>
+          <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Data de Nascimento</span><div id="emitir-ant-nascimento" style="margin-top:4px"></div></div>
+          <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Nome da Mãe</span><div id="emitir-ant-mae" style="margin-top:4px"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
     <select class="form-select" style="width:auto" onchange="ordenarCandidatos(this.value)">
       <option value="recentes" ${window._candidatosOrdem !== 'antigas' ? 'selected' : ''}>Mais recentes</option>
@@ -3101,6 +3124,86 @@ function pageCandidatos() {
     </div>
   </div>`;
 }
+
+function statusAntecedenteCellHtml(c) {
+  const valor = c.status_antecente || '';
+  const isOutro = valor && valor !== 'Nada Consta';
+  const valorEscapado = valor.replace(/"/g, '&quot;');
+  return `
+    <div style="display:flex;flex-direction:column;gap:4px">
+      <select class="form-select" style="width:auto" id="status-antecedente-select-${c.id_candidaturas}" onchange="onChangeStatusAntecedente(${c.id_candidaturas}, this.value)">
+        <option value="" ${!valor ? 'selected' : ''}>—</option>
+        <option value="Nada Consta" ${valor === 'Nada Consta' ? 'selected' : ''}>Nada Consta</option>
+        <option value="Outro" ${isOutro ? 'selected' : ''}>Outro</option>
+      </select>
+      <input class="form-input" style="width:auto;display:${isOutro ? '' : 'none'}" id="status-antecedente-outro-${c.id_candidaturas}" placeholder="Descreva..." value="${isOutro ? valorEscapado : ''}" onchange="salvarStatusAntecedenteOutro(${c.id_candidaturas}, this.value)">
+    </div>`;
+}
+
+window.onChangeStatusAntecedente = async function(idCandidatura, valor) {
+  const outroInput = document.getElementById(`status-antecedente-outro-${idCandidatura}`);
+  if (valor === 'Outro') {
+    if (outroInput) { outroInput.style.display = ''; outroInput.value = ''; outroInput.focus(); }
+    return;
+  }
+  if (outroInput) { outroInput.style.display = 'none'; outroInput.value = ''; }
+  await salvarStatusAntecedente(idCandidatura, valor || null);
+};
+
+window.salvarStatusAntecedenteOutro = async function(idCandidatura, texto) {
+  await salvarStatusAntecedente(idCandidatura, texto.trim() || null);
+};
+
+async function salvarStatusAntecedente(idCandidatura, valor) {
+  try {
+    const { error } = await supaClient.from('candidaturas').update({ status_antecente: valor }).eq('id_candidaturas', idCandidatura);
+    if (error) throw error;
+    const cand = (window._candidaturas || []).find(c => c.id_candidaturas === idCandidatura);
+    if (cand) cand.status_antecente = valor;
+    showToast('Status de antecedente salvo.');
+  } catch (e) {
+    console.error('Erro ao salvar status de antecedente:', e);
+    showToast('Erro ao salvar status de antecedente: ' + (e.message || e));
+  }
+}
+
+window.abrirModalEmitirAntecedente = function() {
+  const sel = document.getElementById('emitir-antecedente-select');
+  if (sel) {
+    sel.innerHTML = '<option value="">— Selecione —</option>' +
+      (window._candidaturas || []).map(c => `<option value="${c.id_candidaturas}">${c.nome_candidato || 'Sem nome'}</option>`).join('');
+  }
+  const dados = document.getElementById('emitir-antecedente-dados');
+  if (dados) dados.style.display = 'none';
+  document.getElementById('emitir-antecedente-modal').style.display = 'flex';
+};
+
+window.onSelecionarCandidatoAntecedente = async function(idCandidatura) {
+  const dados = document.getElementById('emitir-antecedente-dados');
+  if (!idCandidatura) { if (dados) dados.style.display = 'none'; return; }
+
+  const cand = (window._candidaturas || []).find(c => String(c.id_candidaturas) === String(idCandidatura));
+  if (!cand) return;
+
+  document.getElementById('emitir-ant-nome').textContent = cand.nome_candidato || '—';
+  document.getElementById('emitir-ant-cpf').textContent = cand.cpf || '—';
+  document.getElementById('emitir-ant-nascimento').textContent = cand.data_nascimento ? new Date(cand.data_nascimento).toLocaleDateString('pt-BR') : '—';
+  document.getElementById('emitir-ant-mae').textContent = cand.nome_da_mae || '—';
+  if (dados) dados.style.display = 'flex';
+
+  try {
+    const { data, error } = await supaClient.from('internos').select('id_drive').eq('nome', 'Busca').maybeSingle();
+    if (error) throw error;
+    if (data && data.id_drive) {
+      window.open(data.id_drive, '_blank', 'noopener');
+    } else {
+      showToast('Link de busca de antecedentes não encontrado em Internos.');
+    }
+  } catch (e) {
+    console.error('Erro ao buscar link de antecedentes:', e);
+    showToast('Erro ao buscar link de antecedentes: ' + (e.message || e));
+  }
+};
 
 window.toggleCandidatosVaga = function(idVaga) {
   const tabela = document.getElementById(`candidatos-tabela-${idVaga}`);
