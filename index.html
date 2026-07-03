@@ -385,10 +385,6 @@ const N8N_CHECK_WEBHOOK_URL = 'https://automatiza.minart.com.br/webhook/check-do
 // Drive e a credencial do Google Drive nos nodes, ativar o workflow e copiar a
 // "Production URL" do node Webhook para cá.
 const N8N_CURRICULO_WEBHOOK_URL = 'https://automatiza.minart.com.br/webhook/upload-curriculo-drive';
-// Webhook do n8n que envia o e-mail de convite para a avaliação (DISC + Competências +
-// Entrevista) ao candidato aprovado. Após importar n8n/enviar-email-avaliacao.workflow.json,
-// configurar a credencial de e-mail, ativar o workflow e colar a "Production URL" abaixo.
-const N8N_EMAIL_AVALIACAO_WEBHOOK_URL = 'https://automatiza.minart.com.br/webhook/enviar-email-avaliacao';
 // Webhook do n8n dedicado ao upload dos arquivos .docx gerados na avaliação pública
 // (Competências e Entrevista) para uma pasta fixa do Drive. Após importar
 // n8n/upload-documento-avaliacao-drive.workflow.json, preencher o folderId do Drive e a
@@ -3148,7 +3144,6 @@ window.aprovarCandidatoAvaliacao = async function(idCandidatura) {
     const cand = data[0];
     const vaga = (window._vagas || []).find(v => v.id_vagas === cand.id_vagas);
     const idCargo = cand.id_cargos || (vaga ? vaga.id_cargos : null);
-    const cargoNome = idCargo ? nomeCargoPorId(idCargo) : '—';
 
     // Cria o registro da avaliação (token de acesso único, sem login) já existente
     // ou cria um novo caso ainda não exista para este candidato.
@@ -3170,25 +3165,6 @@ window.aprovarCandidatoAvaliacao = async function(idCandidatura) {
       await supaClient.from('testes_avaliacoes')
         .update({ nome_candidato: cand.nome_candidato || null, id_cargo: idCargo })
         .eq('token', token);
-    }
-
-    const link = `${location.origin}${location.pathname}?avaliacao=${token}`;
-
-    if (cand.email_candidato) {
-      try {
-        const formData = new FormData();
-        formData.append('email', cand.email_candidato);
-        formData.append('nome_candidato', cand.nome_candidato || '');
-        formData.append('cargo', cargoNome);
-        formData.append('link', link);
-        formData.append('token', N8N_WEBHOOK_TOKEN);
-        const res = await fetch(N8N_EMAIL_AVALIACAO_WEBHOOK_URL, { method: 'POST', body: formData });
-        if (!res.ok) throw new Error(`Webhook respondeu com status ${res.status}`);
-      } catch (emailError) {
-        console.error('Erro ao enviar e-mail de avaliação:', emailError);
-        showToast('Candidato aprovado, mas houve falha ao enviar o e-mail. Verifique o webhook do n8n.');
-        return;
-      }
     }
 
     window.showAcoesEnvioBanner();
