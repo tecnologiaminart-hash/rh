@@ -814,9 +814,8 @@ window.showAcoesEnvioBanner = function() {
     el.id = 'action-banner';
     el.innerHTML = `
       <div>
-        <div class="action-banner-title">✔️ Ações de Envio Concluídas</div>
-        <div class="action-banner-line"><strong>E-mail:</strong> O link para as avaliações (DISC, Competências e Entrevista) já está na caixa de entrada do candidato.</div>
-        <div class="action-banner-line"><strong>WhatsApp:</strong> Se desejar agilizar o processo, acesse o botão "Chamar no WhatsApp" em Ações, na aba Candidatos para Avaliação. Uma mensagem pronta com o link já está preparada.</div>
+        <div class="action-banner-title">✔️ </div>
+        <div class="action-banner-line"><strong>WhatsApp:</strong> Para iniciar o processo de Avaliações, na aba Candidatos para Avaliação. Uma mensagem pronta com o link já está preparada, acesse o botão "Chamar no WhatsApp" em Ações.</div>
       </div>
       <button class="action-banner-close" title="Fechar" onclick="document.getElementById('action-banner').classList.remove('show')">✕</button>`;
     document.body.appendChild(el);
@@ -3354,7 +3353,12 @@ window.removerCandidatoAvaliacao = async function(idCandidatura) {
     const { data, error } = await supaClient.from('candidaturas').update({ aprovado_avaliacao: false }).eq('id_candidaturas', idCandidatura).select();
     if (error) throw error;
     if (!data || data.length === 0) throw new Error('Nenhuma linha foi atualizada (verifique a policy de UPDATE da tabela candidaturas no Supabase).');
+
+    const { error: delError } = await supaClient.from('testes_avaliacoes').delete().eq('id_candidato', idCandidatura);
+    if (delError) throw delError;
+
     await loadCandidaturasForApp();
+    await loadTestesAvaliacoesForApp();
     if (window._renderCandidatosAprovados) window._renderCandidatosAprovados();
     if (window._renderCandidatos) window._renderCandidatos();
     showToast('Candidato removido da avaliação.');
