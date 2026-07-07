@@ -4598,7 +4598,6 @@ function pageDadosPessoais() {
             </td>
             <td style="white-space:nowrap">
               <button class="action-btn" title="Editar" onclick="openDadosPessoaisModal(${d.id})">✎</button>
-              <button class="action-btn" title="Excluir" onclick="excluirDadosPessoaisEpi(${d.id})" style="color:var(--danger)">✕</button>
             </td>
           </tr>`;
         }).join('');
@@ -4808,20 +4807,6 @@ window.salvarDadosPessoaisEpi = async function() {
   }
 };
 
-window.excluirDadosPessoaisEpi = async function(id) {
-  if (!confirm('Excluir este registro?')) return;
-  try {
-    const { error } = await supaClient.from('dados_pessoais_epi').delete().eq('id', id);
-    if (error) throw error;
-    await loadDadosPessoaisEpiForApp();
-    if (window._renderDadosPessoaisEpi) window._renderDadosPessoaisEpi();
-    showToast('Registro excluído.');
-  } catch (e) {
-    console.error('Erro ao excluir registro:', e);
-    showToast('Erro ao excluir registro: ' + (e.message || e));
-  }
-};
-
 window.alterarStatusDadosPessoais = async function(id, novoStatus) {
   try {
     const { error } = await supaClient.from('dados_pessoais_epi').update({ status_dados_pessoais: novoStatus }).eq('id', id);
@@ -4885,7 +4870,6 @@ function pageMapeamentoPerfil() {
             </td>
             <td style="white-space:nowrap">
               <button class="action-btn" title="Editar" onclick="openMapeamentoPerfilModal(${m.id})">✎</button>
-              <button class="action-btn" title="Excluir" onclick="excluirMapeamentoPerfil(${m.id})" style="color:var(--danger)">✕</button>
             </td>
           </tr>`;
         }).join('');
@@ -5069,20 +5053,6 @@ window.salvarMapeamentoPerfil = async function() {
   } catch (e) {
     console.error('Erro ao salvar mapeamento de perfil:', e);
     showToast('Erro ao salvar registro: ' + (e.message || e));
-  }
-};
-
-window.excluirMapeamentoPerfil = async function(id) {
-  if (!confirm('Excluir este registro?')) return;
-  try {
-    const { error } = await supaClient.from('mapeamento_perfil').delete().eq('id', id);
-    if (error) throw error;
-    await loadMapeamentoPerfilForApp();
-    if (window._renderMapeamentoPerfil) window._renderMapeamentoPerfil();
-    showToast('Registro excluído.');
-  } catch (e) {
-    console.error('Erro ao excluir registro:', e);
-    showToast('Erro ao excluir registro: ' + (e.message || e));
   }
 };
 
