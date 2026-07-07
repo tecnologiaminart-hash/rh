@@ -4549,6 +4549,89 @@ function fotoPerfilUrl(idColaborador) {
   return foto ? foto.url : null;
 }
 
+// Atualiza o quadrado grande de Foto de Perfil no topo do modal de Dados Pessoais.
+window.atualizarFotoGrandeDadosPessoais = function(idColaborador) {
+  const el = document.getElementById('dp-foto-grande');
+  if (!el) return;
+  const url = idColaborador ? fotoPerfilUrl(idColaborador) : null;
+  el.innerHTML = url
+    ? `<img src="${driveThumbnailUrl(url)}" alt="Foto de perfil" style="width:100%;height:100%;object-fit:cover;cursor:pointer" onclick="visualizarDocumento('${url}')">`
+    : 'Sem foto de perfil';
+};
+
+// Envia a Foto de Perfil para o Drive (mesmo fluxo do "Enviar Documento") e grava
+// em documentos com tipo_doc = 'Foto de Perfil', substituindo a anterior se houver.
+window.uploadFotoPerfilDadosPessoais = async function(file) {
+  const cid = document.getElementById('dp-colaborador').value;
+  if (!cid) return showToast('Selecione o colaborador antes de enviar a foto.');
+  if (!file) return;
+  if (!supaClient) return showToast('Supabase não está configurado.');
+
+  let driveFolderId;
+  try {
+    driveFolderId = await window.obterDriveFolderIdParaColaborador(cid);
+  } catch (error) {
+    console.error('Erro ao buscar pasta de documentos:', error);
+    return showToast('Erro ao localizar pasta do colaborador.', 'danger');
+  }
+  if (!driveFolderId) return showToast('Pasta de documentos não encontrada para este colaborador.', 'danger');
+
+  let urlArquivo;
+  try {
+    urlArquivo = await window.enviarArquivoParaDrive(file, { cid, tipo: 'Foto de Perfil', driveFolderId });
+  } catch (error) {
+    console.error('Erro ao enviar foto de perfil para o Drive via n8n:', error);
+    return showToast('Falha ao enviar foto para o Drive.', 'danger');
+  }
+  if (!urlArquivo) return showToast('A foto foi enviada mas o Drive não retornou a URL.', 'danger');
+
+  if (!window._documentosPorColab) window._documentosPorColab = {};
+  const existente = (window._documentosPorColab[cid] || []).find(d => d.tipo === 'Foto de Perfil');
+  if (existente?.id_doc) {
+    await supaClient.from('documentos').delete().eq('id_doc', existente.id_doc);
+    window._documentosPorColab[cid] = window._documentosPorColab[cid].filter(d => d !== existente);
+  }
+
+  const hoje = new Date().toISOString().slice(0, 10);
+  const { data: insertedRows, error: insertError } = await supaClient
+    .from('documentos')
+    .insert([{ id_colaborador: cid, tipo_doc: 'Foto de Perfil', data_envio_doc: hoje, url_arquivo: urlArquivo }])
+    .select();
+  if (insertError) {
+    console.error('Erro ao salvar foto de perfil:', insertError);
+    return showToast('Erro ao salvar foto de perfil: ' + (insertError.message || 'verifique o console.'), 'danger');
+  }
+
+  const insertedDoc = insertedRows?.[0];
+  if (!window._documentosPorColab[cid]) window._documentosPorColab[cid] = [];
+  window._documentosPorColab[cid].push({ id_doc: insertedDoc?.id_doc, tipo: 'Foto de Perfil', data: new Date().toLocaleDateString('pt-BR'), url: urlArquivo });
+
+  document.getElementById('dp-foto-upload-input').value = '';
+  atualizarFotoGrandeDadosPessoais(cid);
+  if (window._renderDadosPessoaisEpi) window._renderDadosPessoaisEpi();
+  showToast('Foto de perfil enviada!');
+};
+
+window.excluirFotoPerfilDadosPessoais = async function() {
+  const cid = document.getElementById('dp-colaborador').value;
+  if (!cid) return showToast('Selecione o colaborador.');
+  const existente = (window._documentosPorColab && window._documentosPorColab[cid] || []).find(d => d.tipo === 'Foto de Perfil');
+  if (!existente) return showToast('Nenhuma foto de perfil cadastrada para este colaborador.');
+  if (!confirm('Excluir a foto de perfil deste colaborador?')) return;
+
+  try {
+    const { error } = await supaClient.from('documentos').delete().eq('id_doc', existente.id_doc);
+    if (error) throw error;
+    window._documentosPorColab[cid] = window._documentosPorColab[cid].filter(d => d !== existente);
+    atualizarFotoGrandeDadosPessoais(cid);
+    if (window._renderDadosPessoaisEpi) window._renderDadosPessoaisEpi();
+    showToast('Foto de perfil excluída.');
+  } catch (e) {
+    console.error('Erro ao excluir foto de perfil:', e);
+    showToast('Erro ao excluir foto de perfil: ' + (e.message || e));
+  }
+};
+
 // Cores dos selects de Status (Ficha e EPIs): Incompleto = amarelo, Completo = verde.
 function corSelectStatus(status) {
   return status === 'Completo' ? 'background:#e8f5ec;color:#1a7a3c' : 'background:#fef5e0;color:#9a6800';
@@ -4678,10 +4761,18 @@ window.openDadosPessoaisModal = async function(id = null) {
         </div>
         <div style="padding:24px">
           <div class="form-section-title">Dados Pessoais</div>
+          <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:20px">
+            <div id="dp-foto-grande" style="width:140px;height:140px;border-radius:8px;background:var(--bg2);display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:12px;overflow:hidden;text-align:center;margin-bottom:10px"></div>
+            <input type="file" id="dp-foto-upload-input" accept=".jpg,.jpeg,.png" style="display:none" onchange="uploadFotoPerfilDadosPessoais(this.files[0])">
+            <div style="display:flex;gap:8px">
+              <button type="button" class="btn btn-sm" onclick="document.getElementById('dp-foto-upload-input').click()">📤 Upload</button>
+              <button type="button" class="btn btn-sm" style="color:var(--danger)" onclick="excluirFotoPerfilDadosPessoais()">✕ Deletar</button>
+            </div>
+          </div>
           <div class="form-grid">
             <div class="form-group form-full">
               <label class="form-label">Nome Colaborador</label>
-              <select class="form-select" id="dp-colaborador" onchange="preencherSalarioDadosPessoais(this.value)"><option value="">— Selecione —</option></select>
+              <select class="form-select" id="dp-colaborador" onchange="preencherSalarioDadosPessoais(this.value);atualizarFotoGrandeDadosPessoais(this.value)"><option value="">— Selecione —</option></select>
             </div>
             <div class="form-group"><label class="form-label">CPF</label><input class="form-input" id="dp-cpf" placeholder="000.000.000-00"></div>
             <div class="form-group"><label class="form-label">RG</label><input class="form-input" id="dp-rg"></div>
@@ -4754,6 +4845,7 @@ window.openDadosPessoaisModal = async function(id = null) {
     document.getElementById('dp-vale-transporte').value = (registro && registro['vale-transporte']) || '';
     document.getElementById('dp-funcao').value = registro?.funcao || '';
     preencherSalarioDadosPessoais(selectColab.value);
+    atualizarFotoGrandeDadosPessoais(selectColab.value);
     document.getElementById('dp-epi-camisa').value = registro?.epi_camisa || '';
     document.getElementById('dp-epi-calca').value = registro?.epi_calca || '';
     document.getElementById('dp-epi-botina').value = registro?.epi_botina || '';
@@ -4764,6 +4856,7 @@ window.openDadosPessoaisModal = async function(id = null) {
     document.getElementById('dados-pessoais-modal-title').textContent = 'Novo Registro';
     selectColab.value = '';
     campos.forEach(c => { const el = document.getElementById(`dp-${c}`); if (el) el.value = ''; });
+    atualizarFotoGrandeDadosPessoais('');
   }
 
   document.getElementById('dados-pessoais-modal').style.display = 'flex';
