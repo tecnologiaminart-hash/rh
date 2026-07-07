@@ -4556,8 +4556,7 @@ async function loadDadosPessoaisEpiForApp() {
 function pageDadosPessoais() {
   if (!window._dadosPessoaisEpi) window._dadosPessoaisEpi = [];
 
-  document.getElementById('topbar-actions').innerHTML =
-    `<button class="btn btn-primary" onclick="openDadosPessoaisModal()">+ Novo Registro</button>`;
+  document.getElementById('topbar-actions').innerHTML = '';
 
   const renderTabela = () => {
     const tbody = document.getElementById('dados-pessoais-tbody');
@@ -4567,7 +4566,7 @@ function pageDadosPessoais() {
     const lista = [...(window._dadosPessoaisEpi || [])].sort((a, b) =>
       nomeColaboradorPorId(a.id_colaborador).localeCompare(nomeColaboradorPorId(b.id_colaborador)));
     tbody.innerHTML = lista.length === 0
-      ? '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro cadastrado.</td></tr>'
+      ? '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro cadastrado.</td></tr>'
       : lista.map(d => {
           // Salário sempre lido em tempo real de colaboradores.salario_base — fonte
           // única de verdade, evita ficar desatualizado em relação a Informações Contratuais.
@@ -4576,12 +4575,19 @@ function pageDadosPessoais() {
             ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(colab.salario_base))
             : '—';
           const nomeColab = colab ? (colab.nome_colaborador || colab.nome || colab.name) : '—';
+          const status = d.status_dados_pessoais || 'Incompleto';
           return `
           <tr>
             <td><strong>${nomeColab}</strong></td>
             <td>${d.cpf || '—'}</td>
             <td>${d.funcao || '—'}</td>
             <td>${salario}</td>
+            <td>
+              <select class="form-select" style="width:auto" onchange="alterarStatusDadosPessoais(${d.id}, this.value)">
+                <option value="Incompleto" ${status === 'Incompleto' ? 'selected' : ''}>Incompleto</option>
+                <option value="Completo" ${status === 'Completo' ? 'selected' : ''}>Completo</option>
+              </select>
+            </td>
             <td style="white-space:nowrap">
               <button class="action-btn" title="Editar" onclick="openDadosPessoaisModal(${d.id})">✎</button>
               <button class="action-btn" title="Excluir" onclick="excluirDadosPessoaisEpi(${d.id})" style="color:var(--danger)">✕</button>
@@ -4609,11 +4615,12 @@ function pageDadosPessoais() {
           <th>CPF</th>
           <th>Função</th>
           <th>Salário R$</th>
+          <th>Status</th>
           <th>Ações</th>
         </tr>
       </thead>
       <tbody id="dados-pessoais-tbody">
-        <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
+        <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
       </tbody>
     </table>
   </div>`;
@@ -4807,6 +4814,19 @@ window.excluirDadosPessoaisEpi = async function(id) {
   }
 };
 
+window.alterarStatusDadosPessoais = async function(id, novoStatus) {
+  try {
+    const { error } = await supaClient.from('dados_pessoais_epi').update({ status_dados_pessoais: novoStatus }).eq('id', id);
+    if (error) throw error;
+    const registro = (window._dadosPessoaisEpi || []).find(d => d.id === id);
+    if (registro) registro.status_dados_pessoais = novoStatus;
+    showToast('Status atualizado!');
+  } catch (e) {
+    console.error('Erro ao atualizar status:', e);
+    showToast('Erro ao atualizar status: ' + (e.message || e));
+  }
+};
+
 // ------------------------------------------------------------
 // MAPEAMENTO DE PERFIL (Ficha e EPIs) — registros em Supabase (mapeamento_perfil)
 // ------------------------------------------------------------
@@ -4830,8 +4850,7 @@ async function loadMapeamentoPerfilForApp() {
 function pageMapeamentoPerfil() {
   if (!window._mapeamentoPerfil) window._mapeamentoPerfil = [];
 
-  document.getElementById('topbar-actions').innerHTML =
-    `<button class="btn btn-primary" onclick="openMapeamentoPerfilModal()">+ Novo Registro</button>`;
+  document.getElementById('topbar-actions').innerHTML = '';
 
   const renderTabela = () => {
     const tbody = document.getElementById('mapeamento-perfil-tbody');
@@ -4841,18 +4860,27 @@ function pageMapeamentoPerfil() {
     const lista = [...(window._mapeamentoPerfil || [])].sort((a, b) =>
       nomeColaboradorPorId(a.id_colaborador).localeCompare(nomeColaboradorPorId(b.id_colaborador)));
     tbody.innerHTML = lista.length === 0
-      ? '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro cadastrado.</td></tr>'
-      : lista.map(m => `
+      ? '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro cadastrado.</td></tr>'
+      : lista.map(m => {
+          const status = m.status_mapeamento || 'Incompleto';
+          return `
           <tr>
             <td><strong>${nomeColaboradorPorId(m.id_colaborador)}</strong></td>
             <td>${m.como_gosta_ser_chamado || '—'}</td>
             <td>${m.perfil_disc_1 || '—'}</td>
             <td>${m.perfil_disc_2 || '—'}</td>
+            <td>
+              <select class="form-select" style="width:auto" onchange="alterarStatusMapeamentoPerfil(${m.id}, this.value)">
+                <option value="Incompleto" ${status === 'Incompleto' ? 'selected' : ''}>Incompleto</option>
+                <option value="Completo" ${status === 'Completo' ? 'selected' : ''}>Completo</option>
+              </select>
+            </td>
             <td style="white-space:nowrap">
               <button class="action-btn" title="Editar" onclick="openMapeamentoPerfilModal(${m.id})">✎</button>
               <button class="action-btn" title="Excluir" onclick="excluirMapeamentoPerfil(${m.id})" style="color:var(--danger)">✕</button>
             </td>
-          </tr>`).join('');
+          </tr>`;
+        }).join('');
   };
 
   window._renderMapeamentoPerfil = renderTabela;
@@ -4871,11 +4899,12 @@ function pageMapeamentoPerfil() {
           <th>Como gosta de ser chamado(a)</th>
           <th>Perfil DISC (1ª)</th>
           <th>Perfil DISC (2ª)</th>
+          <th>Status</th>
           <th>Ações</th>
         </tr>
       </thead>
       <tbody id="mapeamento-perfil-tbody">
-        <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
+        <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
       </tbody>
     </table>
   </div>`;
@@ -5046,6 +5075,19 @@ window.excluirMapeamentoPerfil = async function(id) {
   } catch (e) {
     console.error('Erro ao excluir registro:', e);
     showToast('Erro ao excluir registro: ' + (e.message || e));
+  }
+};
+
+window.alterarStatusMapeamentoPerfil = async function(id, novoStatus) {
+  try {
+    const { error } = await supaClient.from('mapeamento_perfil').update({ status_mapeamento: novoStatus }).eq('id', id);
+    if (error) throw error;
+    const registro = (window._mapeamentoPerfil || []).find(m => m.id === id);
+    if (registro) registro.status_mapeamento = novoStatus;
+    showToast('Status atualizado!');
+  } catch (e) {
+    console.error('Erro ao atualizar status:', e);
+    showToast('Erro ao atualizar status: ' + (e.message || e));
   }
 };
 
