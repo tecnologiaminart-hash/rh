@@ -4818,8 +4818,7 @@ async function loadMapeamentoPerfilForApp() {
   }
   const { data, error } = await supaClient
     .from('mapeamento_perfil')
-    .select('*')
-    .order('nome_colaborador', { ascending: true });
+    .select('*');
   if (error) {
     console.error('Erro ao carregar mapeamento de perfil:', error.message);
     window._mapeamentoPerfil = [];
@@ -4837,12 +4836,15 @@ function pageMapeamentoPerfil() {
   const renderTabela = () => {
     const tbody = document.getElementById('mapeamento-perfil-tbody');
     if (!tbody) return;
-    const lista = window._mapeamentoPerfil || [];
+    // Nome do colaborador não é mais gravado em mapeamento_perfil (coluna removida,
+    // era redundante com id_colaborador); resolvemos sempre via colaboradores, fonte única de verdade.
+    const lista = [...(window._mapeamentoPerfil || [])].sort((a, b) =>
+      nomeColaboradorPorId(a.id_colaborador).localeCompare(nomeColaboradorPorId(b.id_colaborador)));
     tbody.innerHTML = lista.length === 0
       ? '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro cadastrado.</td></tr>'
       : lista.map(m => `
           <tr>
-            <td><strong>${m.nome_colaborador || '—'}</strong></td>
+            <td><strong>${nomeColaboradorPorId(m.id_colaborador)}</strong></td>
             <td>${m.como_gosta_ser_chamado || '—'}</td>
             <td>${m.perfil_disc_1 || '—'}</td>
             <td>${m.perfil_disc_2 || '—'}</td>
@@ -4963,7 +4965,7 @@ window.openMapeamentoPerfilModal = async function(id = null) {
 
   if (id) {
     const registro = (window._mapeamentoPerfil || []).find(m => m.id === id);
-    document.getElementById('mapeamento-perfil-modal-title').textContent = `Editar Registro — ${registro ? registro.nome_colaborador : ''}`;
+    document.getElementById('mapeamento-perfil-modal-title').textContent = `Editar Registro — ${registro ? nomeColaboradorPorId(registro.id_colaborador) : ''}`;
     selectColab.value = registro ? (registro.id_colaborador || '') : '';
     document.getElementById('mp-apelido').value = registro?.como_gosta_ser_chamado || '';
     document.getElementById('mp-hobbies').value = registro?.hobbies || '';
@@ -4995,11 +4997,9 @@ window.openMapeamentoPerfilModal = async function(id = null) {
 window.salvarMapeamentoPerfil = async function() {
   const idColaborador = document.getElementById('mp-colaborador').value;
   if (!idColaborador) return showToast('Selecione o colaborador.');
-  const nomeColaborador = document.querySelector('#mp-colaborador option:checked')?.textContent || '';
 
   const payload = {
     id_colaborador: idColaborador,
-    nome_colaborador: nomeColaborador,
     como_gosta_ser_chamado: document.getElementById('mp-apelido').value || null,
     hobbies: document.getElementById('mp-hobbies').value || null,
     prato_doce_preferido: document.getElementById('mp-prato-doce').value || null,
