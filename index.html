@@ -4536,6 +4536,14 @@ function nomeColaboradorPorId(idColaborador) {
   return colab ? (colab.nome_colaborador || colab.nome || colab.name || '—') : '—';
 }
 
+// Cores dos selects de Status (Ficha e EPIs): Incompleto = amarelo, Completo = verde.
+function corSelectStatus(status) {
+  return status === 'Completo' ? 'background:#e8f5ec;color:#1a7a3c' : 'background:#fef5e0;color:#9a6800';
+}
+window.aplicarCorStatus = function(selectEl) {
+  selectEl.style.cssText += ';' + corSelectStatus(selectEl.value);
+};
+
 async function loadDadosPessoaisEpiForApp() {
   if (!supaClient) {
     console.error('Supabase client não inicializado para dados_pessoais_epi.');
@@ -4578,12 +4586,12 @@ function pageDadosPessoais() {
           const status = d.status_dados_pessoais || 'Incompleto';
           return `
           <tr>
-            <td><strong>${nomeColab}</strong></td>
+            <td><strong style="cursor:pointer;text-decoration:underline" onclick="openDadosPessoaisModal(${d.id})">${nomeColab}</strong></td>
             <td>${d.cpf || '—'}</td>
             <td>${d.funcao || '—'}</td>
             <td>${salario}</td>
             <td>
-              <select class="form-select" style="width:auto" onchange="alterarStatusDadosPessoais(${d.id}, this.value)">
+              <select class="form-select" style="width:auto;${corSelectStatus(status)}" onchange="aplicarCorStatus(this); alterarStatusDadosPessoais(${d.id}, this.value)">
                 <option value="Incompleto" ${status === 'Incompleto' ? 'selected' : ''}>Incompleto</option>
                 <option value="Completo" ${status === 'Completo' ? 'selected' : ''}>Completo</option>
               </select>
@@ -4865,12 +4873,12 @@ function pageMapeamentoPerfil() {
           const status = m.status_mapeamento || 'Incompleto';
           return `
           <tr>
-            <td><strong>${nomeColaboradorPorId(m.id_colaborador)}</strong></td>
+            <td><strong style="cursor:pointer;text-decoration:underline" onclick="openMapeamentoPerfilModal(${m.id})">${nomeColaboradorPorId(m.id_colaborador)}</strong></td>
             <td>${m.como_gosta_ser_chamado || '—'}</td>
             <td>${m.perfil_disc_1 || '—'}</td>
             <td>${m.perfil_disc_2 || '—'}</td>
             <td>
-              <select class="form-select" style="width:auto" onchange="alterarStatusMapeamentoPerfil(${m.id}, this.value)">
+              <select class="form-select" style="width:auto;${corSelectStatus(status)}" onchange="aplicarCorStatus(this); alterarStatusMapeamentoPerfil(${m.id}, this.value)">
                 <option value="Incompleto" ${status === 'Incompleto' ? 'selected' : ''}>Incompleto</option>
                 <option value="Completo" ${status === 'Completo' ? 'selected' : ''}>Completo</option>
               </select>
