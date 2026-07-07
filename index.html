@@ -535,7 +535,7 @@ function linkWhatsappAvaliacao(numero, nomeCandidato, cargoNome, link) {
   let digits = String(numero || '').replace(/\D/g, '');
   if (!digits) return null;
   if (!digits.startsWith('55')) digits = '55' + digits;
-  const mensagem = `Olá, ${nomeCandidato || ''}! Tudo bem? Para seguir no seu processo seletivo para a vaga de ${cargoNome || ''} na Minart Móveis, acesse o link abaixo e responda a avaliação (Perfil DISC, Competências e Entrevista) em um único acesso — o link só pode ser respondido uma vez:\n${link}`;
+  const mensagem = `Olá, ${nomeCandidato || ''}! Tudo bem? Para seguir no seu processo seletivo para a vaga de ${cargoNome || ''} na Minart Móveis, acesse o link abaixo e responda a avaliação de Perfil DISC — o link só pode ser respondido uma vez:\n${link}`;
   return `https://wa.me/${digits}?text=${encodeURIComponent(mensagem)}`;
 }
 
@@ -6079,15 +6079,6 @@ function renderAvaliacaoShell(innerHtml) {
   </div>`;
 }
 
-function avaliacaoStepsHtml(atual) {
-  const steps = ['Perfil DISC', 'Competências', 'Entrevista'];
-  return `<div class="aval-steps">${steps.map((s, i) => {
-    const n = i + 1;
-    const cls = n < atual ? 'done' : (n === atual ? 'active' : '');
-    return `<div class="aval-step ${cls}">${n}. ${s}</div>`;
-  }).join('')}</div>`;
-}
-
 async function checkAvaliacaoLink() {
   const params = new URLSearchParams(location.search);
   const token = params.get('avaliacao');
@@ -6121,7 +6112,7 @@ async function checkAvaliacaoLink() {
   if (teste.id_cargo) {
     const { data: cargoData, error: cargoError } = await supaClient
       .from('cargos')
-      .select('id_cargos,nome_cargo,formulario_entrevista')
+      .select('id_cargos,nome_cargo')
       .eq('id_cargos', teste.id_cargo)
       .maybeSingle();
     if (cargoError) console.error('Erro ao carregar cargo da avaliação:', cargoError.message);
@@ -6132,7 +6123,6 @@ async function checkAvaliacaoLink() {
     token: teste.token,
     idCargo: teste.id_cargo,
     cargoNome: (cargo && cargo.nome_cargo) || '—',
-    formularioEntrevista: (cargo && cargo.formulario_entrevista) || '',
     // Nome vem direto de testes_avaliacoes (gravado no momento da aprovação) em vez
     // de consultar candidaturas, porque o anon normalmente só tem permissão de
     // INSERT nessa tabela (usada pelo formulário público), não de SELECT.
@@ -6142,13 +6132,12 @@ async function checkAvaliacaoLink() {
   renderAvaliacaoEtapaDisc();
 }
 
-// --- Etapa 1: Perfil DISC (mesma estrutura do teste interno, sem revelar o resultado) ---
+// --- Perfil DISC: única etapa da avaliação pública (mesma estrutura do teste interno, sem revelar o resultado) ---
 function renderAvaliacaoEtapaDisc() {
   const pa = window._pubAval;
   renderAvaliacaoShell(`
-    ${avaliacaoStepsHtml(1)}
     <div id="aval-disc-intro" class="form-card" style="margin-bottom:16px">
-      <div style="font-size:18px;font-weight:700;margin-bottom:12px">Etapa 1 de 3 — Perfil Comportamental (DISC)</div>
+      <div style="font-size:18px;font-weight:700;margin-bottom:12px">Perfil Comportamental (DISC)</div>
       <p style="margin-bottom:12px">Seja bem-vindo(a) à sua avaliação para a vaga de <strong>${pa.cargoNome}</strong>.</p>
       <p style="margin-bottom:16px">Este questionário ajuda a identificar suas principais características comportamentais. Não existem respostas certas ou erradas; seja o mais sincero possível com quem você é hoje.</p>
       <div style="background:#fff8e1;border:1px solid #f1c40f;border-radius:6px;padding:16px 20px;margin-bottom:16px">
@@ -6207,7 +6196,7 @@ function renderAvaliacaoDiscQuiz() {
         <button class="btn" onclick="voltarAvaliacaoDisc()" ${st.tela === 0 ? 'disabled style="opacity:.4;cursor:not-allowed"' : ''}>← Voltar</button>
         ${st.tela < 9
           ? `<button class="btn btn-primary" onclick="avancarAvaliacaoDisc()">Próxima Exibição →</button>`
-          : `<button class="btn btn-primary" onclick="finalizarAvaliacaoDisc()">Concluir Etapa 1</button>`}
+          : `<button class="btn btn-primary" onclick="finalizarAvaliacaoDisc()">Concluir Avaliação</button>`}
       </div>
     </div>`;
 }
@@ -6247,8 +6236,9 @@ window.voltarAvaliacaoDisc = function() {
   if (pa.discTeste.tela > 0) { pa.discTeste.tela--; renderAvaliacaoDiscQuiz(); }
 };
 
-// Calcula o perfil, salva SOMENTE o resultado em testes_avaliacoes.resultado_perfil_disk
-// (sem nunca exibir o resultado na tela) e avança direto para a Etapa 2.
+// Calcula o perfil, salva o resultado em testes_avaliacoes.resultado_perfil_disk
+// (sem nunca exibir o resultado na tela) e já marca a avaliação como concluída —
+// o processo de aprovação usa somente o Perfil DISC, sem Competências/Entrevista.
 window.finalizarAvaliacaoDisc = async function() {
   if (!validarTelaAvaliacaoDiscAtual()) return;
   const pa = window._pubAval;
@@ -6260,145 +6250,30 @@ window.finalizarAvaliacaoDisc = async function() {
   const perfil = `${ranking[0].rotulo} + ${ranking[1].rotulo}`;
 
   const container = document.getElementById('aval-disc-quiz');
-  if (container) container.innerHTML = `<div class="form-card" style="text-align:center;padding:48px 24px"><div style="font-size:40px;margin-bottom:16px">⏳</div><div style="font-size:15px;color:var(--text3)">Salvando e avançando para a próxima etapa...</div></div>`;
+  if (container) container.innerHTML = `<div class="form-card" style="text-align:center;padding:48px 24px"><div style="font-size:40px;margin-bottom:16px">⏳</div><div style="font-size:15px;color:var(--text3)">Salvando sua avaliação...</div></div>`;
 
   try {
-    const { error } = await supaClient.from('testes_avaliacoes').update({ resultado_perfil_disk: perfil }).eq('token', pa.token);
-    if (error) console.error('Erro ao salvar resultado do Perfil DISC:', error.message);
-  } catch (e) {
-    console.error('Erro ao salvar resultado do Perfil DISC:', e);
-  }
-
-  renderAvaliacaoEtapaCompetencias();
-};
-
-// Algumas linhas de "Perguntas comportamentais" trazem mais de uma pergunta numerada
-// na mesma célula (ex.: "1. ... 2. ..."). Quebra cada célula em perguntas individuais,
-// uma pergunta por campo de resposta na tela.
-function splitPerguntasComportamentais(texto) {
-  const partes = String(texto || '')
-    .split(/(?<!\d)(?=\d+\.\s*)/)
-    .map(p => p.trim())
-    .filter(Boolean);
-  return partes.length ? partes : [String(texto || '').trim()].filter(Boolean);
-}
-
-// --- Etapa 2: Perguntas por Competências (somente a coluna "Perguntas comportamentais") ---
-function renderAvaliacaoEtapaCompetencias() {
-  const perguntas = PERGUNTAS_COMPETENCIAS.flatMap(item => splitPerguntasComportamentais(item.perguntas));
-  window._pubAval.competenciasPerguntas = perguntas;
-
-  renderAvaliacaoShell(`
-    ${avaliacaoStepsHtml(2)}
-    <div class="form-card">
-      <div style="font-size:18px;font-weight:700;margin-bottom:8px">Etapa 2 de 3 — Perguntas por Competências</div>
-      <p style="font-size:13px;color:var(--text3);margin-bottom:20px">Responda as perguntas abaixo com a maior sinceridade possível.</p>
-      ${perguntas.map((p, i) => `
-        <div style="margin-bottom:18px">
-          <label class="form-label" style="display:block;margin-bottom:6px">${p}</label>
-          <textarea class="form-input" id="aval-comp-resp-${i}" style="width:100%;min-height:80px;box-sizing:border-box"></textarea>
-        </div>`).join('')}
-      <div id="aval-comp-aviso" style="display:none;color:var(--danger);font-size:13px;font-weight:600;margin-bottom:12px"></div>
-      <button class="btn btn-primary" id="aval-comp-btn" onclick="finalizarAvaliacaoCompetencias()">Concluir Etapa 2</button>
-    </div>`);
-}
-
-window.finalizarAvaliacaoCompetencias = async function() {
-  const avisoEl = document.getElementById('aval-comp-aviso');
-  const perguntas = window._pubAval.competenciasPerguntas || [];
-  const respostas = perguntas.map((p, i) => ({
-    pergunta: p,
-    resposta: (document.getElementById(`aval-comp-resp-${i}`)?.value || '').trim()
-  }));
-  if (respostas.some(r => !r.resposta)) {
-    if (avisoEl) { avisoEl.textContent = 'Responda todas as perguntas antes de continuar.'; avisoEl.style.display = ''; }
-    return;
-  }
-  if (avisoEl) avisoEl.style.display = 'none';
-
-  const btn = document.getElementById('aval-comp-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Enviando...'; }
-
-  try {
-    const blob = await window.gerarDocxPerguntasRespostas('Respostas — Perguntas por Competências', respostas);
-    const url = await window.enviarDocxAvaliacaoParaDrive(blob, { nomeCandidato: window._pubAval.nomeCandidato, tipoAvaliacao: 'Competências' });
-    const { error } = await supaClient.from('testes_avaliacoes').update({ url_respostas_competencias: url }).eq('token', window._pubAval.token);
-    if (error) throw error;
-    renderAvaliacaoEtapaEntrevista();
-  } catch (e) {
-    console.error('Erro ao concluir etapa de competências:', e);
-    if (avisoEl) { avisoEl.textContent = 'Erro ao enviar suas respostas. Tente novamente.'; avisoEl.style.display = ''; }
-    if (btn) { btn.disabled = false; btn.textContent = 'Concluir Etapa 2'; }
-  }
-};
-
-// --- Etapa 3: Formulário de Entrevista (a partir de cargos.formulario_entrevista) ---
-function renderAvaliacaoEtapaEntrevista() {
-  const pa = window._pubAval;
-  const perguntas = String(pa.formularioEntrevista || '').split('\n').map(l => l.trim()).filter(Boolean);
-  pa.entrevistaPerguntas = perguntas;
-
-  renderAvaliacaoShell(`
-    ${avaliacaoStepsHtml(3)}
-    <div class="form-card">
-      <div style="font-size:18px;font-weight:700;margin-bottom:8px">Etapa 3 de 3 — Formulário de Entrevista</div>
-      <p style="font-size:13px;color:var(--text3);margin-bottom:20px">Última etapa! Responda as perguntas da entrevista para a vaga de <strong>${pa.cargoNome}</strong>.</p>
-      ${perguntas.length === 0
-        ? `<div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-title">Nenhuma pergunta cadastrada</div><div class="empty-state-desc">O RH ainda não cadastrou o formulário de entrevista para este cargo.</div></div>`
-        : perguntas.map((p, i) => `
-          <div style="margin-bottom:18px">
-            <label class="form-label" style="display:block;margin-bottom:6px">${p}</label>
-            <textarea class="form-input" id="aval-entr-resp-${i}" style="width:100%;min-height:80px;box-sizing:border-box"></textarea>
-          </div>`).join('')}
-      <div id="aval-entr-aviso" style="display:none;color:var(--danger);font-size:13px;font-weight:600;margin-bottom:12px"></div>
-      <button class="btn btn-primary" id="aval-entr-btn" onclick="finalizarAvaliacaoEntrevista()">Concluir Avaliação</button>
-    </div>`);
-}
-
-window.finalizarAvaliacaoEntrevista = async function() {
-  const pa = window._pubAval;
-  const perguntas = pa.entrevistaPerguntas || [];
-  const avisoEl = document.getElementById('aval-entr-aviso');
-  const respostas = perguntas.map((p, i) => ({
-    pergunta: p,
-    resposta: (document.getElementById(`aval-entr-resp-${i}`)?.value || '').trim()
-  }));
-  if (perguntas.length > 0 && respostas.some(r => !r.resposta)) {
-    if (avisoEl) { avisoEl.textContent = 'Responda todas as perguntas antes de continuar.'; avisoEl.style.display = ''; }
-    return;
-  }
-  if (avisoEl) avisoEl.style.display = 'none';
-
-  const btn = document.getElementById('aval-entr-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Enviando...'; }
-
-  try {
-    let url = null;
-    if (perguntas.length > 0) {
-      const blob = await window.gerarDocxPerguntasRespostas('Respostas — Formulário de Entrevista', respostas);
-      url = await window.enviarDocxAvaliacaoParaDrive(blob, { nomeCandidato: pa.nomeCandidato, tipoAvaliacao: 'Entrevista' });
-    }
     const { error } = await supaClient.from('testes_avaliacoes').update({
-      url_respostas_entrevista: url,
+      resultado_perfil_disk: perfil,
       status_realizacao: 'concluido',
       respondido_em: new Date().toISOString()
     }).eq('token', pa.token);
     if (error) throw error;
-    renderAvaliacaoConcluida();
   } catch (e) {
-    console.error('Erro ao concluir avaliação:', e);
-    if (avisoEl) { avisoEl.textContent = 'Erro ao enviar suas respostas. Tente novamente.'; avisoEl.style.display = ''; }
-    if (btn) { btn.disabled = false; btn.textContent = 'Concluir Avaliação'; }
+    console.error('Erro ao salvar resultado do Perfil DISC:', e);
+    if (container) container.innerHTML = `<div class="form-card" style="text-align:center;padding:48px 24px"><div style="color:var(--danger);font-weight:600">Erro ao salvar sua avaliação. Tente novamente.</div></div>`;
+    return;
   }
+
+  renderAvaliacaoConcluida();
 };
 
 function renderAvaliacaoConcluida() {
   renderAvaliacaoShell(`
-    ${avaliacaoStepsHtml(4)}
     <div class="form-card" style="text-align:center;padding:48px 24px">
       <div style="font-size:40px;margin-bottom:16px">✅</div>
       <div style="font-size:18px;font-weight:700;margin-bottom:8px">Avaliação concluída!</div>
-      <div style="font-size:14px;color:var(--text3)">Obrigado por completar todas as etapas. Em breve entraremos em contato.</div>
+      <div style="font-size:14px;color:var(--text3)">Obrigado por responder a avaliação. Em breve entraremos em contato.</div>
     </div>`);
 }
 
