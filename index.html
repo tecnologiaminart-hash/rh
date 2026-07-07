@@ -14,6 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root {
     --bg: #ffffff;
@@ -5407,6 +5408,7 @@ window.gerarRelatorioColaborador = function(idColaborador) {
       <span class="table-title">Relatório Completo — ${dadosColab.colab.nome_colaborador}</span>
       <div class="table-actions">
         <button class="btn btn-primary" onclick="baixarRelatorioPdf()">⬇ Baixar PDF</button>
+        <button class="btn" onclick="baixarRelatorioXlsx()">⬇ Baixar XLSX</button>
       </div>
     </div>
     <div style="padding:24px">
@@ -5439,6 +5441,7 @@ window.gerarRelatorioTodos = function() {
       <span class="table-title">Relatório Completo — Todos os Colaboradores (${colaboradoresDados.length})</span>
       <div class="table-actions">
         <button class="btn btn-primary" onclick="baixarRelatorioPdf()">⬇ Baixar PDF</button>
+        <button class="btn" onclick="baixarRelatorioXlsx()">⬇ Baixar XLSX</button>
       </div>
     </div>
   </div>
@@ -5631,6 +5634,110 @@ window.baixarRelatorioPdf = async function() {
     ? 'relatorio-todos-colaboradores.pdf'
     : `relatorio-${(colaboradores[0].colab.nome_colaborador || 'colaborador').trim().replace(/\s+/g, '-').toLowerCase()}.pdf`;
   doc.save(nomeArquivo);
+};
+
+window.baixarRelatorioXlsx = function() {
+  if (!window.XLSX || !window._relatorioAtual || !window._relatorioAtual.colaboradores || window._relatorioAtual.colaboradores.length === 0) {
+    showToast('Gere o relatório antes de baixar o XLSX.');
+    return;
+  }
+  const { colaboradores, secoes, tipo } = window._relatorioAtual;
+  const wb = XLSX.utils.book_new();
+
+  if (secoes.includes('contratuais')) {
+    const linhas = [['Nome', 'Cargo', 'Status', 'Tipo de Contrato', 'Período do Contrato', 'Prorrogação', 'Salário Base', 'Data de Admissão']];
+    colaboradores.forEach(({ colab }) => {
+      const salarioNum = salarioBaseDoColaborador(colab);
+      linhas.push([
+        colab.nome_colaborador || '',
+        colab.cargos ? colab.cargos.nome_cargo : '',
+        colab.status_colaborador || '',
+        colab.tipo_de_contrato || '',
+        colab.tipo_de_contrato === 'Temporária' ? (colab.periodo_contrato || '') : '',
+        colab.tipo_de_contrato === 'Temporária' ? (colab.prorrogacao_contrato || '') : '',
+        salarioNum !== null ? salarioNum : '',
+        formatarDataBR(colab.desde) || '',
+      ]);
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), 'Dados Contratuais');
+  }
+
+  if (secoes.includes('historico')) {
+    const linhas = [['Nome', 'Período Início', 'Período Fim', 'Cargo', 'Salário', 'Motivo']];
+    colaboradores.forEach(({ colab, historico }) => {
+      (historico || []).forEach(h => {
+        linhas.push([
+          colab.nome_colaborador || '',
+          formatarDataBR(h.periodo_inicio) || '',
+          formatarDataBR(h.periodo_fim) || 'Atual',
+          nomeCargoPorId(h.id_cargos) || '',
+          h.salario_hist !== null && h.salario_hist !== undefined ? h.salario_hist : '',
+          h.motivo || '',
+        ]);
+      });
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), 'Histórico de Carreira');
+  }
+
+  if (secoes.includes('pessoais')) {
+    const linhas = [['Nome', 'CPF', 'RG', 'Data de Nascimento', 'Telefone', 'E-mail', 'Endereço', 'Telefone Emergência', 'Estado Civil', 'Escolaridade', 'PIX', 'Vale-Transporte']];
+    colaboradores.forEach(({ colab, dadosPessoais: d }) => {
+      linhas.push([
+        colab.nome_colaborador || '',
+        d?.cpf || '', d?.rg || '', formatarDataBR(d?.data_nascimento) || '',
+        d?.telefone || '', d?.email || '', d?.endereco || '', d?.telefone_emergencia || '',
+        d?.estado_civil || '', d?.escolaridade || '', d?.pix || '', d?.['vale-transporte'] || '',
+      ]);
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), 'Dados Pessoais');
+  }
+
+  if (secoes.includes('epis')) {
+    const linhas = [['Nome', 'Camisa', 'Calça', 'Botina', 'Jaleco', 'Luva Raspa', 'Luva Lavagem']];
+    colaboradores.forEach(({ colab, dadosPessoais: d }) => {
+      linhas.push([
+        colab.nome_colaborador || '',
+        d?.epi_camisa || '', d?.epi_calca || '', d?.epi_botina || '',
+        d?.epi_jaleco || '', d?.epi_luva_raspa || '', d?.epi_luva_lavagem || '',
+      ]);
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), 'EPIs');
+  }
+
+  if (secoes.includes('perfil')) {
+    const linhas = [['Nome', 'Como gosta de ser chamado(a)', 'Hobbies', 'Prato/Doce preferido', 'Pretende ter filhos?', 'Grande sonho pessoal', 'Metas do ano vigente', 'Talentos e dons', 'Desafios pessoais', 'Expectativa na empresa', 'Pontos fortes', 'A desenvolver', 'Habilidades profissionais', 'Perfil DISC (1ª)', 'Perfil DISC (2ª)', 'Comunicação ideal', '3 principais valores']];
+    colaboradores.forEach(({ colab, perfil: p }) => {
+      linhas.push([
+        colab.nome_colaborador || '',
+        p?.como_gosta_ser_chamado || '', p?.hobbies || '', p?.prato_doce_preferido || '',
+        p?.pretende_ter_filhos || '', p?.grande_sonho_pessoal || '', p?.metas_ano_vigente || '',
+        p?.talentos_dons || '', p?.desafios_pessoais || '', p?.expectativa_empresa || '',
+        p?.pontos_fortes || '', p?.a_desenvolver || '', p?.habilidades_profissionais || '',
+        p?.perfil_disc_1 || '', p?.perfil_disc_2 || '', p?.comunicacao_ideal || '', p?.valores_principais || '',
+      ]);
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), 'Mapeamento de Perfil');
+  }
+
+  if (secoes.includes('documentos')) {
+    const linhas = [['Nome', 'Tipo', 'Data de Envio', 'URL do Arquivo']];
+    colaboradores.forEach(({ colab, documentos }) => {
+      (documentos || []).forEach(d => {
+        linhas.push([colab.nome_colaborador || '', d.tipo || '', d.data || '', d.url || '']);
+      });
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), 'Documentos');
+  }
+
+  if (wb.SheetNames.length === 0) {
+    showToast('Selecione ao menos uma seção para gerar o XLSX.');
+    return;
+  }
+
+  const nomeArquivo = tipo === 'todos'
+    ? 'relatorio-todos-colaboradores.xlsx'
+    : `relatorio-${(colaboradores[0].colab.nome_colaborador || 'colaborador').trim().replace(/\s+/g, '-').toLowerCase()}.xlsx`;
+  XLSX.writeFile(wb, nomeArquivo);
 };
 
 // ------------------------------------------------------------
