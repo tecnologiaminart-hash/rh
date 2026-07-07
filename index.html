@@ -1986,6 +1986,11 @@ window.driveDownloadUrl = function(url) {
   return id ? `https://drive.google.com/uc?export=download&id=${id}` : url;
 };
 
+window.driveThumbnailUrl = function(url) {
+  const id = extrairDriveFileId(url);
+  return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w200` : url;
+};
+
 // Consulta o webhook do n8n para saber se o arquivo ainda existe no Drive.
 // Se a verificação não estiver configurada ou falhar, assume que existe
 // (não esconde documentos por causa de uma falha de rede).
@@ -4536,6 +4541,14 @@ function nomeColaboradorPorId(idColaborador) {
   return colab ? (colab.nome_colaborador || colab.nome || colab.name || '—') : '—';
 }
 
+// Busca a Foto de Perfil do colaborador em documentos (tipo_doc = 'Foto de Perfil'),
+// já carregada/agrupada por id_colaborador em window._documentosPorColab.
+function fotoPerfilUrl(idColaborador) {
+  const docs = (window._documentosPorColab && window._documentosPorColab[idColaborador]) || [];
+  const foto = docs.find(d => d.tipo === 'Foto de Perfil');
+  return foto ? foto.url : null;
+}
+
 // Cores dos selects de Status (Ficha e EPIs): Incompleto = amarelo, Completo = verde.
 function corSelectStatus(status) {
   return status === 'Completo' ? 'background:#e8f5ec;color:#1a7a3c' : 'background:#fef5e0;color:#9a6800';
@@ -4574,7 +4587,7 @@ function pageDadosPessoais() {
     const lista = [...(window._dadosPessoaisEpi || [])].sort((a, b) =>
       nomeColaboradorPorId(a.id_colaborador).localeCompare(nomeColaboradorPorId(b.id_colaborador)));
     tbody.innerHTML = lista.length === 0
-      ? '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro cadastrado.</td></tr>'
+      ? '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro cadastrado.</td></tr>'
       : lista.map(d => {
           // Salário sempre lido em tempo real de colaboradores.salario_base — fonte
           // única de verdade, evita ficar desatualizado em relação a Informações Contratuais.
@@ -4584,8 +4597,13 @@ function pageDadosPessoais() {
             : '—';
           const nomeColab = colab ? (colab.nome_colaborador || colab.nome || colab.name) : '—';
           const status = d.status_dados_pessoais || 'Incompleto';
+          const fotoUrl = fotoPerfilUrl(d.id_colaborador);
+          const foto = fotoUrl
+            ? `<img src="${driveThumbnailUrl(fotoUrl)}" alt="Foto de perfil" style="width:40px;height:40px;object-fit:cover;border-radius:6px;cursor:pointer" onclick="visualizarDocumento('${fotoUrl}')">`
+            : `<div style="width:40px;height:40px;border-radius:6px;background:var(--bg2);display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:9px;text-align:center;line-height:1.2">Sem foto</div>`;
           return `
           <tr>
+            <td>${foto}</td>
             <td><strong style="cursor:pointer;text-decoration:underline" onclick="openDadosPessoaisModal(${d.id})">${nomeColab}</strong></td>
             <td>${d.cpf || '—'}</td>
             <td>${d.funcao || '—'}</td>
@@ -4606,7 +4624,8 @@ function pageDadosPessoais() {
   window._renderDadosPessoaisEpi = renderTabela;
   Promise.all([
     loadDadosPessoaisEpiForApp(),
-    (!_colaboradoresSupabase || _colaboradoresSupabase.length === 0) ? loadColaboradoresFromSupabase() : Promise.resolve()
+    (!_colaboradoresSupabase || _colaboradoresSupabase.length === 0) ? loadColaboradoresFromSupabase() : Promise.resolve(),
+    loadDocumentosFromSupabase()
   ]).then(renderTabela);
 
   return `
@@ -4618,6 +4637,7 @@ function pageDadosPessoais() {
     <table>
       <thead>
         <tr>
+          <th>Foto</th>
           <th>Nome Colaborador</th>
           <th>CPF</th>
           <th>Função</th>
@@ -4627,7 +4647,7 @@ function pageDadosPessoais() {
         </tr>
       </thead>
       <tbody id="dados-pessoais-tbody">
-        <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
+        <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
       </tbody>
     </table>
   </div>`;
