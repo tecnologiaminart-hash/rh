@@ -2117,7 +2117,7 @@ window.openEnviarDocModal = function(prefillColabId='') {
   // cria modal de envio se necessário
   if (!document.getElementById('enviar-doc-modal')) {
     const modal = document.createElement('div'); modal.id='enviar-doc-modal'; modal.style.cssText='display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;';
-    modal.innerHTML = `<div style="background:#fff;border-radius:6px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.2)"><div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between"><div style="font-size:15px;font-weight:700">Enviar Documento</div><button type="button" class="btn btn-sm" onclick="document.getElementById('enviar-doc-modal').style.display='none'">✕</button></div><div style="padding:24px"><div class="form-group" style="margin-bottom:16px"><label class="form-label">Colaborador</label><select class="form-select" id="enviar-doc-colab"><option value="">— Selecione —</option>${(_colaboradoresSupabase||[]).map(c=>`<option value="${c.id_colaborador||c.id||c.codigo}">${c.nome_colaborador||c.nome||c.name}</option>`).join('')}</select></div><div class="form-group" style="margin-bottom:16px"><label class="form-label">Tipo de Documento</label><select class="form-select" id="enviar-doc-tipo"><option value="">— Selecione —</option><option value="RG">RG</option><option value="CPF">CPF</option><option value="Exame Médico Admissional (ASO)">Exame Médico Admissional (ASO)</option><option value="Carteira de Trabalho">Carteira de Trabalho</option><option value="Comprovante de residência">Comprovante de residência</option><option value="Contrato de Trabalho">Contrato de Trabalho</option><option value="Contrato de expectativa">Contrato de expectativa</option><option value="Uma (1) foto 3x4">Uma (1) foto 3x4</option><option value="Certificado de Reservista (para homens)">Certificado de Reservista (para homens)</option><option value="Título de Eleitor">Título de Eleitor</option><option value="Registro de Casamento ou Nascimento (se solteiro)">Registro de Casamento ou Nascimento (se solteiro)</option><option value="Certidão Negativa Nada Consta">Certidão Negativa Nada Consta</option><option value="Carteira Nacional de Habilitação (CNH), para cargo de motorista">Carteira Nacional de Habilitação (CNH), para cargo de motorista</option><option value="Declaração de frequência escolar em Maio e Novembro de cada ano para maiores de 6 anos (se tiver filhos)">Declaração de frequência escolar em Maio e Novembro de cada ano para maiores de 6 anos (se tiver filhos)</option><option value="Certidão de nascimento dos filhos menores de 21 anos (se tiver filhos)">Certidão de nascimento dos filhos menores de 21 anos (se tiver filhos)</option><option value="Atestado de vacinas dos filhos menores de 14 anos (se tiver filhos)">Atestado de vacinas dos filhos menores de 14 anos (se tiver filhos)</option><option value="CPF dos filhos a partir de 8 anos">CPF dos filhos a partir de 8 anos</option><option value="Em caso de pensão alimentícia, cópia do acordo ou sentença do juiz">Em caso de pensão alimentícia, cópia do acordo ou sentença do juiz</option><option value="Ficha Funcionário">Ficha Funcionário</option><option value="Acordo de Compensação de horas trabalhadas">Acordo de Compensação de horas trabalhadas</option><option value="Declaração de Renúncia de vale Transporte">Declaração de Renúncia de vale Transporte</option><option value="Termo de Responsabilidade">Termo de Responsabilidade</option><option value="Ficha Salário Família">Ficha Salário Família</option><option value="Manual de cultura">Manual de cultura</option><option value="Regulamento Interno">Regulamento Interno</option></select></div><div class="form-group" style="margin-bottom:20px"><label class="form-label">Arquivo</label><input class="form-input" type="file" id="enviar-doc-arquivo" accept=".pdf,.jpg,.png,.jpeg"></div><div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn" onclick="document.getElementById('enviar-doc-modal').style.display='none'">Cancelar</button><button type="button" class="btn btn-primary" onclick="salvarDocumento()">📤 Enviar</button></div></div></div>`;
+    modal.innerHTML = `<div style="background:#fff;border-radius:6px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.2)"><div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between"><div style="font-size:15px;font-weight:700">Enviar Documento</div><button type="button" class="btn btn-sm" onclick="document.getElementById('enviar-doc-modal').style.display='none'">✕</button></div><div style="padding:24px"><div class="form-group" style="margin-bottom:16px"><label class="form-label">Colaborador</label><select class="form-select" id="enviar-doc-colab"><option value="">— Selecione —</option>${(_colaboradoresSupabase||[]).map(c=>`<option value="${c.id_colaborador||c.id||c.codigo}">${c.nome_colaborador||c.nome||c.name}</option>`).join('')}</select></div><div class="form-group" style="margin-bottom:16px"><label class="form-label">Tipo de Documento</label><select class="form-select" id="enviar-doc-tipo"><option value="">— Selecione —</option><option value="Foto de Perfil">Foto de Perfil</option><option value="RG">RG</option><option value="CPF">CPF</option><option value="Exame Médico Admissional (ASO)">Exame Médico Admissional (ASO)</option><option value="Carteira de Trabalho">Carteira de Trabalho</option><option value="Comprovante de residência">Comprovante de residência</option><option value="Contrato de Trabalho">Contrato de Trabalho</option><option value="Contrato de expectativa">Contrato de expectativa</option><option value="Uma (1) foto 3x4">Uma (1) foto 3x4</option><option value="Certificado de Reservista (para homens)">Certificado de Reservista (para homens)</option><option value="Título de Eleitor">Título de Eleitor</option><option value="Registro de Casamento ou Nascimento (se solteiro)">Registro de Casamento ou Nascimento (se solteiro)</option><option value="Certidão Negativa Nada Consta">Certidão Negativa Nada Consta</option><option value="Carteira Nacional de Habilitação (CNH), para cargo de motorista">Carteira Nacional de Habilitação (CNH), para cargo de motorista</option><option value="Declaração de frequência escolar em Maio e Novembro de cada ano para maiores de 6 anos (se tiver filhos)">Declaração de frequência escolar em Maio e Novembro de cada ano para maiores de 6 anos (se tiver filhos)</option><option value="Certidão de nascimento dos filhos menores de 21 anos (se tiver filhos)">Certidão de nascimento dos filhos menores de 21 anos (se tiver filhos)</option><option value="Atestado de vacinas dos filhos menores de 14 anos (se tiver filhos)">Atestado de vacinas dos filhos menores de 14 anos (se tiver filhos)</option><option value="CPF dos filhos a partir de 8 anos">CPF dos filhos a partir de 8 anos</option><option value="Em caso de pensão alimentícia, cópia do acordo ou sentença do juiz">Em caso de pensão alimentícia, cópia do acordo ou sentença do juiz</option><option value="Ficha Funcionário">Ficha Funcionário</option><option value="Acordo de Compensação de horas trabalhadas">Acordo de Compensação de horas trabalhadas</option><option value="Declaração de Renúncia de vale Transporte">Declaração de Renúncia de vale Transporte</option><option value="Termo de Responsabilidade">Termo de Responsabilidade</option><option value="Ficha Salário Família">Ficha Salário Família</option><option value="Manual de cultura">Manual de cultura</option><option value="Regulamento Interno">Regulamento Interno</option></select></div><div class="form-group" style="margin-bottom:20px"><label class="form-label">Arquivo</label><input class="form-input" type="file" id="enviar-doc-arquivo" accept=".pdf,.jpg,.png,.jpeg"></div><div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn" onclick="document.getElementById('enviar-doc-modal').style.display='none'">Cancelar</button><button type="button" class="btn btn-primary" onclick="salvarDocumento()">📤 Enviar</button></div></div></div>`;
     document.body.appendChild(modal);
   }
   // atualiza select caso as opções mudem
@@ -3888,7 +3888,6 @@ window.salvarCriarAdmissao = async function() {
 
   const dadosPayload = {
     id_colaborador: novoId,
-    nome_colaborador: nome,
     cpf: document.getElementById('adm-cpf').value || null,
     rg: document.getElementById('adm-rg').value || null,
     data_nascimento: document.getElementById('adm-nascimento').value || null,
@@ -4530,6 +4529,13 @@ window.preencherCargoAtual = function(idx) {
 // ------------------------------------------------------------
 // DADOS PESSOAIS (Ficha e EPIs) — registros em Supabase (dados_pessoais_epi)
 // ------------------------------------------------------------
+// dados_pessoais_epi não guarda mais o nome do colaborador (era redundante com a FK
+// id_colaborador); o nome é sempre resolvido em colaboradores, fonte única de verdade.
+function nomeColaboradorPorId(idColaborador) {
+  const colab = (_colaboradoresSupabase || []).find(c => String(c.id_colaborador || c.id || c.codigo) === String(idColaborador));
+  return colab ? (colab.nome_colaborador || colab.nome || colab.name || '—') : '—';
+}
+
 async function loadDadosPessoaisEpiForApp() {
   if (!supaClient) {
     console.error('Supabase client não inicializado para dados_pessoais_epi.');
@@ -4538,8 +4544,7 @@ async function loadDadosPessoaisEpiForApp() {
   }
   const { data, error } = await supaClient
     .from('dados_pessoais_epi')
-    .select('*')
-    .order('nome_colaborador', { ascending: true });
+    .select('*');
   if (error) {
     console.error('Erro ao carregar dados pessoais/EPIs:', error.message);
     window._dadosPessoaisEpi = [];
@@ -4557,7 +4562,10 @@ function pageDadosPessoais() {
   const renderTabela = () => {
     const tbody = document.getElementById('dados-pessoais-tbody');
     if (!tbody) return;
-    const lista = window._dadosPessoaisEpi || [];
+    // Nome do colaborador não é mais gravado em dados_pessoais_epi (coluna removida,
+    // era redundante com id_colaborador); resolvemos sempre via colaboradores, fonte única de verdade.
+    const lista = [...(window._dadosPessoaisEpi || [])].sort((a, b) =>
+      nomeColaboradorPorId(a.id_colaborador).localeCompare(nomeColaboradorPorId(b.id_colaborador)));
     tbody.innerHTML = lista.length === 0
       ? '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro cadastrado.</td></tr>'
       : lista.map(d => {
@@ -4567,9 +4575,10 @@ function pageDadosPessoais() {
           const salario = colab && colab.salario_base !== undefined && colab.salario_base !== null && String(colab.salario_base) !== ''
             ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(colab.salario_base))
             : '—';
+          const nomeColab = colab ? (colab.nome_colaborador || colab.nome || colab.name) : '—';
           return `
           <tr>
-            <td><strong>${d.nome_colaborador || '—'}</strong></td>
+            <td><strong>${nomeColab}</strong></td>
             <td>${d.cpf || '—'}</td>
             <td>${d.funcao || '—'}</td>
             <td>${salario}</td>
@@ -4696,7 +4705,7 @@ window.openDadosPessoaisModal = async function(id = null) {
 
   if (id) {
     const registro = (window._dadosPessoaisEpi || []).find(d => d.id === id);
-    document.getElementById('dados-pessoais-modal-title').textContent = `Editar Registro — ${registro ? registro.nome_colaborador : ''}`;
+    document.getElementById('dados-pessoais-modal-title').textContent = `Editar Registro — ${registro ? nomeColaboradorPorId(registro.id_colaborador) : ''}`;
     selectColab.value = registro ? (registro.id_colaborador || '') : '';
     document.getElementById('dp-cpf').value = registro?.cpf || '';
     document.getElementById('dp-rg').value = registro?.rg || '';
@@ -4743,13 +4752,11 @@ window.preencherSalarioDadosPessoais = function(idColaborador) {
 window.salvarDadosPessoaisEpi = async function() {
   const idColaborador = document.getElementById('dp-colaborador').value;
   if (!idColaborador) return showToast('Selecione o colaborador.');
-  const nomeColaborador = document.querySelector('#dp-colaborador option:checked')?.textContent || '';
 
   // Salário não é mais gravado aqui: o campo é somente leitura e reflete sempre
   // colaboradores.salario_base (única fonte de verdade, editável em Informações Contratuais).
   const payload = {
     id_colaborador: idColaborador,
-    nome_colaborador: nomeColaborador,
     cpf: document.getElementById('dp-cpf').value || null,
     rg: document.getElementById('dp-rg').value || null,
     data_nascimento: document.getElementById('dp-nascimento').value || null,
