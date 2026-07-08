@@ -417,6 +417,9 @@ const N8N_AVALIACAO_DOC_WEBHOOK_URL = 'https://automatiza.minart.com.br/webhook/
 // n8n/criar-usuario-treinamento.workflow.json, preencher a service_role key nos
 // nodes HTTP Request, ativar o workflow e colar a "Production URL" abaixo.
 const N8N_CRIAR_USUARIO_WEBHOOK_URL = 'https://automatiza.minart.com.br/webhook/criar-usuario-treinamento';
+// Perfil Treinamento não usa o app de RH: depois de logado (e com a senha já
+// trocada, se for o primeiro acesso) é mandado direto para a Academia Minart.
+const ACADEMIA_MINART_URL = 'https://tecnologiaminart-hash.github.io/rh/academiaminart/';
 
 let _colaboradoresSupabase = [];
 let _editingStatusColabId = null;
@@ -698,10 +701,20 @@ async function doLogin() {
     return;
   }
 
-  enterApp();
+  entrarNoDestinoCorreto();
 }
 
 document.getElementById('l-pass').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+
+// Perfil Treinamento não usa o app de RH — vai direto para a Academia
+// Minart em vez de abrir o app. Os demais perfis seguem normalmente.
+function entrarNoDestinoCorreto() {
+  if (currentUser && currentUser.perfil === 'Treinamento') {
+    window.location.href = ACADEMIA_MINART_URL;
+    return;
+  }
+  enterApp();
+}
 
 function enterApp() {
   document.getElementById('login-screen').style.display = 'none';
@@ -827,7 +840,7 @@ window.confirmarNovaSenha = async function() {
     window._modoTrocaSenhaObrigatoria = false;
     document.getElementById('reset-password-screen').style.display = 'none';
     showToast('Senha atualizada!');
-    enterApp();
+    entrarNoDestinoCorreto();
   } else {
     // A sessão criada pelo link de recuperação é só para trocar a senha —
     // encerra ela e devolve para a tela normal de login.
@@ -6776,7 +6789,7 @@ if (supaClient) {
         window._modoTrocaSenhaObrigatoria = true;
         mostrarTelaRedefinirSenha();
       } else {
-        enterApp();
+        entrarNoDestinoCorreto();
       }
     } else {
       // Sessão válida no Supabase Auth, mas sem usuário/perfil ativo cadastrado

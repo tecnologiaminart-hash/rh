@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Academia Minart</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:,">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: #111; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  .box {
+    background: #fff; border-radius: 4px; padding: 48px 40px; width: 420px; max-width: 92vw;
+    border: 1px solid #e0e0e0; text-align: center;
+  }
+  .logo { max-width: 200px; height: auto; margin-bottom: 24px; }
+  h1 { font-size: 18px; margin: 0 0 8px; color: #111; }
+  p { font-size: 13px; color: #666; line-height: 1.6; margin: 0 0 24px; }
+  #user-info { font-size: 12px; color: #999; margin-bottom: 20px; }
+  .btn-sair {
+    background: none; border: 1px solid #ddd; color: #555; padding: 8px 18px; border-radius: 3px;
+    font-size: 12px; cursor: pointer;
+  }
+  .btn-sair:hover { background: #f5f5f5; }
+</style>
+</head>
+<body>
+  <div class="box">
+    <img src="../assets/logo-minart.png" alt="Minart Móveis" class="logo">
+    <h1>Academia Minart</h1>
+    <p>Em construção — em breve os treinamentos da sua trilha vão aparecer aqui.</p>
+    <div id="user-info"></div>
+    <button class="btn-sair" onclick="sair()">Sair</button>
+  </div>
+<script>
+  // Mesmo projeto/URL/anon key usados no site principal (rh/index.html) — a
+  // sessão do Supabase Auth é guardada no localStorage por origem, então o
+  // login feito lá continua valendo aqui (mesmo domínio, pasta diferente).
+  const SUPA_URL = 'https://bxzgrqmmrswpytzwngwv.supabase.co';
+  const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ4emdycW1tcnN3cHl0enduZ3d2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MDA0ODksImV4cCI6MjA5NTQ3NjQ4OX0.SXGblVdHviiaOKXLvY50BZIXlDHdgolIu2vI-e-S3kE';
+  const supaClient = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+  async function sair() {
+    await supaClient.auth.signOut().catch(() => {});
+    window.location.href = '../';
+  }
+
+  (async () => {
+    const { data: { session } } = await supaClient.auth.getSession();
+    if (!session?.user) {
+      // Sem sessão válida (ex.: acesso direto sem login) — manda pro login do site principal.
+      window.location.href = '../';
+      return;
+    }
+    document.getElementById('user-info').textContent =
+      'Logado como ' + (session.user.user_metadata?.nome || session.user.email);
+  })();
+</script>
+</body>
+</html>
