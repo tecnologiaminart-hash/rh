@@ -38,7 +38,7 @@
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg2); color: var(--text); font-size: 14px; line-height: 1.5; }
 
   /* LOGIN */
-  #login-screen {
+  #login-screen, #reset-password-screen {
     min-height: 100vh; display: flex; align-items: center; justify-content: center;
     background: #111; position: fixed; inset: 0; z-index: 999;
   }
@@ -314,10 +314,27 @@
     <input id="l-pass" type="password" placeholder="••••••••" autocomplete="current-password">
     <button class="login-btn" onclick="doLogin()">Entrar</button>
     <div class="login-error" id="login-error"></div>
+    <div style="text-align:center;margin-top:10px">
+      <a href="#" onclick="event.preventDefault(); abrirRecuperarSenha()" style="font-size:12px;color:var(--text3)">Esqueci minha senha</a>
+    </div>
     <div class="login-config">
       <input id="sb-url" type="hidden" value="https://bxzgrqmmrswpytzwngwv.supabase.co">
 <input id="sb-key" type="hidden" value="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ4emdycW1tcnN3cHl0enduZ3d2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5MDA0ODksImV4cCI6MjA5NTQ3NjQ4OX0.SXGblVdHviiaOKXLvY50BZIXlDHdgolIu2vI-e-S3kE">
     </div>
+  </div>
+</div>
+
+<!-- REDEFINIR SENHA (aberto pelo link enviado por e-mail em "Esqueci minha senha") -->
+<div id="reset-password-screen" style="display:none">
+  <div class="login-box">
+    <img src="assets/logo-minart.png" alt="Minart Móveis" class="login-logo-img">
+    <div style="font-size:14px;font-weight:700;margin:4px 0">Definir nova senha</div>
+    <label for="rp-pass">Nova senha</label>
+    <input id="rp-pass" type="password" placeholder="••••••••" autocomplete="new-password">
+    <label for="rp-pass-confirm">Confirmar nova senha</label>
+    <input id="rp-pass-confirm" type="password" placeholder="••••••••" autocomplete="new-password">
+    <button class="login-btn" onclick="confirmarNovaSenha()">Salvar nova senha</button>
+    <div class="login-error" id="reset-password-error"></div>
   </div>
 </div>
 
@@ -695,6 +712,98 @@ function doLogout() {
   document.getElementById('login-screen').style.display = '';
   document.getElementById('app').classList.remove('visible');
 }
+
+// ------------------------------------------------------------
+// RECUPERAÇÃO DE SENHA
+// ------------------------------------------------------------
+window.abrirRecuperarSenha = function() {
+  if (!document.getElementById('recuperar-senha-modal')) {
+    const modal = document.createElement('div');
+    modal.id = 'recuperar-senha-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;align-items:center;justify-content:center;';
+    modal.innerHTML = `<div style="background:#fff;border-radius:6px;width:380px;max-width:92vw;padding:24px;box-shadow:0 8px 40px rgba(0,0,0,.25)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:4px">Recuperar senha</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:16px">Informe seu e-mail de acesso. Enviaremos um link para você definir uma nova senha.</div>
+      <label class="form-label" for="rec-email">E-mail</label>
+      <input class="form-input" id="rec-email" type="email" placeholder="seu@email.com" style="margin-bottom:8px;width:100%;box-sizing:border-box">
+      <div id="rec-senha-msg" style="font-size:12px;margin-bottom:12px"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button type="button" class="btn" onclick="document.getElementById('recuperar-senha-modal').style.display='none'">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="rec-senha-btn" onclick="enviarLinkRecuperacaoSenha()">Enviar link</button>
+      </div>
+    </div>`;
+    document.body.appendChild(modal);
+  }
+  document.getElementById('rec-email').value = document.getElementById('l-email').value || '';
+  document.getElementById('rec-senha-msg').textContent = '';
+  document.getElementById('recuperar-senha-modal').style.display = 'flex';
+};
+
+window.enviarLinkRecuperacaoSenha = async function() {
+  const email = document.getElementById('rec-email').value.trim();
+  const msgEl = document.getElementById('rec-senha-msg');
+  if (!email) { msgEl.style.color = 'var(--danger)'; msgEl.textContent = 'Informe seu e-mail.'; return; }
+  if (!supaClient) { msgEl.style.color = 'var(--danger)'; msgEl.textContent = 'Supabase não inicializado.'; return; }
+
+  const btn = document.getElementById('rec-senha-btn');
+  btn.disabled = true; btn.textContent = 'Enviando...';
+
+  // Volta para a própria página (sem query string) — o supabase-js detecta o
+  // token de recuperação anexado à URL e dispara o evento PASSWORD_RECOVERY.
+  const redirectTo = window.location.origin + window.location.pathname;
+  const { error } = await supaClient.auth.resetPasswordForEmail(email, { redirectTo });
+
+  btn.disabled = false; btn.textContent = 'Enviar link';
+
+  if (error) {
+    msgEl.style.color = 'var(--danger)';
+    msgEl.textContent = 'Não foi possível enviar o link: ' + error.message;
+    return;
+  }
+  msgEl.style.color = '#1a7a3c';
+  msgEl.textContent = 'Link enviado! Verifique seu e-mail (inclusive spam) para redefinir a senha.';
+};
+
+function mostrarTelaRedefinirSenha() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').classList.remove('visible');
+  document.getElementById('reset-password-screen').style.display = '';
+}
+
+window.confirmarNovaSenha = async function() {
+  const senha = document.getElementById('rp-pass').value;
+  const confirmar = document.getElementById('rp-pass-confirm').value;
+  const errEl = document.getElementById('reset-password-error');
+  errEl.textContent = '';
+
+  if (!senha || senha.length < 6) {
+    errEl.textContent = 'A senha precisa ter pelo menos 6 caracteres.';
+    return;
+  }
+  if (senha !== confirmar) {
+    errEl.textContent = 'As senhas não coincidem.';
+    return;
+  }
+  if (!supaClient) {
+    errEl.textContent = 'Erro de configuração: Supabase não inicializado.';
+    return;
+  }
+
+  const { error } = await supaClient.auth.updateUser({ password: senha });
+  if (error) {
+    errEl.textContent = 'Não foi possível salvar a nova senha: ' + error.message;
+    return;
+  }
+
+  // A sessão criada pelo link de recuperação é só para trocar a senha — encerra
+  // ela e devolve para a tela normal de login com a senha já atualizada.
+  await supaClient.auth.signOut();
+  document.getElementById('reset-password-screen').style.display = 'none';
+  document.getElementById('login-screen').style.display = '';
+  document.getElementById('rp-pass').value = '';
+  document.getElementById('rp-pass-confirm').value = '';
+  showToast('Senha atualizada! Faça login com sua nova senha.');
+};
 
 // ============================================================
 // SIDEBAR NAVIGATION
@@ -6396,11 +6505,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadCargosForApp(); // <-- Carrega os cargos antes de tentar logar ou renderizar qualquer coisa que dependa deles
   // FIM DA LINHA ADICIONADA
 
+  // Registra o listener de recuperação de senha o quanto antes: quando o usuário
+  // chega pelo link do e-mail de "esqueci minha senha", o supabase-js processa o
+  // token da URL durante a inicialização do client e dispara PASSWORD_RECOVERY.
+  // Precisa ser registrado antes do getSession() abaixo para não perder o evento.
+  let emRecuperacaoSenha = false;
+  if (supaClient) {
+    supaClient.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        emRecuperacaoSenha = true;
+        mostrarTelaRedefinirSenha();
+      }
+    });
+  }
+
   // Se houver uma sessão Supabase ativa, entra no app
  // Verifica sessão ativa (Supabase Auth v2)
 if (supaClient) {
   const { data: { session } } = await supaClient.auth.getSession();
-  if (session?.user) {
+  // Sessão de recuperação de senha não deve logar no app — o usuário precisa
+  // primeiro definir a nova senha na tela mostrada pelo listener acima.
+  if (session?.user && !emRecuperacaoSenha) {
     const perfilInfo = await carregarUsuarioLogado(session.user);
     if (perfilInfo) {
       currentUser = {
