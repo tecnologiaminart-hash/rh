@@ -932,8 +932,18 @@ function paginaPermissao(id) {
   return PAGINA_PAI[id] || id;
 }
 
+// "Cadastro de Usuário" cria login no Supabase Auth e decide o perfil de
+// acesso de alguém — sensível demais pra depender só de uma linha correta em
+// `permissoes`. Trava a Administrador/RH direto no código, como camada extra
+// (além da tabela), pra uma linha errada no banco nunca voltar a expor essa
+// página pra outros perfis.
+function podeGerenciarUsuarios() {
+  return !!currentUser && (currentUser.perfil === 'Administrador' || currentUser.perfil === 'RH');
+}
+
 function temPermissao(id) {
   if (!currentUser || !currentUser.permissoes) return false;
+  if (paginaPermissao(id) === 'trein-cadastro-usuario' && !podeGerenciarUsuarios()) return false;
   return currentUser.permissoes.has(paginaPermissao(id));
 }
 
@@ -5448,7 +5458,7 @@ async function loadUsuariosCadastrados() {
   }
   const { data, error } = await supaClient
     .from('usuarios')
-    .select('id, colaborador_id, email, ativo, created_at, perfis(nome)')
+    .select('id, colaborador_id, email, ativo, created_at, perfil_id, perfis(nome)')
     .order('created_at', { ascending: false });
   if (error) {
     console.error('Erro ao carregar usuários cadastrados:', error.message);
@@ -5465,7 +5475,11 @@ function pageCadastroUsuarioTreinamento() {
   const renderTabela = () => {
     const tbody = document.getElementById('cadastro-usuario-tbody');
     if (!tbody) return;
-    const lista = window._usuariosCadastrados || [];
+    // A listagem desta página mostra só as contas de Treinamento (perfil_id=3).
+    // A exclusão de colaborador já cadastrado no modal continua olhando TODOS
+    // os perfis (window._usuariosCadastrados sem filtro) — ninguém deve ter
+    // dois logins, independente do perfil.
+    const lista = (window._usuariosCadastrados || []).filter(u => u.perfil_id === 3);
     tbody.innerHTML = lista.length === 0
       ? '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum usuário cadastrado ainda.</td></tr>'
       : lista.map(u => {
