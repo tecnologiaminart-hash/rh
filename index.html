@@ -6505,18 +6505,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadCargosForApp(); // <-- Carrega os cargos antes de tentar logar ou renderizar qualquer coisa que dependa deles
   // FIM DA LINHA ADICIONADA
 
-  // Registra o listener de recuperação de senha o quanto antes: quando o usuário
-  // chega pelo link do e-mail de "esqueci minha senha", o supabase-js processa o
-  // token da URL durante a inicialização do client e dispara PASSWORD_RECOVERY.
-  // Precisa ser registrado antes do getSession() abaixo para não perder o evento.
-  let emRecuperacaoSenha = false;
-  if (supaClient) {
-    supaClient.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        emRecuperacaoSenha = true;
-        mostrarTelaRedefinirSenha();
-      }
-    });
+  // Detecta o link de recuperação de senha lendo a URL diretamente (síncrono),
+  // em vez de depender do evento PASSWORD_RECOVERY do onAuthStateChange: esse
+  // evento é emitido de forma assíncrona (via setTimeout internamente no
+  // supabase-js) e podia chegar DEPOIS do getSession() abaixo já ter decidido
+  // logar no app — causando o bug de abrir o app por um instante antes de cair
+  // na tela de nova senha. O Supabase manda o token como #...&type=recovery
+  // (fluxo implícito, padrão deste projeto) ou, em outras configurações,
+  // como ?...&type=recovery.
+  const emRecuperacaoSenha =
+    new URLSearchParams((window.location.hash || '').replace(/^#/, '')).get('type') === 'recovery' ||
+    new URLSearchParams(window.location.search || '').get('type') === 'recovery';
+  if (emRecuperacaoSenha) {
+    mostrarTelaRedefinirSenha();
+    // Limpa o token da barra de endereço para não deixá-lo exposto/reutilizável
+    // e para que um F5 depois não caia de novo nesta tela.
+    history.replaceState(null, '', window.location.pathname);
   }
 
   // Se houver uma sessão Supabase ativa, entra no app
@@ -6524,7 +6528,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 if (supaClient) {
   const { data: { session } } = await supaClient.auth.getSession();
   // Sessão de recuperação de senha não deve logar no app — o usuário precisa
-  // primeiro definir a nova senha na tela mostrada pelo listener acima.
+  // primeiro definir a nova senha na tela mostrada acima.
   if (session?.user && !emRecuperacaoSenha) {
     const perfilInfo = await carregarUsuarioLogado(session.user);
     if (perfilInfo) {
