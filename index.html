@@ -6489,6 +6489,21 @@ function renderAvaliacaoConcluida() {
 
 // Executa ao carregar a página
 document.addEventListener('DOMContentLoaded', async () => {
+  // Detecta o link de recuperação de senha lendo a URL crua, ANTES de qualquer
+  // outra coisa (antes até de criar o supaClient). O supabase-js lê e depois
+  // apaga esse token da URL durante sua própria inicialização assíncrona; se
+  // checássemos depois de criar o client e dar algum await (ex.: loadCargosForApp),
+  // o hash já podia estar limpo e a detecção falhava — foi exatamente o bug de
+  // "abre o app e só depois volta pra tela de senha". O Supabase manda o token
+  // como #...&type=recovery (fluxo implícito, padrão deste projeto) ou, em
+  // outras configurações, como ?...&type=recovery.
+  const emRecuperacaoSenha =
+    new URLSearchParams((window.location.hash || '').replace(/^#/, '')).get('type') === 'recovery' ||
+    new URLSearchParams(window.location.search || '').get('type') === 'recovery';
+  if (emRecuperacaoSenha) {
+    mostrarTelaRedefinirSenha();
+  }
+
   const sbUrlEl = document.getElementById('sb-url');
   const sbKeyEl = document.getElementById('sb-key');
 
@@ -6501,25 +6516,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (sbKeyEl) sbKeyEl.value = SUPA_KEY;
 
   // Agora que SUPA_URL e SUPA_KEY estão definidos, podemos inicializar supaClient
+  // (é aqui que o supabase-js lê o token de recuperação da URL, se houver, e
+  // monta a sessão temporária que o updateUser() vai usar mais adiante).
   supaClient = initSupabase();
     await loadCargosForApp(); // <-- Carrega os cargos antes de tentar logar ou renderizar qualquer coisa que dependa deles
   // FIM DA LINHA ADICIONADA
 
-  // Detecta o link de recuperação de senha lendo a URL diretamente (síncrono),
-  // em vez de depender do evento PASSWORD_RECOVERY do onAuthStateChange: esse
-  // evento é emitido de forma assíncrona (via setTimeout internamente no
-  // supabase-js) e podia chegar DEPOIS do getSession() abaixo já ter decidido
-  // logar no app — causando o bug de abrir o app por um instante antes de cair
-  // na tela de nova senha. O Supabase manda o token como #...&type=recovery
-  // (fluxo implícito, padrão deste projeto) ou, em outras configurações,
-  // como ?...&type=recovery.
-  const emRecuperacaoSenha =
-    new URLSearchParams((window.location.hash || '').replace(/^#/, '')).get('type') === 'recovery' ||
-    new URLSearchParams(window.location.search || '').get('type') === 'recovery';
   if (emRecuperacaoSenha) {
-    mostrarTelaRedefinirSenha();
-    // Limpa o token da barra de endereço para não deixá-lo exposto/reutilizável
-    // e para que um F5 depois não caia de novo nesta tela.
+    // Só limpa a URL agora (depois do supaClient já ter processado o token):
+    // limpar antes disso apagaria o token antes do supabase-js conseguir lê-lo.
     history.replaceState(null, '', window.location.pathname);
   }
 
