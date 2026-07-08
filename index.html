@@ -411,6 +411,12 @@ const N8N_CURRICULO_WEBHOOK_URL = 'https://automatiza.minart.com.br/webhook/uplo
 // n8n/upload-documento-avaliacao-drive.workflow.json, preencher o folderId do Drive e a
 // credencial do Google Drive, ativar o workflow e colar a "Production URL" abaixo.
 const N8N_AVALIACAO_DOC_WEBHOOK_URL = 'https://automatiza.minart.com.br/webhook/upload-documento-avaliacao-drive';
+// Webhook do n8n que cria o login (Supabase Auth) e a linha em `usuarios` de um
+// colaborador — precisa da service_role key do Supabase, que NUNCA pode ir para
+// o código do site, só fica guardada dentro do n8n. Após importar
+// n8n/criar-usuario-treinamento.workflow.json, preencher a service_role key nos
+// nodes HTTP Request, ativar o workflow e colar a "Production URL" abaixo.
+const N8N_CRIAR_USUARIO_WEBHOOK_URL = 'https://automatiza.minart.com.br/webhook/criar-usuario-treinamento';
 
 let _colaboradoresSupabase = [];
 let _editingStatusColabId = null;
@@ -682,6 +688,16 @@ async function doLogin() {
     name: data.user.user_metadata?.nome || data.user.email,
     ...perfilInfo,
   };
+
+  // Usuários criados em "Treinamentos > Cadastro de Usuário" começam com a
+  // senha inicial 12345678 e o metadado must_change_password=true — obriga
+  // trocar antes de liberar o acesso ao restante do sistema.
+  if (data.user.user_metadata?.must_change_password) {
+    window._modoTrocaSenhaObrigatoria = true;
+    mostrarTelaRedefinirSenha();
+    return;
+  }
+
   enterApp();
 }
 
@@ -789,20 +805,37 @@ window.confirmarNovaSenha = async function() {
     return;
   }
 
-  const { error } = await supaClient.auth.updateUser({ password: senha });
+  // Fluxo de troca obrigatória (primeiro login com a senha inicial 12345678):
+  // além de trocar a senha, limpa o metadado must_change_password para não
+  // pedir de novo nos próximos logins.
+  const payload = window._modoTrocaSenhaObrigatoria
+    ? { password: senha, data: { must_change_password: false } }
+    : { password: senha };
+
+  const { error } = await supaClient.auth.updateUser(payload);
   if (error) {
     errEl.textContent = 'Não foi possível salvar a nova senha: ' + error.message;
     return;
   }
 
-  // A sessão criada pelo link de recuperação é só para trocar a senha — encerra
-  // ela e devolve para a tela normal de login com a senha já atualizada.
-  await supaClient.auth.signOut();
-  document.getElementById('reset-password-screen').style.display = 'none';
-  document.getElementById('login-screen').style.display = '';
   document.getElementById('rp-pass').value = '';
   document.getElementById('rp-pass-confirm').value = '';
-  showToast('Senha atualizada! Faça login com sua nova senha.');
+
+  if (window._modoTrocaSenhaObrigatoria) {
+    // Já está logado (só precisava trocar a senha) — segue direto para o app,
+    // sem precisar fazer login de novo.
+    window._modoTrocaSenhaObrigatoria = false;
+    document.getElementById('reset-password-screen').style.display = 'none';
+    showToast('Senha atualizada!');
+    enterApp();
+  } else {
+    // A sessão criada pelo link de recuperação é só para trocar a senha —
+    // encerra ela e devolve para a tela normal de login.
+    await supaClient.auth.signOut();
+    document.getElementById('reset-password-screen').style.display = 'none';
+    document.getElementById('login-screen').style.display = '';
+    showToast('Senha atualizada! Faça login com sua nova senha.');
+  }
 };
 
 // ============================================================
@@ -852,6 +885,12 @@ const NAV = [
     subs: [
       { id: 'ficha-dados', label: 'Dados Pessoais' },
       { id: 'ficha-mapeamento', label: 'Mapeamento de Perfil' },
+    ]
+  },
+  {
+    id: 'treinamentos', label: 'Treinamentos', icon: '◆',
+    subs: [
+      { id: 'trein-cadastro-usuario', label: 'Cadastro de Usuário' },
     ]
   },
   {
@@ -2596,6 +2635,7 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
     'aval-perguntas-competencias': pagePerguntasCompetencias,
     'ficha-dados':     pageDadosPessoais,
     'ficha-mapeamento': pageMapeamentoPerfil,
+    'trein-cadastro-usuario': pageCadastroUsuarioTreinamento,
     'relatorios-impressao': pageRelatorioColaborador,
     'bon-regras':      pageBonRegras,
     'bon-historico':   pageBonHistorico,
@@ -5394,6 +5434,182 @@ window.alterarStatusMapeamentoPerfil = async function(id, novoStatus) {
 };
 
 // ------------------------------------------------------------
+// TREINAMENTOS > CADASTRO DE USUÁRIO — cria o login (Supabase Auth) de um
+// colaborador com perfil Treinamento (perfil_id fixo = 3) e grava a linha
+// correspondente em `usuarios`. A criação do login em si roda num webhook do
+// n8n (N8N_CRIAR_USUARIO_WEBHOOK_URL), porque exige a service_role key do
+// Supabase — uma credencial que nunca pode ficar exposta no código do site.
+// ------------------------------------------------------------
+async function loadUsuariosCadastrados() {
+  if (!supaClient) {
+    console.error('Supabase client não inicializado para usuarios.');
+    window._usuariosCadastrados = [];
+    return;
+  }
+  const { data, error } = await supaClient
+    .from('usuarios')
+    .select('id, colaborador_id, email, ativo, created_at, perfis(nome)')
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.error('Erro ao carregar usuários cadastrados:', error.message);
+    window._usuariosCadastrados = [];
+  } else {
+    window._usuariosCadastrados = data;
+  }
+}
+
+function pageCadastroUsuarioTreinamento() {
+  document.getElementById('topbar-actions').innerHTML =
+    `<button class="btn btn-primary" onclick="abrirCadastroUsuarioModal()">+ Selecionar Colaborador</button>`;
+
+  const renderTabela = () => {
+    const tbody = document.getElementById('cadastro-usuario-tbody');
+    if (!tbody) return;
+    const lista = window._usuariosCadastrados || [];
+    tbody.innerHTML = lista.length === 0
+      ? '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum usuário cadastrado ainda.</td></tr>'
+      : lista.map(u => {
+          const criado = u.created_at ? new Date(u.created_at).toLocaleDateString('pt-BR') : '—';
+          return `
+          <tr>
+            <td><strong>${nomeColaboradorPorId(u.colaborador_id)}</strong></td>
+            <td>${u.email || '—'}</td>
+            <td>${u.perfis ? u.perfis.nome : '—'}</td>
+            <td><span class="badge ${u.ativo ? 'badge-active' : 'badge-gray'}">${u.ativo ? 'Ativo' : 'Inativo'}</span></td>
+            <td style="color:var(--text3);font-size:12px">${criado}</td>
+          </tr>`;
+        }).join('');
+  };
+
+  window._renderCadastroUsuario = renderTabela;
+  Promise.all([
+    loadUsuariosCadastrados(),
+    (!_colaboradoresSupabase || _colaboradoresSupabase.length === 0) ? loadColaboradoresFromSupabase() : Promise.resolve(),
+  ]).then(renderTabela);
+
+  return `
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">Cadastro de Usuário</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Colaborador</th>
+          <th>E-mail</th>
+          <th>Perfil</th>
+          <th>Status</th>
+          <th>Criado em</th>
+        </tr>
+      </thead>
+      <tbody id="cadastro-usuario-tbody">
+        <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>`;
+}
+
+window.abrirCadastroUsuarioModal = async function() {
+  if (!_colaboradoresSupabase || _colaboradoresSupabase.length === 0) {
+    await loadColaboradoresFromSupabase();
+  }
+  if (!window._usuariosCadastrados) {
+    await loadUsuariosCadastrados();
+  }
+
+  if (!document.getElementById('cadastro-usuario-modal')) {
+    const modal = document.createElement('div');
+    modal.id = 'cadastro-usuario-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:6px;width:440px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:15px;font-weight:700">Cadastro de Usuário</div>
+          <button type="button" class="btn btn-sm" onclick="document.getElementById('cadastro-usuario-modal').style.display='none'">✕</button>
+        </div>
+        <div style="padding:24px">
+          <div class="form-group" style="margin-bottom:16px">
+            <label class="form-label">Colaborador</label>
+            <select class="form-select" id="cu-colaborador"><option value="">— Selecione —</option></select>
+          </div>
+          <div class="form-group" style="margin-bottom:16px">
+            <label class="form-label">E-mail</label>
+            <input class="form-input" id="cu-email" type="email" placeholder="colaborador@email.com">
+          </div>
+          <div class="form-group" style="margin-bottom:16px">
+            <label class="form-label">Senha inicial</label>
+            <input class="form-input" id="cu-senha" type="text" value="12345678">
+          </div>
+          <div class="form-group" style="margin-bottom:4px">
+            <label class="form-label">Perfil</label>
+            <input class="form-input" value="Treinamento" disabled style="background:var(--bg2);cursor:not-allowed">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn" onclick="document.getElementById('cadastro-usuario-modal').style.display='none'">Cancelar</button>
+          <button type="button" class="btn btn-primary" id="cu-btn-salvar" onclick="salvarCadastroUsuario()">Cadastrar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  // Colaboradores que já têm usuário cadastrado saem da lista de seleção.
+  const jaCadastrados = new Set((window._usuariosCadastrados || []).map(u => String(u.colaborador_id)));
+  const disponiveis = (_colaboradoresSupabase || []).filter(c => !jaCadastrados.has(String(c.id_colaborador)));
+  const selectColab = document.getElementById('cu-colaborador');
+  selectColab.innerHTML = '<option value="">— Selecione —</option>' +
+    disponiveis.map(c => `<option value="${c.id_colaborador}">${c.nome_colaborador}</option>`).join('');
+
+  document.getElementById('cu-email').value = '';
+  document.getElementById('cu-senha').value = '12345678';
+  document.getElementById('cadastro-usuario-modal').style.display = 'flex';
+};
+
+window.salvarCadastroUsuario = async function() {
+  const colaboradorId = document.getElementById('cu-colaborador').value;
+  const email = document.getElementById('cu-email').value.trim();
+  const senha = document.getElementById('cu-senha').value;
+  if (!colaboradorId) return showToast('Selecione o colaborador.');
+  if (!email) return showToast('Informe o e-mail.');
+  if (!senha) return showToast('Informe a senha.');
+  if (!N8N_CRIAR_USUARIO_WEBHOOK_URL || N8N_CRIAR_USUARIO_WEBHOOK_URL.startsWith('COLE_AQUI')) {
+    return showToast('Webhook de criação de usuário não configurado.', 'danger');
+  }
+
+  const btn = document.getElementById('cu-btn-salvar');
+  if (btn) { btn.disabled = true; btn.textContent = 'Cadastrando...'; }
+
+  try {
+    const res = await fetch(N8N_CRIAR_USUARIO_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token: N8N_WEBHOOK_TOKEN,
+        email,
+        senha,
+        colaborador_id: colaboradorId,
+        perfil_id: 3, // Treinamento
+      }),
+    });
+    let result = {};
+    try { result = await res.json(); } catch (e) { /* resposta sem corpo JSON */ }
+    if (!res.ok || result.success === false) {
+      throw new Error(result.error || `Falha ao cadastrar usuário (status ${res.status}).`);
+    }
+
+    document.getElementById('cadastro-usuario-modal').style.display = 'none';
+    await loadUsuariosCadastrados();
+    if (window._renderCadastroUsuario) window._renderCadastroUsuario();
+    showToast('Usuário cadastrado! Peça para a pessoa entrar com a senha inicial e trocar no primeiro acesso.');
+  } catch (e) {
+    console.error('Erro ao cadastrar usuário:', e);
+    showToast('Erro ao cadastrar usuário: ' + (e.message || e), 'danger');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Cadastrar'; }
+  }
+};
+
+// ------------------------------------------------------------
 // RELATÓRIOS E IMPRESSÃO — cruza Colaboradores, Histórico, Dados Pessoais/EPIs,
 // Mapeamento de Perfil e Documentos. Permite escolher quais seções entram no
 // relatório e gerar tanto de um colaborador quanto de todos de uma vez.
@@ -6542,7 +6758,12 @@ if (supaClient) {
         name: session.user.user_metadata?.nome || session.user.email,
         ...perfilInfo,
       };
-      enterApp();
+      if (session.user.user_metadata?.must_change_password) {
+        window._modoTrocaSenhaObrigatoria = true;
+        mostrarTelaRedefinirSenha();
+      } else {
+        enterApp();
+      }
     } else {
       // Sessão válida no Supabase Auth, mas sem usuário/perfil ativo cadastrado
       // em `usuarios` — não deixa entrar no app com a sessão antiga.
