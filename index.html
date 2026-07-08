@@ -333,7 +333,10 @@
     </div>
     <div class="sidebar-user">
       <div class="sidebar-avatar" id="user-avatar">U</div>
-      <div class="sidebar-uname" id="user-name">Usuário</div>
+      <div>
+        <div class="sidebar-uname" id="user-name">Usuário</div>
+        <div class="sidebar-uperfil" id="user-perfil" style="font-size:11px;opacity:.65"></div>
+      </div>
     </div>
     <div class="sidebar-nav" id="sidebar-nav"></div>
     <div class="sidebar-footer">
@@ -650,10 +653,17 @@ async function doLogin() {
     return;
   }
 
+  const perfilInfo = await carregarUsuarioLogado(data.user);
+  if (!perfilInfo) {
+    errEl.textContent = 'Seu usuário ainda não tem acesso liberado ao sistema. Contate o administrador.';
+    await supaClient.auth.signOut();
+    return;
+  }
+
   currentUser = {
     email,
     name: data.user.user_metadata?.nome || data.user.email,
-    role: data.user.user_metadata?.perfil || 'user'
+    ...perfilInfo,
   };
   enterApp();
 }
@@ -665,8 +675,18 @@ function enterApp() {
   document.getElementById('app').classList.add('visible');
   document.getElementById('user-name').textContent = currentUser.name;
   document.getElementById('user-avatar').textContent = (currentUser.name || 'U')[0].toUpperCase();
+  const perfilEl = document.getElementById('user-perfil');
+  if (perfilEl) perfilEl.textContent = currentUser.perfil || '';
   buildSidebar();
-  navigate('dashboard', 'Dashboard');
+  const primeiraPagina = temPermissao('dashboard') ? 'dashboard' : primeiraPaginaPermitida();
+  if (primeiraPagina) {
+    activeId = primeiraPagina;
+    navigate(primeiraPagina, labelDaPaginaNav(primeiraPagina) || 'Dashboard');
+  } else {
+    document.getElementById('page-title').textContent = 'Sem acesso';
+    document.getElementById('page-breadcrumb').textContent = 'RH Sistema';
+    document.getElementById('content-area').innerHTML = `<div class="empty-state"><div class="empty-state-icon">🔒</div><div class="empty-state-title">Nenhuma página liberada</div><div class="empty-state-desc">Seu perfil (${currentUser.perfil}) ainda não tem nenhuma página liberada. Contate o administrador.</div></div>`;
+  }
 }
 
 function doLogout() {
@@ -746,6 +766,88 @@ const NAV = [
   },
 ];
 
+// ============================================================
+// PERFIS E PERMISSÕES
+// ============================================================
+// Páginas que não aparecem na sidebar (abertas a partir de outra página) mas
+// que precisam de uma checagem de permissão: herdam a permissão da página-mãe,
+// já que a tabela `permissoes` só cadastra os ids que aparecem no menu (NAV).
+const PAGINA_PAI = {
+  'col-historico-detalhe': 'col-historico',
+  'cont-admissao-nova': 'cont-admissoes',
+  'dep-historico': 'dep-tabela',
+  'dep-alteracao': 'dep-tabela',
+  'dep-relatorio': 'dep-tabela',
+};
+
+function paginaPermissao(id) {
+  return PAGINA_PAI[id] || id;
+}
+
+function temPermissao(id) {
+  if (!currentUser || !currentUser.permissoes) return false;
+  return currentUser.permissoes.has(paginaPermissao(id));
+}
+
+// Primeira página do menu (respeitando a ordem do NAV) que o perfil logado
+// pode ver — usada para abrir algo além do Dashboard quando o perfil não tem
+// acesso a ele.
+function primeiraPaginaPermitida() {
+  for (const item of NAV) {
+    if (item.subs) {
+      const sub = item.subs.find(s => temPermissao(s.id));
+      if (sub) return sub.id;
+    } else if (temPermissao(item.id)) {
+      return item.id;
+    }
+  }
+  return null;
+}
+
+function labelDaPaginaNav(id) {
+  for (const item of NAV) {
+    if (item.id === id) return item.label;
+    if (item.subs) {
+      const sub = item.subs.find(s => s.id === id);
+      if (sub) return sub.label;
+    }
+  }
+  return '';
+}
+
+// Busca o usuário (tabela usuarios) vinculado ao login autenticado, seu perfil
+// (tabela perfis) e o conjunto de páginas liberadas para esse perfil (tabela
+// permissoes). Retorna null se o usuário não estiver cadastrado/ativo — nesse
+// caso o login é bloqueado, mesmo com credenciais válidas no Supabase Auth.
+async function carregarUsuarioLogado(authUser) {
+  const { data: usuario, error } = await supaClient
+    .from('usuarios')
+    .select('id, colaborador_id, ativo, perfis(id, nome)')
+    .eq('auth_user_id', authUser.id)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Erro ao carregar usuário/perfil:', error.message);
+    return null;
+  }
+  if (!usuario || !usuario.ativo || !usuario.perfis) return null;
+
+  const { data: permissoes, error: errorPermissoes } = await supaClient
+    .from('permissoes')
+    .select('pagina_id')
+    .eq('perfil_id', usuario.perfis.id);
+  if (errorPermissoes) {
+    console.error('Erro ao carregar permissões:', errorPermissoes.message);
+    return null;
+  }
+
+  return {
+    colaboradorId: usuario.colaborador_id,
+    perfil: usuario.perfis.nome,
+    permissoes: new Set((permissoes || []).map(p => p.pagina_id)),
+  };
+}
+
 let openMenus = {};
 let activeId = 'dashboard';
 
@@ -753,9 +855,15 @@ function buildSidebar() {
   const nav = document.getElementById('sidebar-nav');
   nav.innerHTML = '';
   NAV.forEach(item => {
+    const hasSubs = item.subs && item.subs.length;
+    // Grupo: só aparece se pelo menos uma sub-página estiver liberada para o
+    // perfil logado. Item único: só aparece se a própria página estiver liberada.
+    const subsVisiveis = hasSubs ? item.subs.filter(sub => temPermissao(sub.id)) : [];
+    if (hasSubs && subsVisiveis.length === 0) return;
+    if (!hasSubs && !temPermissao(item.id)) return;
+
     const el = document.createElement('div');
     el.className = 'nav-group';
-    const hasSubs = item.subs && item.subs.length;
     const itemEl = document.createElement('div');
     itemEl.className = 'nav-item' + (activeId === item.id ? ' active' : '') + (openMenus[item.id] ? ' open' : '');
     itemEl.innerHTML = `<span class="nav-icon">${item.icon}</span><span>${item.label}</span>${hasSubs ? '<span class="nav-arrow">›</span>' : ''}`;
@@ -774,7 +882,7 @@ function buildSidebar() {
     if (hasSubs && openMenus[item.id]) {
       const subEl = document.createElement('div');
       subEl.className = 'sub-nav';
-      item.subs.forEach(sub => {
+      subsVisiveis.forEach(sub => {
         const s = document.createElement('div');
         s.className = 'sub-nav-item' + (activeId === sub.id ? ' active' : '');
         s.textContent = sub.label;
@@ -2349,6 +2457,13 @@ window.salvarDocumento = async function() {
 
 function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
   const el = document.getElementById('content-area');
+  // Segunda barreira além da sidebar (que já esconde o que o perfil não vê):
+  // impede renderizar uma página fora das permissões do perfil logado.
+  if (!temPermissao(id)) {
+    document.getElementById('topbar-actions').innerHTML = '';
+    el.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🔒</div><div class="empty-state-title">Acesso não permitido</div><div class="empty-state-desc">Seu perfil (${currentUser?.perfil || '—'}) não tem acesso a esta página.</div></div>`;
+    return;
+  }
   const pages = {
     'dashboard':       pageDashboard,
     'col-documentos':  (typeof pageDocumentos === 'function') ? pageDocumentos : (function(){ console.error('pageDocumentos não está definida'); return function(){ return `<div class="empty-state"><div class="empty-state-icon">⚠</div><div class="empty-state-title">Página indisponível</div><div class="empty-state-desc">pageDocumentos não definida.</div></div>`; }; })(),
@@ -6286,12 +6401,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 if (supaClient) {
   const { data: { session } } = await supaClient.auth.getSession();
   if (session?.user) {
-    currentUser = {
-      email: session.user.email,
-      name: session.user.user_metadata?.nome || session.user.email,
-      role: session.user.user_metadata?.perfil || 'user'
-    };
-    enterApp();
+    const perfilInfo = await carregarUsuarioLogado(session.user);
+    if (perfilInfo) {
+      currentUser = {
+        email: session.user.email,
+        name: session.user.user_metadata?.nome || session.user.email,
+        ...perfilInfo,
+      };
+      enterApp();
+    } else {
+      // Sessão válida no Supabase Auth, mas sem usuário/perfil ativo cadastrado
+      // em `usuarios` — não deixa entrar no app com a sessão antiga.
+      await supaClient.auth.signOut();
+    }
   }
 }
 
