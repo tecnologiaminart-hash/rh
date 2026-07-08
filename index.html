@@ -907,6 +907,10 @@ const NAV = [
     ]
   },
   {
+    id: 'permissoes-acesso', label: 'Permissões de Acesso', icon: '⚿',
+    action: () => navigate('permissoes-acesso', 'Permissões de Acesso')
+  },
+  {
     id: 'relatorios-impressao', label: 'Relatórios e Impressão', icon: '▤',
     action: () => navigate('relatorios-impressao', 'Relatórios e Impressão')
   },
@@ -954,10 +958,19 @@ function podeGerenciarUsuarios() {
   return !!currentUser && (currentUser.perfil === 'Administrador' || currentUser.perfil === 'RH');
 }
 
+// A tela de Permissões de Acesso decide o que cada perfil (inclusive
+// Administrador e RH) enxerga — a mais sensível de todas. Só Administrador,
+// sem exceção, e travado direto no código (não só na tabela `permissoes`).
+function podeGerenciarPermissoes() {
+  return !!currentUser && currentUser.perfil === 'Administrador';
+}
+
 function temPermissao(id) {
   if (!currentUser || !currentUser.permissoes) return false;
-  if (paginaPermissao(id) === 'trein-cadastro-usuario' && !podeGerenciarUsuarios()) return false;
-  return currentUser.permissoes.has(paginaPermissao(id));
+  const pagina = paginaPermissao(id);
+  if (pagina === 'trein-cadastro-usuario' && !podeGerenciarUsuarios()) return false;
+  if (pagina === 'permissoes-acesso' && !podeGerenciarPermissoes()) return false;
+  return currentUser.permissoes.has(pagina);
 }
 
 // Primeira página do menu (respeitando a ordem do NAV) que o perfil logado
@@ -2659,6 +2672,7 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
     'ficha-dados':     pageDadosPessoais,
     'ficha-mapeamento': pageMapeamentoPerfil,
     'trein-cadastro-usuario': pageCadastroUsuarioTreinamento,
+    'permissoes-acesso': pagePermissoesAcesso,
     'relatorios-impressao': pageRelatorioColaborador,
     'bon-regras':      pageBonRegras,
     'bon-historico':   pageBonHistorico,
@@ -5633,6 +5647,118 @@ window.salvarCadastroUsuario = async function() {
     showToast('Erro ao cadastrar usuário: ' + (e.message || e), 'danger');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Cadastrar'; }
+  }
+};
+
+// ------------------------------------------------------------
+// PERMISSÕES DE ACESSO — grade perfil × página, só para Administrador
+// (temPermissao/podeGerenciarPermissoes já travam isso na sidebar e no
+// renderPage; a policy do Supabase também só deixa Administrador
+// inserir/apagar em `permissoes`).
+// ------------------------------------------------------------
+// Ids que nunca aparecem nesta grade porque são travados direto no código,
+// não dependem só da tabela permissoes (ver temPermissao()).
+const PAGINAS_FORA_DA_GRADE = ['trein-cadastro-usuario', 'permissoes-acesso'];
+
+// Deriva a lista de páginas "gerenciáveis" a partir do próprio NAV — evita
+// manter uma segunda lista duplicada que poderia ficar desatualizada.
+function paginasParaGrade() {
+  const grupos = [];
+  NAV.forEach(item => {
+    if (item.subs && item.subs.length) {
+      const subs = item.subs.filter(s => !PAGINAS_FORA_DA_GRADE.includes(s.id));
+      if (subs.length) grupos.push({ label: item.label, paginas: subs });
+    } else if (!PAGINAS_FORA_DA_GRADE.includes(item.id)) {
+      grupos.push({ label: item.label, paginas: [{ id: item.id, label: item.label }] });
+    }
+  });
+  return grupos;
+}
+
+async function loadPerfisEPermissoesParaGrade() {
+  const [{ data: perfis, error: errPerfis }, { data: permissoes, error: errPermissoes }] = await Promise.all([
+    supaClient.from('perfis').select('id, nome').order('id'),
+    supaClient.from('permissoes').select('perfil_id, pagina_id'),
+  ]);
+  if (errPerfis) console.error('Erro ao carregar perfis:', errPerfis.message);
+  if (errPermissoes) console.error('Erro ao carregar permissões:', errPermissoes.message);
+  window._perfisGrade = perfis || [];
+  window._permissoesGradeSet = new Set((permissoes || []).map(p => `${p.perfil_id}:${p.pagina_id}`));
+}
+
+function pagePermissoesAcesso() {
+  document.getElementById('topbar-actions').innerHTML = '';
+
+  const renderGrade = () => {
+    const container = document.getElementById('permissoes-grade-container');
+    if (!container) return;
+    const perfis = window._perfisGrade || [];
+    const grupos = paginasParaGrade();
+    const marcado = (perfilId, paginaId) => (window._permissoesGradeSet || new Set()).has(`${perfilId}:${paginaId}`);
+
+    container.innerHTML = `
+      <div style="overflow-x:auto">
+      <table style="white-space:nowrap">
+        <thead>
+          <tr>
+            <th style="text-align:left">Página</th>
+            ${perfis.map(p => `<th style="text-align:center">${p.nome}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${grupos.map(g => `
+            <tr><td colspan="${perfis.length + 1}" style="background:var(--bg2);font-weight:700;font-size:12px;padding:8px 10px">${g.label}</td></tr>
+            ${g.paginas.map(pg => `
+              <tr>
+                <td style="padding-left:20px">${pg.label}</td>
+                ${perfis.map(p => `
+                  <td style="text-align:center">
+                    <input type="checkbox" ${marcado(p.id, pg.id) ? 'checked' : ''}
+                      onchange="alterarPermissaoGrade(${p.id}, '${pg.id}', this.checked)">
+                  </td>`).join('')}
+              </tr>`).join('')}
+          `).join('')}
+        </tbody>
+      </table>
+      </div>
+      <p style="font-size:12px;color:var(--text3);margin-top:16px">
+        "Cadastro de Usuário" (dentro de Treinamentos) e esta própria página, "Permissões de Acesso", não aparecem
+        aqui de propósito: ficam sempre restritas a Administrador — e, no caso de Cadastro de Usuário, também RH —
+        direto no código, independente do que estiver marcado nesta tabela.
+      </p>`;
+  };
+
+  window._renderPermissoesGrade = renderGrade;
+  loadPerfisEPermissoesParaGrade().then(renderGrade);
+
+  return `
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">Permissões de Acesso</span>
+    </div>
+    <div style="padding:20px" id="permissoes-grade-container">
+      <div style="text-align:center;padding:24px;color:var(--text3)">Carregando...</div>
+    </div>
+  </div>`;
+}
+
+window.alterarPermissaoGrade = async function(perfilId, paginaId, marcar) {
+  try {
+    if (marcar) {
+      const { error } = await supaClient.from('permissoes').insert([{ perfil_id: perfilId, pagina_id: paginaId }]);
+      if (error) throw error;
+      window._permissoesGradeSet.add(`${perfilId}:${paginaId}`);
+    } else {
+      const { error } = await supaClient.from('permissoes').delete().eq('perfil_id', perfilId).eq('pagina_id', paginaId);
+      if (error) throw error;
+      window._permissoesGradeSet.delete(`${perfilId}:${paginaId}`);
+    }
+    showToast('Permissão atualizada!');
+  } catch (e) {
+    console.error('Erro ao atualizar permissão:', e);
+    showToast('Erro ao atualizar permissão: ' + (e.message || e), 'danger');
+    // Reverte o checkbox visualmente, já que window._permissoesGradeSet não mudou.
+    if (window._renderPermissoesGrade) window._renderPermissoesGrade();
   }
 };
 
