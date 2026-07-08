@@ -593,7 +593,7 @@ function linkWhatsappEntrevistaPresencial(numero, nomeCandidato, cargoNome) {
   if (!digits) return null;
   if (!digits.startsWith('55')) digits = '55' + digits;
   const linkMaterial = window._materialComportamentoEntrevistaUrl;
-  const mensagem = `Olá, ${nomeCandidato || ''}! Parabéns, você avançou para a etapa de entrevista presencial do processo seletivo para a vaga de ${cargoNome || ''} na Minart Móveis! Em breve entraremos em contato para combinar dia e horário.` +
+  const mensagem = `Olá, ${nomeCandidato || ''}! Parabéns, você avançou para a etapa de entrevista do processo seletivo para a vaga de ${cargoNome || ''} na Minart Móveis! Em breve entraremos em contato para combinar dia e horário.` +
     (linkMaterial ? `\n\nEnquanto isso, dá uma olhada nessas dicas de como se comportar numa entrevista de emprego:\n${linkMaterial}` : '');
   return `https://wa.me/${digits}?text=${encodeURIComponent(mensagem)}`;
 }
@@ -3787,8 +3787,8 @@ window.reprovarEntrevistaPresencial = function(idCandidatura) {
   atualizarStatusEntrevista(idCandidatura, 'Reprovado');
 };
 
-window.salvarObservacoesEntrevista = async function(idCandidatura) {
-  const el = document.getElementById(`obs-entrevista-${idCandidatura}`);
+window.salvarObservacoesAvaliacao = async function(idCandidatura) {
+  const el = document.getElementById(`obs-avaliacao-${idCandidatura}`);
   if (!el) return;
   try {
     const { error } = await supaClient.from('testes_avaliacoes').update({ observacoes: el.value }).eq('id_candidato', idCandidatura);
@@ -3801,14 +3801,39 @@ window.salvarObservacoesEntrevista = async function(idCandidatura) {
   }
 };
 
-// Cabeçalho e linhas da tabela de candidatos compartilhados por Candidatos
-// para Avaliação e Candidatos para Entrevista — só a última tem a coluna
-// extra do botão de WhatsApp de entrevista (comWhatsappEntrevista).
-function theadCandidatosEntrevistaHtml(comWhatsappEntrevista) {
+window.salvarTranscricaoReuniao = async function(idCandidatura) {
+  const el = document.getElementById(`transcricao-reuniao-${idCandidatura}`);
+  if (!el) return;
+  try {
+    const { error } = await supaClient.from('testes_avaliacoes').update({ transcricao_reuniao: el.value }).eq('id_candidato', idCandidatura);
+    if (error) throw error;
+    await loadTestesAvaliacoesForApp();
+    showToast('Transcrição salva!');
+  } catch (e) {
+    console.error('Erro ao salvar transcrição:', e);
+    showToast('Erro ao salvar transcrição: ' + (e.message || e));
+  }
+};
+
+window.salvarObservacoesEntrevista = async function(idCandidatura) {
+  const el = document.getElementById(`obs-entrevista-${idCandidatura}`);
+  if (!el) return;
+  try {
+    const { error } = await supaClient.from('testes_avaliacoes').update({ observacoes_entrevista: el.value }).eq('id_candidato', idCandidatura);
+    if (error) throw error;
+    await loadTestesAvaliacoesForApp();
+    showToast('Observações salvas!');
+  } catch (e) {
+    console.error('Erro ao salvar observações:', e);
+    showToast('Erro ao salvar observações: ' + (e.message || e));
+  }
+};
+
+// Cabeçalho e linhas da tabela de Candidatos para Avaliação.
+function theadCandidatosAprovadosHtml() {
   return `
     <tr>
       <th>Nome</th>
-      <th>CPF</th>
       <th>Número</th>
       <th>Instagram</th>
       <th>Currículo</th>
@@ -3819,23 +3844,19 @@ function theadCandidatosEntrevistaHtml(comWhatsappEntrevista) {
       <th>Entrevista Presencial</th>
       <th>Observações</th>
       <th>Ações</th>
-      ${comWhatsappEntrevista ? '<th>Entrevista</th>' : ''}
     </tr>`;
 }
 
-function corpoTabelaCandidatosEntrevista(cands, vaga, opcoes = {}) {
-  const comWhatsappEntrevista = !!opcoes.comWhatsappEntrevista;
+function corpoTabelaCandidatosAprovados(cands, vaga) {
   return cands.map((c) => {
     const teste = (window._testesAvaliacoes || []).find(t => t.id_candidato === c.id_candidaturas);
     const linkAvaliacao = teste ? `${location.origin}${location.pathname}?avaliacao=${teste.token}` : null;
     const linkWhatsAvaliacao = linkAvaliacao ? linkWhatsappAvaliacao(c.numero, c.nome_candidato, nomeCargoPorId(vaga.id_cargos), linkAvaliacao) : null;
     const concluido = teste && teste.status_realizacao === 'concluido';
     const statusEntrevista = teste?.status_entrevista || '';
-    const linkWhatsEntrevista = comWhatsappEntrevista ? linkWhatsappEntrevistaPresencial(c.numero, c.nome_candidato, nomeCargoPorId(vaga.id_cargos)) : null;
     return `
     <tr>
       <td><strong>${c.nome_candidato || '—'}</strong></td>
-      <td>${c.cpf || '—'}</td>
       <td>${c.numero || '—'}</td>
       <td>${c.instagram || '—'}</td>
       <td>
@@ -3867,8 +3888,8 @@ function corpoTabelaCandidatosEntrevista(cands, vaga, opcoes = {}) {
       </td>
       <td style="white-space:normal;min-width:200px">
         <div style="display:flex;gap:4px;align-items:center">
-          <input class="form-input" id="obs-entrevista-${c.id_candidaturas}" value="${(teste?.observacoes || '').replace(/"/g, '&quot;')}" style="font-size:12px;padding:6px 8px;width:140px" placeholder="Observações...">
-          <button class="action-btn" title="Salvar observações" onclick="salvarObservacoesEntrevista(${c.id_candidaturas})">💾</button>
+          <input class="form-input" id="obs-avaliacao-${c.id_candidaturas}" value="${(teste?.observacoes || '').replace(/"/g, '&quot;')}" style="font-size:12px;padding:6px 8px;width:140px" placeholder="Observações...">
+          <button class="action-btn" title="Salvar observações" onclick="salvarObservacoesAvaliacao(${c.id_candidaturas})">💾</button>
         </div>
       </td>
       <td style="white-space:nowrap">
@@ -3876,14 +3897,84 @@ function corpoTabelaCandidatosEntrevista(cands, vaga, opcoes = {}) {
         ${linkWhatsAvaliacao
           ? `<a class="action-btn" title="Chamar no WhatsApp (Avaliação)" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block" href="${linkWhatsAvaliacao}">💬</a>`
           : `<span class="action-btn" style="opacity:.4;cursor:default" title="Cadastre o número ou aguarde a geração do link da avaliação">💬</span>`}
-        ${!comWhatsappEntrevista ? `<button class="action-btn" title="Remover da avaliação" onclick="removerCandidatoAvaliacao(${c.id_candidaturas})">↩</button>` : ''}
+        <button class="action-btn" title="Remover da avaliação" onclick="removerCandidatoAvaliacao(${c.id_candidaturas})">↩</button>
       </td>
-      ${comWhatsappEntrevista ? `
+    </tr>`;
+  }).join('');
+}
+
+// Cabeçalho e linhas da tabela de Candidatos para Entrevista.
+function theadCandidatosEntrevistaHtml() {
+  return `
+    <tr>
+      <th>Nome</th>
+      <th>Número</th>
+      <th>Instagram</th>
+      <th>Currículo</th>
+      <th>Avaliação</th>
+      <th>Entrevista Presencial</th>
+      <th>Transcrição Reunião Entrevista</th>
+      <th>Observações</th>
+      <th>Ações</th>
+      <th>Entrevista</th>
+    </tr>`;
+}
+
+function corpoTabelaCandidatosEntrevista(cands, vaga) {
+  return cands.map((c) => {
+    const teste = (window._testesAvaliacoes || []).find(t => t.id_candidato === c.id_candidaturas);
+    const concluido = teste && teste.status_realizacao === 'concluido';
+    const statusEntrevista = teste?.status_entrevista || '';
+    const linkWhatsEntrevista = linkWhatsappEntrevistaPresencial(c.numero, c.nome_candidato, nomeCargoPorId(vaga.id_cargos));
+    return `
+    <tr>
+      <td><strong>${c.nome_candidato || '—'}</strong></td>
+      <td>${c.numero || '—'}</td>
+      <td>${c.instagram || '—'}</td>
+      <td>
+        ${c.url_curriculo
+          ? `<button class="action-btn" title="Visualizar" onclick="visualizarDocumento('${c.url_curriculo}')">👁</button>
+             <a class="action-btn" title="Baixar" href="${driveDownloadUrl(c.url_curriculo)}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">⬇</a>`
+          : `<span class="badge badge-gray">Não enviado</span>`}
+      </td>
+      <td>
+        ${!teste
+          ? `<span class="badge badge-gray">—</span>`
+          : concluido
+            ? `<span class="badge badge-active">Concluído</span>`
+            : `<span class="badge badge-pending">Pendente</span>`}
+      </td>
+      <td style="white-space:normal;min-width:170px">
+        <div style="margin-bottom:6px">
+          ${statusEntrevista === 'Aprovado' ? '<span class="badge badge-active">Aprovado</span>'
+            : statusEntrevista === 'Reprovado' ? '<span class="badge badge-inactive">Reprovado</span>'
+            : '<span class="badge badge-gray">—</span>'}
+        </div>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-sm" onclick="aprovarEntrevistaPresencial(${c.id_candidaturas})">Aprovar</button>
+          <button class="btn btn-sm" style="color:var(--danger)" onclick="reprovarEntrevistaPresencial(${c.id_candidaturas})">Reprovar</button>
+        </div>
+      </td>
+      <td style="white-space:normal;min-width:220px">
+        <div style="display:flex;gap:4px;align-items:center">
+          <textarea id="transcricao-reuniao-${c.id_candidaturas}" style="font-size:12px;padding:6px 8px;width:160px;min-height:32px" placeholder="Transcrição da reunião...">${teste?.transcricao_reuniao || ''}</textarea>
+          <button class="action-btn" title="Salvar transcrição" onclick="salvarTranscricaoReuniao(${c.id_candidaturas})">💾</button>
+        </div>
+      </td>
+      <td style="white-space:normal;min-width:200px">
+        <div style="display:flex;gap:4px;align-items:center">
+          <input class="form-input" id="obs-entrevista-${c.id_candidaturas}" value="${(teste?.observacoes_entrevista || '').replace(/"/g, '&quot;')}" style="font-size:12px;padding:6px 8px;width:140px" placeholder="Observações...">
+          <button class="action-btn" title="Salvar observações" onclick="salvarObservacoesEntrevista(${c.id_candidaturas})">💾</button>
+        </div>
+      </td>
+      <td style="white-space:nowrap">
+        <button class="action-btn" onclick="verCandidato(${c.id_candidaturas})" title="Ver dados completos">👁</button>
+      </td>
       <td style="white-space:nowrap">
         ${linkWhatsEntrevista
           ? `<a class="btn btn-sm btn-primary" style="text-decoration:none;display:inline-block" target="_blank" rel="noopener" href="${linkWhatsEntrevista}">💬 Chamar no WhatsApp</a>`
           : `<span class="btn btn-sm" style="opacity:.4;cursor:default">💬 Chamar no WhatsApp</span>`}
-      </td>` : ''}
+      </td>
     </tr>`;
   }).join('');
 }
@@ -3937,8 +4028,8 @@ function pageCandidatosAprovados() {
         <div id="candidatos-aprovados-tabela-${g.vaga.id_vagas}" style="display:none">
         <div style="overflow-x:auto">
         <table style="white-space:nowrap">
-          <thead>${theadCandidatosEntrevistaHtml(false)}</thead>
-          <tbody>${corpoTabelaCandidatosEntrevista(g.cands, g.vaga, { comWhatsappEntrevista: false })}</tbody>
+          <thead>${theadCandidatosAprovadosHtml()}</thead>
+          <tbody>${corpoTabelaCandidatosAprovados(g.cands, g.vaga)}</tbody>
         </table>
         </div>
         </div>
@@ -4026,8 +4117,8 @@ function pageCandidatosEntrevista() {
         <div id="candidatos-entrevista-tabela-${g.vaga.id_vagas}" style="display:none">
         <div style="overflow-x:auto">
         <table style="white-space:nowrap">
-          <thead>${theadCandidatosEntrevistaHtml(true)}</thead>
-          <tbody>${corpoTabelaCandidatosEntrevista(g.cands, g.vaga, { comWhatsappEntrevista: true })}</tbody>
+          <thead>${theadCandidatosEntrevistaHtml()}</thead>
+          <tbody>${corpoTabelaCandidatosEntrevista(g.cands, g.vaga)}</tbody>
         </table>
         </div>
         </div>
