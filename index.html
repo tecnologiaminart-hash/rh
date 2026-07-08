@@ -1738,7 +1738,7 @@ function renderStatusTable() {
       : 'badge-inactive';
 
     return `
-      <tr>
+      <tr style="cursor:pointer" onclick="openStatusModal('${colab.id_colaborador}')">
         <td>${colab.nome_colaborador}</td>
         <td>${cargoNome}</td>
         <td>${formatarDataBR(colab.desde) || 'N/A'}</td>
@@ -1747,7 +1747,7 @@ function renderStatusTable() {
         <td>${salarioBase}</td>
         <td><span class="badge ${statusBadgeClass}">${colab.status_colaborador}</span></td>
         <td>
-          <button class="action-btn" onclick="openStatusModal('${colab.id_colaborador}')">✎</button>
+          <button class="action-btn" onclick="event.stopPropagation();openStatusModal('${colab.id_colaborador}')">✎</button>
         </td>
       </tr>
     `;
