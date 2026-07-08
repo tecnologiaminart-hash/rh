@@ -1851,11 +1851,12 @@ function pageStatus() {
         <option value="salario-asc" ${window._statusOrdem === 'salario-asc' ? 'selected' : ''}>Salário (menor → maior)</option>
       </select>
     </div>
-    <table>
+    <div style="overflow-x:auto">
+    <table style="white-space:nowrap">
       <thead>
         <tr>
-          <th>Nome</th>
-          <th>Cargo</th>
+          <th style="min-width:200px">Nome</th>
+          <th style="min-width:160px">Cargo</th>
           <th>Data de Admissão (Experiência)</th>
           <th>Data de Efetivação</th>
           <th>Tipo de Contrato</th>
@@ -1869,6 +1870,7 @@ function pageStatus() {
         <tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text3);">Carregando colaboradores...</td></tr>
       </tbody>
     </table>
+    </div>
   </div>`;
 }
 async function openStatusModal(colabId = null) {
