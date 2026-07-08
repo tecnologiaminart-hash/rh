@@ -1722,7 +1722,7 @@ function renderStatusTable() {
   });
 
   if (lista.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text3);">Nenhum colaborador encontrado.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text3);">Nenhum colaborador encontrado.</td></tr>`;
     return;
   }
 
@@ -1742,6 +1742,7 @@ function renderStatusTable() {
         <td>${colab.nome_colaborador}</td>
         <td>${cargoNome}</td>
         <td>${formatarDataBR(colab.desde) || 'N/A'}</td>
+        <td>${formatarDataBR(colab.desde_efetivo) || 'N/A'}</td>
         <td>${colab.tipo_de_contrato || 'N/A'}</td>
         <td>${salarioBase}</td>
         <td><span class="badge ${statusBadgeClass}">${colab.status_colaborador}</span></td>
@@ -1779,8 +1780,12 @@ function pageStatus() {
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">Data de Admissão</label>
+          <label class="form-label">Data de Admissão (Experiência)</label>
           <input class="form-input" type="date" id="sm-desde">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Data de Efetivação</label>
+          <input class="form-input" type="date" id="sm-desde-efetivo">
         </div>
         <div class="form-group">
           <label class="form-label">Salário Base</label>
@@ -1851,7 +1856,8 @@ function pageStatus() {
         <tr>
           <th>Nome</th>
           <th>Cargo</th>
-          <th>Desde</th>
+          <th>Data de Admissão (Experiência)</th>
+          <th>Data de Efetivação</th>
           <th>Tipo de Contrato</th>
           <th>Salário Base</th>
           <th>Status</th>
@@ -1860,7 +1866,7 @@ function pageStatus() {
       </thead>
       <tbody id="status-table-body">
         <!-- Dados serão carregados aqui pelo JavaScript -->
-        <tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text3);">Carregando colaboradores...</td></tr>
+        <tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text3);">Carregando colaboradores...</td></tr>
       </tbody>
     </table>
   </div>`;
@@ -1881,6 +1887,7 @@ async function openStatusModal(colabId = null) {
   const smNome = document.getElementById('sm-nome');
   const smCargo = document.getElementById('sm-cargo');
   const smDesde = document.getElementById('sm-desde');
+  const smDesdeEfetivo = document.getElementById('sm-desde-efetivo');
   const smStatus = document.getElementById('sm-status');
   const smSalarioBase = document.getElementById('sm-salario-base'); // Novo campo
   const smTipoContrato = document.getElementById('sm-tipo-contrato');
@@ -1927,6 +1934,7 @@ async function openStatusModal(colabId = null) {
       smNome.value = colab.nome_colaborador;
       smCargo.value = colab.id_cargos;
       smDesde.value = colab.desde;
+      smDesdeEfetivo.value = colab.desde_efetivo || '';
       smStatus.value = colab.status_colaborador;
       smTipoContrato.value = colab.tipo_de_contrato || '';
       console.log('[EDIT] Dados preenchidos. Salário base:', colab.salario_base);
@@ -1951,6 +1959,7 @@ async function openStatusModal(colabId = null) {
     smNome.value = '';
     smCargo.value = '';
     smDesde.value = '';
+    smDesdeEfetivo.value = '';
     smStatus.value = 'Ativo';
     smSalarioBase.value = ''; // Limpa o salário base
     smTipoContrato.value = '';
@@ -1966,6 +1975,7 @@ async function saveStatusEmployee() {
   const smNome = document.getElementById('sm-nome').value.trim();
   const smCargoId = document.getElementById('sm-cargo').value;
   const smDesde = document.getElementById('sm-desde').value;
+  const smDesdeEfetivo = document.getElementById('sm-desde-efetivo').value;
   const smStatus = document.getElementById('sm-status').value;
   const smSalarioRaw = document.getElementById('sm-salario-base').value;
   const smTipoContrato = document.getElementById('sm-tipo-contrato').value;
@@ -1981,6 +1991,7 @@ async function saveStatusEmployee() {
     nome_colaborador: smNome,
     id_cargos: smCargoId,
     desde: smDesde,
+    desde_efetivo: smDesdeEfetivo || null,
     status_colaborador: smStatus,
     tipo_de_contrato: smTipoContrato || null,
   };
@@ -2164,7 +2175,8 @@ function printStatusRow(colabId) {
     <p><strong>Cargo:</strong> ${cargoNome}</p>
     <p><strong>Salário Base:</strong> ${salarioBase}</p>
     <p><strong>Status:</strong> ${colab.status_colaborador}</p>
-    <p><strong>Desde:</strong> ${formatarDataBR(colab.desde) || 'N/A'}</p>
+    <p><strong>Data de Admissão (Experiência):</strong> ${formatarDataBR(colab.desde) || 'N/A'}</p>
+    <p><strong>Data de Efetivação:</strong> ${formatarDataBR(colab.desde_efetivo) || 'N/A'}</p>
     <p style="margin-top:30px;color:#888;font-size:12px">Impresso em: ${new Date().toLocaleDateString('pt-BR')}</p>
   </body></html>`);
   w.print();
@@ -2180,7 +2192,7 @@ function filterStatusTable(searchTerm) {
   for (let i = 0; i < tr.length; i++) {
     let tdNome = tr[i].getElementsByTagName('td')[0]; // Colaborador
     let tdCargo = tr[i].getElementsByTagName('td')[1]; // Cargo
-    let tdStatus = tr[i].getElementsByTagName('td')[5]; // Status
+    let tdStatus = tr[i].getElementsByTagName('td')[6]; // Status (Nome, Cargo, Admissão, Efetivação, Contrato, Salário, Status, Ações)
 
     if (tdNome || tdCargo || tdStatus) {
       const textValue = (tdNome ? tdNome.textContent : '') +
