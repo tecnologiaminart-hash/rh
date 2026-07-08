@@ -568,6 +568,36 @@ function linkWhatsappAvaliacao(numero, nomeCandidato, cargoNome, link) {
   return `https://wa.me/${digits}?text=${encodeURIComponent(mensagem)}`;
 }
 
+// Busca no Supabase o link do Drive com as dicas de "Como se comportar numa
+// entrevista de emprego" (tabela internos), usado na mensagem de WhatsApp da
+// aba Candidatos para Entrevista. Carregado uma vez e reaproveitado por linha.
+async function carregarMaterialComportamentoEntrevista() {
+  if (!supaClient) { window._materialComportamentoEntrevistaUrl = null; return; }
+  const { data, error } = await supaClient
+    .from('internos')
+    .select('id_drive')
+    .eq('nome', 'Como_se_Comportar_em_uma_Entrevista_de_Emprego_Minart')
+    .maybeSingle();
+  if (error) {
+    console.error('Erro ao carregar material de comportamento em entrevista:', error.message);
+    window._materialComportamentoEntrevistaUrl = null;
+  } else {
+    window._materialComportamentoEntrevistaUrl = data?.id_drive || null;
+  }
+}
+
+// Monta o link de WhatsApp convidando o candidato aprovado para a entrevista
+// presencial, incluindo o material de dicas (se cadastrado em internos).
+function linkWhatsappEntrevistaPresencial(numero, nomeCandidato, cargoNome) {
+  let digits = String(numero || '').replace(/\D/g, '');
+  if (!digits) return null;
+  if (!digits.startsWith('55')) digits = '55' + digits;
+  const linkMaterial = window._materialComportamentoEntrevistaUrl;
+  const mensagem = `Olá, ${nomeCandidato || ''}! Parabéns, você avançou para a etapa de entrevista presencial do processo seletivo para a vaga de ${cargoNome || ''} na Minart Móveis! Em breve entraremos em contato para combinar dia e horário.` +
+    (linkMaterial ? `\n\nEnquanto isso, dá uma olhada nessas dicas de como se comportar numa entrevista de emprego:\n${linkMaterial}` : '');
+  return `https://wa.me/${digits}?text=${encodeURIComponent(mensagem)}`;
+}
+
 // Gera um token com o "gerador" informado e confere na tabela/coluna se já existe,
 // repetindo até achar um valor que ainda não está em uso (evita colisão/repetição).
 async function gerarTokenUnico(tabela, coluna, gerador) {
@@ -875,6 +905,7 @@ const NAV = [
       { id: 'cont-candidatos', label: 'Candidatos' },
       { id: 'cont-vagas', label: 'Vagas' },
       { id: 'cont-candidatos-aprovados', label: 'Candidatos para Avaliação' },
+      { id: 'cont-candidatos-entrevista', label: 'Candidatos para Entrevista' },
       { id: 'cont-admissoes', label: 'Admissões' },
     ]
   },
@@ -2659,6 +2690,7 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
     'cont-candidatos': pageCandidatos,
     'cont-vagas':      pageVagas,
     'cont-candidatos-aprovados': pageCandidatosAprovados,
+    'cont-candidatos-entrevista': pageCandidatosEntrevista,
     'cont-admissoes':  pageAdmissoes,
     'cont-admissao-nova': pageCriarAdmissao,
     'cont-formulario-entrevista': pageFormularioEntrevista,
@@ -3354,35 +3386,47 @@ function filtrosCandidatosBarHtml(prefix, escopo, filtro) {
   </div>`;
 }
 
+// Os filtros de candidatos são reaproveitados pelas 3 abas (Candidatos,
+// Candidatos para Avaliação, Candidatos para Entrevista) — esses 3 helpers
+// resolvem qual filtro/prefixo/render usar a partir do "escopo" de cada aba,
+// em vez de duplicar a barra de filtros e a lógica de estado em cada página.
+function filtroCandidatosDoEscopo(escopo) {
+  if (escopo === 'aprovados') return window._candidatosAprovadosFiltro;
+  if (escopo === 'entrevista') return window._candidatosEntrevistaFiltro;
+  return window._candidatosFiltro;
+}
+function prefixFiltroCandidatos(escopo) {
+  if (escopo === 'aprovados') return 'cand-aprov-filtro';
+  if (escopo === 'entrevista') return 'cand-entr-filtro';
+  return 'cand-filtro';
+}
+function rerenderCandidatosDoEscopo(escopo) {
+  if (escopo === 'aprovados') { if (window._renderCandidatosAprovados) window._renderCandidatosAprovados(); }
+  else if (escopo === 'entrevista') { if (window._renderCandidatosEntrevista) window._renderCandidatosEntrevista(); }
+  else { if (window._renderCandidatos) window._renderCandidatos(); }
+}
+
 window.atualizarFiltroCandidatos = function(escopo, campo, valor) {
-  const filtro = escopo === 'aprovados' ? window._candidatosAprovadosFiltro : window._candidatosFiltro;
+  const filtro = filtroCandidatosDoEscopo(escopo);
   if (!filtro) return;
   filtro[campo] = valor;
-  if (escopo === 'aprovados') {
-    if (window._renderCandidatosAprovados) window._renderCandidatosAprovados();
-  } else {
-    if (window._renderCandidatos) window._renderCandidatos();
-  }
+  rerenderCandidatosDoEscopo(escopo);
 };
 
 window.limparFiltrosCandidatos = function(escopo) {
-  const filtro = escopo === 'aprovados' ? window._candidatosAprovadosFiltro : window._candidatosFiltro;
+  const filtro = filtroCandidatosDoEscopo(escopo);
   if (!filtro) return;
   filtro.busca = '';
   filtro.vaga = '';
   filtro.status = '';
   filtro.dataIni = '';
   filtro.dataFim = '';
-  const prefix = escopo === 'aprovados' ? 'cand-aprov-filtro' : 'cand-filtro';
+  const prefix = prefixFiltroCandidatos(escopo);
   ['busca', 'vaga', 'status', 'data-ini', 'data-fim'].forEach(campo => {
     const el = document.getElementById(`${prefix}-${campo}`);
     if (el) el.value = '';
   });
-  if (escopo === 'aprovados') {
-    if (window._renderCandidatosAprovados) window._renderCandidatosAprovados();
-  } else {
-    if (window._renderCandidatos) window._renderCandidatos();
-  }
+  rerenderCandidatosDoEscopo(escopo);
 };
 
 function pageCandidatos() {
@@ -3638,6 +3682,22 @@ window.toggleCandidatosVaga = function(idVaga) {
   if (icon) icon.textContent = expandido ? '▸ ver candidatos' : '▾ ocultar candidatos';
 };
 
+// Modal de detalhes do candidato — reaproveitado por Candidatos para
+// Avaliação e Candidatos para Entrevista (cada página injeta esse HTML no
+// próprio #content-area, já que o elemento some quando a página é trocada).
+function candidatoDetalheModalHtml() {
+  return `
+  <div id="candidato-detalhe-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+      <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:15px;font-weight:700">Dados do Candidato</div>
+        <button class="btn btn-sm" onclick="document.getElementById('candidato-detalhe-modal').style.display='none'">✕ Fechar</button>
+      </div>
+      <div style="padding:24px" id="candidato-detalhe-body"></div>
+    </div>
+  </div>`;
+}
+
 window.verCandidato = function(idCandidatura) {
   const cand = (window._candidaturas || []).find(c => c.id_candidaturas === idCandidatura);
   if (!cand) return;
@@ -3703,6 +3763,131 @@ window.aprovarCandidatoAvaliacao = async function(idCandidatura) {
   }
 };
 
+// Grava o resultado da entrevista presencial em testes_avaliacoes.status_entrevista
+// (identificado por id_candidato, que já existe desde a aprovação para avaliação).
+async function atualizarStatusEntrevista(idCandidatura, status) {
+  try {
+    const { error } = await supaClient.from('testes_avaliacoes').update({ status_entrevista: status }).eq('id_candidato', idCandidatura);
+    if (error) throw error;
+    await loadTestesAvaliacoesForApp();
+    if (window._renderCandidatosAprovados) window._renderCandidatosAprovados();
+    if (window._renderCandidatosEntrevista) window._renderCandidatosEntrevista();
+    showToast(`Entrevista presencial: ${status}.`);
+  } catch (e) {
+    console.error('Erro ao atualizar status de entrevista:', e);
+    showToast('Erro ao atualizar status de entrevista: ' + (e.message || e));
+  }
+}
+
+window.aprovarEntrevistaPresencial = function(idCandidatura) {
+  atualizarStatusEntrevista(idCandidatura, 'Aprovado');
+};
+
+window.reprovarEntrevistaPresencial = function(idCandidatura) {
+  atualizarStatusEntrevista(idCandidatura, 'Reprovado');
+};
+
+window.salvarObservacoesEntrevista = async function(idCandidatura) {
+  const el = document.getElementById(`obs-entrevista-${idCandidatura}`);
+  if (!el) return;
+  try {
+    const { error } = await supaClient.from('testes_avaliacoes').update({ observacoes: el.value }).eq('id_candidato', idCandidatura);
+    if (error) throw error;
+    await loadTestesAvaliacoesForApp();
+    showToast('Observações salvas!');
+  } catch (e) {
+    console.error('Erro ao salvar observações:', e);
+    showToast('Erro ao salvar observações: ' + (e.message || e));
+  }
+};
+
+// Cabeçalho e linhas da tabela de candidatos compartilhados por Candidatos
+// para Avaliação e Candidatos para Entrevista — só a última tem a coluna
+// extra do botão de WhatsApp de entrevista (comWhatsappEntrevista).
+function theadCandidatosEntrevistaHtml(comWhatsappEntrevista) {
+  return `
+    <tr>
+      <th>Nome</th>
+      <th>CPF</th>
+      <th>Número</th>
+      <th>Instagram</th>
+      <th>Currículo</th>
+      <th>Envio</th>
+      <th>Avaliação</th>
+      <th>Respondido em</th>
+      <th>Perfil DISC</th>
+      <th>Entrevista Presencial</th>
+      <th>Observações</th>
+      <th>Ações</th>
+      ${comWhatsappEntrevista ? '<th>Entrevista</th>' : ''}
+    </tr>`;
+}
+
+function corpoTabelaCandidatosEntrevista(cands, vaga, opcoes = {}) {
+  const comWhatsappEntrevista = !!opcoes.comWhatsappEntrevista;
+  return cands.map((c) => {
+    const teste = (window._testesAvaliacoes || []).find(t => t.id_candidato === c.id_candidaturas);
+    const linkAvaliacao = teste ? `${location.origin}${location.pathname}?avaliacao=${teste.token}` : null;
+    const linkWhatsAvaliacao = linkAvaliacao ? linkWhatsappAvaliacao(c.numero, c.nome_candidato, nomeCargoPorId(vaga.id_cargos), linkAvaliacao) : null;
+    const concluido = teste && teste.status_realizacao === 'concluido';
+    const statusEntrevista = teste?.status_entrevista || '';
+    const linkWhatsEntrevista = comWhatsappEntrevista ? linkWhatsappEntrevistaPresencial(c.numero, c.nome_candidato, nomeCargoPorId(vaga.id_cargos)) : null;
+    return `
+    <tr>
+      <td><strong>${c.nome_candidato || '—'}</strong></td>
+      <td>${c.cpf || '—'}</td>
+      <td>${c.numero || '—'}</td>
+      <td>${c.instagram || '—'}</td>
+      <td>
+        ${c.url_curriculo
+          ? `<button class="action-btn" title="Visualizar" onclick="visualizarDocumento('${c.url_curriculo}')">👁</button>
+             <a class="action-btn" title="Baixar" href="${driveDownloadUrl(c.url_curriculo)}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">⬇</a>`
+          : `<span class="badge badge-gray">Não enviado</span>`}
+      </td>
+      <td style="color:var(--text3);font-size:12px">${c.data_envio_candidatura ? new Date(c.data_envio_candidatura).toLocaleDateString('pt-BR') : '—'}</td>
+      <td>
+        ${!teste
+          ? `<span class="badge badge-gray">—</span>`
+          : concluido
+            ? `<span class="badge badge-active">Concluído</span>`
+            : `<span class="badge badge-pending">Pendente</span>`}
+      </td>
+      <td style="color:var(--text3);font-size:12px">${teste && teste.respondido_em ? new Date(teste.respondido_em).toLocaleString('pt-BR') : '—'}</td>
+      <td>${(teste && teste.resultado_perfil_disk) || '—'}</td>
+      <td style="white-space:normal;min-width:170px">
+        <div style="margin-bottom:6px">
+          ${statusEntrevista === 'Aprovado' ? '<span class="badge badge-active">Aprovado</span>'
+            : statusEntrevista === 'Reprovado' ? '<span class="badge badge-inactive">Reprovado</span>'
+            : '<span class="badge badge-gray">—</span>'}
+        </div>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-sm" onclick="aprovarEntrevistaPresencial(${c.id_candidaturas})">Aprovar</button>
+          <button class="btn btn-sm" style="color:var(--danger)" onclick="reprovarEntrevistaPresencial(${c.id_candidaturas})">Reprovar</button>
+        </div>
+      </td>
+      <td style="white-space:normal;min-width:200px">
+        <div style="display:flex;gap:4px;align-items:center">
+          <input class="form-input" id="obs-entrevista-${c.id_candidaturas}" value="${(teste?.observacoes || '').replace(/"/g, '&quot;')}" style="font-size:12px;padding:6px 8px;width:140px" placeholder="Observações...">
+          <button class="action-btn" title="Salvar observações" onclick="salvarObservacoesEntrevista(${c.id_candidaturas})">💾</button>
+        </div>
+      </td>
+      <td style="white-space:nowrap">
+        <button class="action-btn" onclick="verCandidato(${c.id_candidaturas})" title="Ver dados completos">👁</button>
+        ${linkWhatsAvaliacao
+          ? `<a class="action-btn" title="Chamar no WhatsApp (Avaliação)" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block" href="${linkWhatsAvaliacao}">💬</a>`
+          : `<span class="action-btn" style="opacity:.4;cursor:default" title="Cadastre o número ou aguarde a geração do link da avaliação">💬</span>`}
+        ${!comWhatsappEntrevista ? `<button class="action-btn" title="Remover da avaliação" onclick="removerCandidatoAvaliacao(${c.id_candidaturas})">↩</button>` : ''}
+      </td>
+      ${comWhatsappEntrevista ? `
+      <td style="white-space:nowrap">
+        ${linkWhatsEntrevista
+          ? `<a class="btn btn-sm btn-primary" style="text-decoration:none;display:inline-block" target="_blank" rel="noopener" href="${linkWhatsEntrevista}">💬 Chamar no WhatsApp</a>`
+          : `<span class="btn btn-sm" style="opacity:.4;cursor:default">💬 Chamar no WhatsApp</span>`}
+      </td>` : ''}
+    </tr>`;
+  }).join('');
+}
+
 // ------------------------------------------------------------
 // CANDIDATOS PARA AVALIAÇÃO (aprovados)
 // ------------------------------------------------------------
@@ -3752,58 +3937,8 @@ function pageCandidatosAprovados() {
         <div id="candidatos-aprovados-tabela-${g.vaga.id_vagas}" style="display:none">
         <div style="overflow-x:auto">
         <table style="white-space:nowrap">
-          <thead>
-            <tr>
-              <th>Nome</th>
-              <th>CPF</th>
-              <th>Número</th>
-              <th>Instagram</th>
-              <th>Currículo</th>
-              <th>Envio</th>
-              <th>Avaliação</th>
-              <th>Respondido em</th>
-              <th>Perfil DISC</th>
-              <th>Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${g.cands.map((c) => {
-              const teste = (window._testesAvaliacoes || []).find(t => t.id_candidato === c.id_candidaturas);
-              const linkAvaliacao = teste ? `${location.origin}${location.pathname}?avaliacao=${teste.token}` : null;
-              const linkWhats = linkAvaliacao ? linkWhatsappAvaliacao(c.numero, c.nome_candidato, nomeCargoPorId(g.vaga.id_cargos), linkAvaliacao) : null;
-              const concluido = teste && teste.status_realizacao === 'concluido';
-              return `
-              <tr>
-                <td><strong>${c.nome_candidato || '—'}</strong></td>
-                <td>${c.cpf || '—'}</td>
-                <td>${c.numero || '—'}</td>
-                <td>${c.instagram || '—'}</td>
-                <td>
-                  ${c.url_curriculo
-                    ? `<button class="action-btn" title="Visualizar" onclick="visualizarDocumento('${c.url_curriculo}')">👁</button>
-                       <a class="action-btn" title="Baixar" href="${driveDownloadUrl(c.url_curriculo)}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">⬇</a>`
-                    : `<span class="badge badge-gray">Não enviado</span>`}
-                </td>
-                <td style="color:var(--text3);font-size:12px">${c.data_envio_candidatura ? new Date(c.data_envio_candidatura).toLocaleDateString('pt-BR') : '—'}</td>
-                <td>
-                  ${!teste
-                    ? `<span class="badge badge-gray">—</span>`
-                    : concluido
-                      ? `<span class="badge badge-active">Concluído</span>`
-                      : `<span class="badge badge-pending">Pendente</span>`}
-                </td>
-                <td style="color:var(--text3);font-size:12px">${teste && teste.respondido_em ? new Date(teste.respondido_em).toLocaleString('pt-BR') : '—'}</td>
-                <td>${(teste && teste.resultado_perfil_disk) || '—'}</td>
-                <td>
-                  <button class="action-btn" onclick="verCandidato(${c.id_candidaturas})" title="Ver dados completos">👁</button>
-                  ${linkWhats
-                    ? `<a class="action-btn" title="Chamar no WhatsApp" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block" href="${linkWhats}">💬</a>`
-                    : `<span class="action-btn" style="opacity:.4;cursor:default" title="Cadastre o número ou aguarde a geração do link da avaliação">💬</span>`}
-                  <button class="action-btn" title="Remover da avaliação" onclick="removerCandidatoAvaliacao(${c.id_candidaturas})">↩</button>
-                </td>
-              </tr>`;
-            }).join('')}
-          </tbody>
+          <thead>${theadCandidatosEntrevistaHtml(false)}</thead>
+          <tbody>${corpoTabelaCandidatosEntrevista(g.cands, g.vaga, { comWhatsappEntrevista: false })}</tbody>
         </table>
         </div>
         </div>
@@ -3816,16 +3951,7 @@ function pageCandidatosAprovados() {
   Promise.all([loadVagasForApp(), loadCandidaturasForApp(), loadTestesAvaliacoesForApp()]).then(renderAprovados);
 
   return `
-  <!-- Modal de detalhe do candidato -->
-  <div id="candidato-detalhe-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:6px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.2)">
-      <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-        <div style="font-size:15px;font-weight:700">Dados do Candidato</div>
-        <button class="btn btn-sm" onclick="document.getElementById('candidato-detalhe-modal').style.display='none'">✕ Fechar</button>
-      </div>
-      <div style="padding:24px" id="candidato-detalhe-body"></div>
-    </div>
-  </div>
+  ${candidatoDetalheModalHtml()}
 
   ${filtrosCandidatosBarHtml('cand-aprov-filtro', 'aprovados', window._candidatosAprovadosFiltro)}
 
@@ -3846,6 +3972,100 @@ window.toggleCandidatosAprovadosVaga = function(idVaga) {
   if (icon) icon.textContent = expandido ? '▸ ver candidatos' : '▾ ocultar candidatos';
 };
 
+// ------------------------------------------------------------
+// CANDIDATOS PARA ENTREVISTA — candidatos aprovados na entrevista presencial
+// (testes_avaliacoes.status_entrevista = 'Aprovado'), mesma estrutura de
+// Candidatos para Avaliação + botão de WhatsApp convidando pra entrevista.
+// ------------------------------------------------------------
+function pageCandidatosEntrevista() {
+  if (!window._vagas) window._vagas = [];
+  if (!window._candidaturas) window._candidaturas = [];
+  if (!window._candidatosEntrevistaFiltro) window._candidatosEntrevistaFiltro = { busca: '', vaga: '', status: '', dataIni: '', dataFim: '' };
+
+  document.getElementById('topbar-actions').innerHTML = '';
+
+  const renderEntrevista = () => {
+    const container = document.getElementById('candidatos-entrevista-container');
+    if (!container) return;
+
+    const aprovadosEntrevista = window._candidaturas.filter(c => {
+      const teste = (window._testesAvaliacoes || []).find(t => t.id_candidato === c.id_candidaturas);
+      return teste && teste.status_entrevista === 'Aprovado';
+    });
+    const filtrados = aplicarFiltrosCandidatos(aprovadosEntrevista, window._candidatosEntrevistaFiltro);
+
+    const grupos = window._vagas.map((v) => {
+      const cands = filtrados.filter(c => c.id_vagas === v.id_vagas);
+      return { vaga: v, cands };
+    }).filter(g => g.cands.length > 0);
+
+    if (grupos.length === 0) {
+      const filtroAtivo = window._candidatosEntrevistaFiltro && (window._candidatosEntrevistaFiltro.busca || window._candidatosEntrevistaFiltro.vaga || window._candidatosEntrevistaFiltro.status || window._candidatosEntrevistaFiltro.dataIni || window._candidatosEntrevistaFiltro.dataFim);
+      container.innerHTML = `<div class="empty-state">
+        <div class="empty-state-icon">🗓️</div>
+        <div class="empty-state-title">${filtroAtivo ? 'Nenhum candidato encontrado' : 'Nenhum candidato aprovado para entrevista ainda'}</div>
+        <div class="empty-state-desc">${filtroAtivo ? 'Ajuste ou limpe os filtros para ver outros candidatos.' : 'Em Candidatos para Avaliação, clique em "Aprovar" na coluna Entrevista Presencial para o candidato aparecer aqui.'}</div>
+      </div>`;
+      return;
+    }
+
+    container.innerHTML = grupos.map(g => {
+      const aberta = g.vaga.status === 'aberta';
+      return `
+      <div class="table-card" style="margin-bottom:16px">
+        <div class="table-header" style="cursor:pointer" onclick="toggleCandidatosEntrevistaVaga(${g.vaga.id_vagas})">
+          <div>
+            <span class="table-title">${nomeCargoPorId(g.vaga.id_cargos)}</span>
+            <span style="font-size:12px;color:var(--text3);margin-left:12px">
+              <span class="badge badge-info">${g.cands.length} candidato${g.cands.length > 1 ? 's' : ''}</span>
+              <span class="badge ${aberta ? 'badge-active' : 'badge-inactive'}" style="margin-left:6px">${g.vaga.status}</span>
+            </span>
+          </div>
+          <span id="candidatos-entrevista-toggle-icon-${g.vaga.id_vagas}" style="margin-left:auto;color:var(--text3);font-size:12px">▸ ver candidatos</span>
+        </div>
+        <div id="candidatos-entrevista-tabela-${g.vaga.id_vagas}" style="display:none">
+        <div style="overflow-x:auto">
+        <table style="white-space:nowrap">
+          <thead>${theadCandidatosEntrevistaHtml(true)}</thead>
+          <tbody>${corpoTabelaCandidatosEntrevista(g.cands, g.vaga, { comWhatsappEntrevista: true })}</tbody>
+        </table>
+        </div>
+        </div>
+      </div>
+    `;
+    }).join('');
+  };
+
+  window._renderCandidatosEntrevista = renderEntrevista;
+  Promise.all([
+    loadVagasForApp(),
+    loadCandidaturasForApp(),
+    loadTestesAvaliacoesForApp(),
+    carregarMaterialComportamentoEntrevista(),
+  ]).then(renderEntrevista);
+
+  return `
+  ${candidatoDetalheModalHtml()}
+
+  ${filtrosCandidatosBarHtml('cand-entr-filtro', 'entrevista', window._candidatosEntrevistaFiltro)}
+
+  <div id="candidatos-entrevista-container">
+    <div class="empty-state">
+      <div class="empty-state-icon">📋</div>
+      <div class="empty-state-title">Carregando...</div>
+    </div>
+  </div>`;
+}
+
+window.toggleCandidatosEntrevistaVaga = function(idVaga) {
+  const tabela = document.getElementById(`candidatos-entrevista-tabela-${idVaga}`);
+  const icon = document.getElementById(`candidatos-entrevista-toggle-icon-${idVaga}`);
+  if (!tabela) return;
+  const expandido = tabela.style.display !== 'none';
+  tabela.style.display = expandido ? 'none' : '';
+  if (icon) icon.textContent = expandido ? '▸ ver candidatos' : '▾ ocultar candidatos';
+};
+
 window.removerCandidatoAvaliacao = async function(idCandidatura) {
   try {
     const { data, error } = await supaClient.from('candidaturas').update({ aprovado_avaliacao: false }).eq('id_candidaturas', idCandidatura).select();
@@ -3858,6 +4078,7 @@ window.removerCandidatoAvaliacao = async function(idCandidatura) {
     await loadCandidaturasForApp();
     await loadTestesAvaliacoesForApp();
     if (window._renderCandidatosAprovados) window._renderCandidatosAprovados();
+    if (window._renderCandidatosEntrevista) window._renderCandidatosEntrevista();
     if (window._renderCandidatos) window._renderCandidatos();
     showToast('Candidato removido da avaliação.');
   } catch (e) {
