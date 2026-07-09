@@ -1917,7 +1917,7 @@ function pageStatus() {
         <option value="Pendente Documentação" ${window._statusFiltros.status === 'Pendente Documentação' ? 'selected' : ''}>Pendente Documentação</option>
       </select>
       <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-left:12px">Ordenar:</span>
-      <select class="form-select" style="width:auto" onchange="ordenarStatusTabela(this.value)">
+      <select class="form-select" style="width:180px" onchange="ordenarStatusTabela(this.value)">
         <option value="nome" ${window._statusOrdem === 'nome' ? 'selected' : ''}>Nome (A-Z)</option>
         <option value="cargo" ${window._statusOrdem === 'cargo' ? 'selected' : ''}>Cargo (A-Z)</option>
         <option value="salario-desc" ${window._statusOrdem === 'salario-desc' ? 'selected' : ''}>Salário (maior → menor)</option>
@@ -2317,6 +2317,23 @@ function pageOcorrencias() {
     const tbody = document.getElementById('ocorrencias-tbody');
     if (!tbody) return;
 
+    // Reconstrói as opções de colaborador (filtro e modal) com os dados mais
+    // recentes: no primeiro acesso à página, _colaboradoresSupabase pode ainda
+    // estar vazio quando o HTML é montado, então isso garante que os selects
+    // sejam preenchidos assim que os colaboradores terminarem de carregar.
+    const selFiltroColab = document.getElementById('oc-filtro-colaborador');
+    if (selFiltroColab) {
+      selFiltroColab.innerHTML = '<option value="">Todos os colaboradores</option>' +
+        (_colaboradoresSupabase || []).map(c => `<option value="${c.id_colaborador}" ${window._ocorrenciasFiltros.colaborador === String(c.id_colaborador) ? 'selected' : ''}>${c.nome_colaborador}</option>`).join('');
+    }
+    const selModalColab = document.getElementById('oc-colaborador');
+    if (selModalColab && selModalColab.options.length <= 1) {
+      const valorAtual = selModalColab.value;
+      selModalColab.innerHTML = '<option value="">— Selecione —</option>' +
+        (_colaboradoresSupabase || []).map(c => `<option value="${c.id_colaborador}">${c.nome_colaborador}</option>`).join('');
+      selModalColab.value = valorAtual;
+    }
+
     let lista = [..._ocorrenciasSupabase];
     if (window._ocorrenciasFiltros.colaborador) lista = lista.filter(o => String(o.id_colaborador) === String(window._ocorrenciasFiltros.colaborador));
     if (window._ocorrenciasFiltros.tipo) lista = lista.filter(o => o.tipo_ocorrencia === window._ocorrenciasFiltros.tipo);
@@ -2397,11 +2414,11 @@ function pageOcorrencias() {
   <div class="table-card">
     <div class="table-header">
       <span class="table-title">Ocorrências</span>
-      <input class="search-input" placeholder="Buscar ocorrência..." oninput="filtrarTabelaGenerica('ocorrencias-tbody', this.value)">
+      <input class="search-input" placeholder="Buscar por tipo ou colaborador..." oninput="filtrarTabelaGenerica('ocorrencias-tbody', this.value)">
     </div>
     <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:var(--bg2)">
       <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase">Filtrar:</span>
-      <select class="form-select" style="width:auto" onchange="filtrarOcorrenciasColaborador(this.value)">
+      <select class="form-select" id="oc-filtro-colaborador" style="width:auto" onchange="filtrarOcorrenciasColaborador(this.value)">
         <option value="">Todos os colaboradores</option>
         ${(_colaboradoresSupabase || []).map(c => `<option value="${c.id_colaborador}" ${window._ocorrenciasFiltros.colaborador === String(c.id_colaborador) ? 'selected' : ''}>${c.nome_colaborador}</option>`).join('')}
       </select>
