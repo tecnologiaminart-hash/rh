@@ -2165,7 +2165,7 @@ function pageColaboradoresExperiencia() {
             <td>${formatarDataBR(c.desde) || '—'}</td>
             <td>${adicionarDiasDataBR(c.desde, 20) || '—'}</td>
             <td>
-              <input class="form-input" readonly id="text-aval-${c.id_colaborador}" value="${(c.text_aval || '').replace(/"/g, '&quot;')}" style="font-size:12px;padding:6px 8px;width:140px;cursor:pointer;background:var(--bg2)" placeholder="Clique para preencher..." title="Clique para abrir em tela cheia" onclick="abrirEditorTelaCheia('text-aval-${c.id_colaborador}', 'Anexar Avaliação 1 — ${(c.nome_colaborador || '').replace(/'/g, "\\'")}', () => salvarTextAval(${c.id_colaborador}, 1))">
+              <input class="form-input" readonly id="text-aval-${c.id_colaborador}" value="${(c.text_aval1 || '').replace(/"/g, '&quot;')}" style="font-size:12px;padding:6px 8px;width:140px;cursor:pointer;background:var(--bg2)" placeholder="Clique para preencher..." title="Clique para abrir em tela cheia" onclick="abrirEditorTelaCheia('text-aval-${c.id_colaborador}', 'Anexar Avaliação 1 — ${(c.nome_colaborador || '').replace(/'/g, "\\'")}', () => salvarTextAval(${c.id_colaborador}, 1))">
             </td>
             <td>${adicionarDiasDataBR(c.desde, 85) || '—'}</td>
             <td>
@@ -4026,7 +4026,7 @@ window.reprovarEntrevistaPresencial = function(idCandidatura) {
 };
 
 window.salvarTextAval = async function(idColaborador, numero) {
-  const campo = numero === 2 ? 'text_aval2' : 'text_aval';
+  const campo = numero === 2 ? 'text_aval2' : 'text_aval1';
   const el = document.getElementById(numero === 2 ? `text-aval2-${idColaborador}` : `text-aval-${idColaborador}`);
   if (!el) return;
   try {
