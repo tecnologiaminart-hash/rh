@@ -2358,21 +2358,24 @@ function pageOcorrencias() {
       <div class="form-grid">
         <div class="form-group">
           <label class="form-label">Tipo de Ocorrência</label>
-          <select class="form-select" id="oc-tipo">
+          <select class="form-select" id="oc-tipo" onchange="ocLimparAviso('oc-tipo')">
             <option value="">— Selecione —</option>
             ${TIPOS_OCORRENCIA.map(t => `<option value="${t}">${t}</option>`).join('')}
           </select>
+          <div class="form-error" id="oc-tipo-aviso" style="display:none;color:#c0392b;font-size:12px;margin-top:4px">Selecione o tipo de ocorrência.</div>
         </div>
         <div class="form-group">
           <label class="form-label">Colaborador</label>
-          <select class="form-select" id="oc-colaborador">
+          <select class="form-select" id="oc-colaborador" onchange="ocLimparAviso('oc-colaborador')">
             <option value="">— Selecione —</option>
             ${(_colaboradoresSupabase || []).map(c => `<option value="${c.id_colaborador}">${c.nome_colaborador}</option>`).join('')}
           </select>
+          <div class="form-error" id="oc-colaborador-aviso" style="display:none;color:#c0392b;font-size:12px;margin-top:4px">Selecione o colaborador.</div>
         </div>
         <div class="form-group">
           <label class="form-label">Data da Ocorrência</label>
-          <input class="form-input" type="date" id="oc-data">
+          <input class="form-input" type="date" id="oc-data" onchange="ocLimparAviso('oc-data')">
+          <div class="form-error" id="oc-data-aviso" style="display:none;color:#c0392b;font-size:12px;margin-top:4px">Informe a data da ocorrência.</div>
         </div>
         <div class="form-group form-full">
           <label class="form-label">Descrição</label>
@@ -2380,7 +2383,8 @@ function pageOcorrencias() {
         </div>
         <div class="form-group form-full">
           <label class="form-label">Registrado Por</label>
-          <textarea class="form-input" id="oc-registrado-por" rows="2" placeholder="Nome de quem está registrando..."></textarea>
+          <textarea class="form-input" id="oc-registrado-por" rows="2" placeholder="Nome de quem está registrando..." oninput="ocLimparAviso('oc-registrado-por')"></textarea>
+          <div class="form-error" id="oc-registrado-por-aviso" style="display:none;color:#c0392b;font-size:12px;margin-top:4px">Informe quem está registrando a ocorrência.</div>
         </div>
       </div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
@@ -2475,7 +2479,19 @@ window.openOcorrenciaModal = function(ocorrenciaId = null) {
     ocRegistradoPor.value = '';
   }
 
+  ['oc-tipo', 'oc-colaborador', 'oc-data', 'oc-registrado-por'].forEach(id => window.ocLimparAviso(id));
   document.getElementById('ocorrencia-modal').style.display = 'flex';
+};
+
+// Marca (ou limpa) o aviso visual de campo obrigatório não preenchido no form de Ocorrência.
+window.ocMarcarAviso = function(id, mostrar) {
+  const campo = document.getElementById(id);
+  const aviso = document.getElementById(id + '-aviso');
+  if (campo) campo.style.borderColor = mostrar ? '#c0392b' : '';
+  if (aviso) aviso.style.display = mostrar ? '' : 'none';
+};
+window.ocLimparAviso = function(id) {
+  window.ocMarcarAviso(id, false);
 };
 
 window.closeOcorrenciaModal = function() {
@@ -2493,8 +2509,13 @@ window.salvarOcorrencia = async function() {
   const descricao = document.getElementById('oc-descricao').value.trim();
   const registradoPor = document.getElementById('oc-registrado-por').value.trim();
 
-  if (!tipo || !colaboradorId || !data) {
-    showToast('Preencha o tipo, o colaborador e a data da ocorrência.', 'danger');
+  window.ocMarcarAviso('oc-tipo', !tipo);
+  window.ocMarcarAviso('oc-colaborador', !colaboradorId);
+  window.ocMarcarAviso('oc-data', !data);
+  window.ocMarcarAviso('oc-registrado-por', !registradoPor);
+
+  if (!tipo || !colaboradorId || !data || !registradoPor) {
+    showToast('Preencha os campos obrigatórios destacados em vermelho.', 'danger');
     return;
   }
   if (!supaClient) return showToast('Supabase não está configurado.', 'danger');
@@ -2521,7 +2542,7 @@ window.salvarOcorrencia = async function() {
   } else {
     const { error } = await supaClient
       .from('ocorrencias')
-      .insert([payload]);
+      .insert([{ ...payload, created_at: new Date().toISOString() }]);
 
     if (error) {
       console.error('Erro ao registrar ocorrência:', error.message);
