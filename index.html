@@ -2150,10 +2150,31 @@ function pageColaboradoresTemporarios() {
 function pageColaboradoresExperiencia() {
   document.getElementById('topbar-actions').innerHTML = '';
 
+  if (!window._expFiltros) window._expFiltros = { cargo: '' };
+  if (!window._expOrdem) window._expOrdem = 'nome';
+
   const renderTabela = () => {
     const tbody = document.getElementById('col-experiencia-tbody');
     if (!tbody) return;
-    const lista = (_colaboradoresSupabase || []).filter(c => c.tipo_de_contrato === 'Experiência');
+
+    let lista = (_colaboradoresSupabase || []).filter(c => c.tipo_de_contrato === 'Experiência');
+
+    // Atualiza as opções do filtro de Cargo com os cargos realmente em uso pelos colaboradores em experiência
+    const selCargo = document.getElementById('exp-filtro-cargo');
+    if (selCargo) {
+      const cargosDistintos = [...new Set(lista.map(c => c.cargos ? c.cargos.nome_cargo : null).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+      selCargo.innerHTML = '<option value="">Todos os cargos</option>' +
+        cargosDistintos.map(c => `<option value="${c}" ${window._expFiltros.cargo === c ? 'selected' : ''}>${c}</option>`).join('');
+    }
+
+    if (window._expFiltros.cargo) lista = lista.filter(c => (c.cargos ? c.cargos.nome_cargo : '') === window._expFiltros.cargo);
+
+    lista = [...lista].sort((a, b) => {
+      if (window._expOrdem === 'data-asc') return (a.desde || '').localeCompare(b.desde || '');
+      if (window._expOrdem === 'data-desc') return (b.desde || '').localeCompare(a.desde || '');
+      return (a.nome_colaborador || '').localeCompare(b.nome_colaborador || '');
+    });
+
     tbody.innerHTML = lista.length === 0
       ? '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhum colaborador em experiência encontrado.</td></tr>'
       : lista.map(c => {
@@ -2184,11 +2205,24 @@ function pageColaboradoresExperiencia() {
       <span class="table-title">Colaboradores em Experiência</span>
       <input class="search-input" placeholder="Buscar colaborador..." oninput="filtrarTabelaGenerica('col-experiencia-tbody', this.value)" style="margin-left:12px">
     </div>
-    <table>
+    <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:var(--bg2)">
+      <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase">Filtrar:</span>
+      <select class="form-select" id="exp-filtro-cargo" style="width:auto" onchange="filtrarExpCargo(this.value)">
+        <option value="">Todos os cargos</option>
+      </select>
+      <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-left:12px">Ordenar:</span>
+      <select class="form-select" style="width:auto" onchange="ordenarExpTabela(this.value)">
+        <option value="nome" ${window._expOrdem === 'nome' ? 'selected' : ''}>Nome (A-Z)</option>
+        <option value="data-desc" ${window._expOrdem === 'data-desc' ? 'selected' : ''}>Data (mais recente)</option>
+        <option value="data-asc" ${window._expOrdem === 'data-asc' ? 'selected' : ''}>Data (mais antiga)</option>
+      </select>
+    </div>
+    <div style="overflow-x:auto">
+    <table style="white-space:nowrap">
       <thead>
         <tr>
-          <th>Nome</th>
-          <th>Cargo</th>
+          <th style="min-width:200px">Nome</th>
+          <th style="min-width:160px">Cargo</th>
           <th>Desde</th>
           <th>Primeira Avaliação de Experiência</th>
           <th>Anexar Avaliação 1</th>
@@ -2200,8 +2234,19 @@ function pageColaboradoresExperiencia() {
         <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
       </tbody>
     </table>
+    </div>
   </div>`;
 }
+
+window.filtrarExpCargo = function(valor) {
+  if (!window._expFiltros) window._expFiltros = {};
+  window._expFiltros.cargo = valor;
+  if (window._renderColExperiencia) window._renderColExperiencia();
+};
+window.ordenarExpTabela = function(valor) {
+  window._expOrdem = valor;
+  if (window._renderColExperiencia) window._renderColExperiencia();
+};
 
 function viewStatusEmployee(colabId) {
   const colab = _colaboradoresSupabase.find(c => c.id_colaborador === colabId);
