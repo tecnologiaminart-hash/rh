@@ -897,7 +897,7 @@ const NAV = [
       { id: 'col-temporarios', label: 'Colaboradores Temporários' },
       { id: 'col-experiencia', label: 'Colaboradores em Experiência' },
       { id: 'col-documentos', label: 'Documentos' },
-      { id: 'col-historico', label: 'Histórico' },
+      { id: 'col-historico', label: 'Histórico de Carreira' },
     ]
   },
   {
@@ -1414,7 +1414,7 @@ function pageHistoricoCarreiraDetalhe(idColaborador) {
               <div class="empty-state-icon">🤔</div>
               <div class="empty-state-title">Colaborador não encontrado</div>
               <div class="empty-state-desc">Não foi possível carregar o histórico para este colaborador.</div>
-              <button class="btn" onclick="navigate('col-historico','Histórico','Colaboradores')">← Voltar para a lista</button>
+              <button class="btn" onclick="navigate('col-historico','Histórico de Carreira','Colaboradores')">← Voltar para a lista</button>
             </div>`;
   }
 
@@ -1453,7 +1453,7 @@ function pageHistoricoCarreiraDetalhe(idColaborador) {
     <div class="table-header">
       <span class="table-title">Histórico de Carreira de ${colaborador.nome_colaborador}</span>
       <div class="table-actions">
-        <button class="btn" onclick="navigate('col-historico', 'Histórico', 'Colaboradores')">← Voltar</button>
+        <button class="btn" onclick="navigate('col-historico', 'Histórico de Carreira', 'Colaboradores')">← Voltar</button>
       </div>
     </div>
     <table class="table">
@@ -6685,7 +6685,7 @@ function escreverColaboradorNoPdf(doc, state, dadosColab, secoes, margemEsq) {
   if (secoes.includes('historico')) {
     titulo('Histórico de Carreira');
     if (historico.length === 0) {
-      campo('Histórico', 'Nenhum registro.');
+      campo('Histórico de Carreira', 'Nenhum registro.');
     } else {
       historico.forEach(h => {
         campo('Período', `${formatarDataBR(h.periodo_inicio) || '—'} – ${formatarDataBR(h.periodo_fim) || 'Atual'}`);
