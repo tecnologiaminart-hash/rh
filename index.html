@@ -920,6 +920,7 @@ const NAV = [
     id: 'avaliacoes', label: 'Avaliações', icon: '◈',
     subs: [
       { id: 'aval-disc', label: 'Perfil DISC' },
+      { id: 'aval-disc-interno', label: 'Perfil DISC Colaborador Interno' },
       { id: 'cont-formulario-entrevista', label: 'Formulários para Entrevista' },
       { id: 'aval-perguntas-competencias', label: 'Perguntas por Competências' },
     ]
@@ -2728,6 +2729,7 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
     'dep-alteracao':   pageAlteracao,
     'dep-relatorio':   pageRelatorio,
     'aval-disc':       pagePerfilDisc,
+    'aval-disc-interno': pagePerfilDiscInterno,
     'aval-perguntas-competencias': pagePerguntasCompetencias,
     'ficha-dados':     pageDadosPessoais,
     'ficha-mapeamento': pageMapeamentoPerfil,
@@ -2982,7 +2984,7 @@ window.filtrarFormulariosEntrevista = function(query) {
 // ------------------------------------------------------------
 function pagePerfilDisc() {
   document.getElementById('topbar-actions').innerHTML =
-    `<button class="btn btn-primary" onclick="toggleDispatoTesteDisc()">+ Disparo Teste Disc
+    `<button class="btn btn-primary" onclick="toggleDispatoTesteDisc()">+ Disparo Teste Disc Exemplo
        </button>`;
 
   const colunas = [
@@ -3226,6 +3228,159 @@ window.renderDiscTeste = function() {
           : `<button class="btn btn-primary" onclick="enviarTesteDisc()">Enviar Teste</button>`}
       </div>
     </div>`;
+};
+
+// ------------------------------------------------------------
+// AVALIAÇÕES — PERFIL DISC (COLABORADOR INTERNO)
+// ------------------------------------------------------------
+// Reaproveita a tabela `testes_avaliacoes` já usada para candidatos: aqui as
+// linhas ficam identificadas por `id_colaborador` (em vez de `id_candidato`),
+// para poder disparar a mesma avaliação de Perfil DISC para colaboradores
+// já contratados, sem misturar com o funil de contratação.
+function pagePerfilDiscInterno() {
+  document.getElementById('topbar-actions').innerHTML =
+    `<button class="btn btn-primary" onclick="abrirDisparoColaboradorInternoModal()">+ Disparo para Colaborador interno</button>`;
+
+  const renderTabela = () => {
+    const tbody = document.getElementById('disc-interno-tbody');
+    if (!tbody) return;
+    const lista = (window._testesAvaliacoes || []).filter(t => t.id_colaborador);
+    tbody.innerHTML = lista.length === 0
+      ? '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum teste Disk disparado ainda.</td></tr>'
+      : lista.map(t => {
+          const link = `${location.origin}${location.pathname}?avaliacao=${t.token}`;
+          const concluido = t.status_realizacao === 'concluido';
+          const colab = (_colaboradoresSupabase || []).find(c => String(c.id_colaborador) === String(t.id_colaborador));
+          const dados = (window._dadosPessoaisEpi || []).find(d => String(d.id_colaborador) === String(t.id_colaborador));
+          const cargoNome = colab && colab.cargos ? colab.cargos.nome_cargo : '';
+          const linkWhats = dados ? linkWhatsappAvaliacaoColaborador(dados.telefone, t.nome_colaborador, cargoNome, link) : null;
+          return `
+          <tr>
+            <td><strong>${t.nome_colaborador || '—'}</strong></td>
+            <td style="white-space:normal;min-width:260px">
+              <div style="display:flex;gap:6px;align-items:center">
+                <input class="form-input" readonly value="${link}" style="font-size:12px;padding:6px 8px;flex:1" onclick="this.select()">
+                <button class="action-btn" title="Copiar link" onclick="copiarLinkDiscInterno('${link}')">📋</button>
+                ${linkWhats ? `<a class="action-btn" title="Enviar por WhatsApp" href="${linkWhats}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">📱</a>` : ''}
+              </div>
+            </td>
+            <td>${concluido ? '<span class="badge badge-active">Concluído</span>' : '<span class="badge badge-pending">Pendente</span>'}</td>
+            <td style="color:var(--text3);font-size:12px">${t.respondido_em ? new Date(t.respondido_em).toLocaleString('pt-BR') : '—'}</td>
+            <td>${t.resultado_perfil_disk || '—'}</td>
+          </tr>`;
+        }).join('');
+  };
+
+  window._renderDiscInterno = renderTabela;
+  Promise.all([
+    loadTestesAvaliacoesForApp(),
+    (!_colaboradoresSupabase || _colaboradoresSupabase.length === 0) ? loadColaboradoresFromSupabase() : Promise.resolve(),
+    loadDadosPessoaisEpiForApp(),
+  ]).then(renderTabela);
+
+  return `
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">Perfil DISC — Colaborador Interno</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Nome do Colaborador</th>
+          <th>Link</th>
+          <th>Status</th>
+          <th>Respondido em</th>
+          <th>Perfil DISC</th>
+        </tr>
+      </thead>
+      <tbody id="disc-interno-tbody">
+        <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>`;
+}
+
+window.copiarLinkDiscInterno = function(link) {
+  navigator.clipboard.writeText(link).then(() => showToast('Link copiado!')).catch(() => showToast('Não foi possível copiar o link.', 'danger'));
+};
+
+// Monta o link de WhatsApp convidando o colaborador interno a responder a
+// avaliação de Perfil DISC (mesma mensagem usada para candidatos, adaptada).
+function linkWhatsappAvaliacaoColaborador(numero, nomeColaborador, cargoNome, link) {
+  let digits = String(numero || '').replace(/\D/g, '');
+  if (!digits) return null;
+  if (!digits.startsWith('55')) digits = '55' + digits;
+  const mensagem = `Olá, ${nomeColaborador || ''}! Para seguir com sua avaliação interna${cargoNome ? ` de ${cargoNome}` : ''} na Minart Móveis, acesse o link abaixo e responda a avaliação de Perfil DISC — o link só pode ser respondido uma vez:\n${link}`;
+  return `https://wa.me/${digits}?text=${encodeURIComponent(mensagem)}`;
+}
+
+window.abrirDisparoColaboradorInternoModal = async function() {
+  if (!_colaboradoresSupabase || _colaboradoresSupabase.length === 0) {
+    await loadColaboradoresFromSupabase();
+  }
+
+  if (!document.getElementById('disparo-disc-interno-modal')) {
+    const modal = document.createElement('div');
+    modal.id = 'disparo-disc-interno-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:6px;width:440px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:15px;font-weight:700">Disparo para Colaborador interno</div>
+          <button type="button" class="btn btn-sm" onclick="document.getElementById('disparo-disc-interno-modal').style.display='none'">✕</button>
+        </div>
+        <div style="padding:24px">
+          <div class="form-group" style="margin-bottom:4px">
+            <label class="form-label">Colaborador</label>
+            <select class="form-select" id="disp-disc-colaborador"><option value="">— Selecione —</option></select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn" onclick="document.getElementById('disparo-disc-interno-modal').style.display='none'">Cancelar</button>
+          <button type="button" class="btn btn-primary" id="disp-disc-btn-salvar" onclick="salvarDisparoColaboradorInterno()">Disparar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  const selectColab = document.getElementById('disp-disc-colaborador');
+  selectColab.innerHTML = '<option value="">— Selecione —</option>' +
+    (_colaboradoresSupabase || []).map(c => `<option value="${c.id_colaborador}">${c.nome_colaborador}</option>`).join('');
+
+  document.getElementById('disparo-disc-interno-modal').style.display = 'flex';
+};
+
+window.salvarDisparoColaboradorInterno = async function() {
+  const idColaborador = document.getElementById('disp-disc-colaborador').value;
+  if (!idColaborador) return showToast('Selecione o colaborador.');
+
+  const colab = (_colaboradoresSupabase || []).find(c => String(c.id_colaborador) === String(idColaborador));
+  if (!colab) return showToast('Colaborador não encontrado.', 'danger');
+
+  const btn = document.getElementById('disp-disc-btn-salvar');
+  if (btn) { btn.disabled = true; btn.textContent = 'Disparando...'; }
+
+  try {
+    const token = await gerarTokenUnico('testes_avaliacoes', 'token', () => crypto.randomUUID());
+    const { error } = await supaClient.from('testes_avaliacoes').insert([{
+      token,
+      id_colaborador: colab.id_colaborador,
+      id_cargo: colab.id_cargos,
+      nome_colaborador: colab.nome_colaborador,
+      status_realizacao: 'pendente'
+    }]);
+    if (error) throw error;
+
+    document.getElementById('disparo-disc-interno-modal').style.display = 'none';
+    await loadTestesAvaliacoesForApp();
+    if (window._renderDiscInterno) window._renderDiscInterno();
+    showToast('Disparo criado! Copie o link na tabela para enviar ao colaborador.');
+  } catch (e) {
+    console.error('Erro ao disparar avaliação para colaborador interno:', e);
+    showToast('Erro ao disparar avaliação: ' + (e.message || e));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Disparar'; }
+  }
 };
 
 // ------------------------------------------------------------
@@ -7061,7 +7216,7 @@ async function checkAvaliacaoLink() {
     // Nome vem direto de testes_avaliacoes (gravado no momento da aprovação) em vez
     // de consultar candidaturas, porque o anon normalmente só tem permissão de
     // INSERT nessa tabela (usada pelo formulário público), não de SELECT.
-    nomeCandidato: teste.nome_candidato || 'Candidato',
+    nomeCandidato: teste.nome_candidato || teste.nome_colaborador || 'Candidato',
   };
 
   renderAvaliacaoEtapaDisc();
