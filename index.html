@@ -2093,7 +2093,7 @@ function pageColaboradoresExperiencia() {
     if (!tbody) return;
     const lista = (_colaboradoresSupabase || []).filter(c => c.tipo_de_contrato === 'Experiência');
     tbody.innerHTML = lista.length === 0
-      ? '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum colaborador em experiência encontrado.</td></tr>'
+      ? '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhum colaborador em experiência encontrado.</td></tr>'
       : lista.map(c => {
           const cargoNome = c.cargos ? c.cargos.nome_cargo : '—';
           return `
@@ -2102,7 +2102,19 @@ function pageColaboradoresExperiencia() {
             <td>${cargoNome}</td>
             <td>${formatarDataBR(c.desde) || '—'}</td>
             <td>${adicionarDiasDataBR(c.desde, 20) || '—'}</td>
+            <td>
+              <div style="display:flex;gap:6px;align-items:center">
+                <input class="form-input" id="text-aval-${c.id_colaborador}" value="${(c.text_aval || '').replace(/"/g, '&quot;')}" style="font-size:12px;padding:6px 8px;width:140px" placeholder="Anexar avaliação...">
+                <button class="action-btn" title="Salvar avaliação 1" onclick="salvarTextAval(${c.id_colaborador}, 1)">💾</button>
+              </div>
+            </td>
             <td>${adicionarDiasDataBR(c.desde, 85) || '—'}</td>
+            <td>
+              <div style="display:flex;gap:6px;align-items:center">
+                <input class="form-input" id="text-aval2-${c.id_colaborador}" value="${(c.text_aval2 || '').replace(/"/g, '&quot;')}" style="font-size:12px;padding:6px 8px;width:140px" placeholder="Anexar avaliação...">
+                <button class="action-btn" title="Salvar avaliação 2" onclick="salvarTextAval(${c.id_colaborador}, 2)">💾</button>
+              </div>
+            </td>
           </tr>`;
         }).join('');
   };
@@ -2123,11 +2135,13 @@ function pageColaboradoresExperiencia() {
           <th>Cargo</th>
           <th>Desde</th>
           <th>Primeira Avaliação de Experiência</th>
+          <th>Anexar Avaliação 1</th>
           <th>Segunda Avaliação de Experiência</th>
+          <th>Anexar Avaliação 2</th>
         </tr>
       </thead>
       <tbody id="col-experiencia-tbody">
-        <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
+        <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
       </tbody>
     </table>
   </div>`;
@@ -3799,6 +3813,22 @@ window.aprovarEntrevistaPresencial = function(idCandidatura) {
 
 window.reprovarEntrevistaPresencial = function(idCandidatura) {
   atualizarStatusEntrevista(idCandidatura, 'Reprovado');
+};
+
+window.salvarTextAval = async function(idColaborador, numero) {
+  const campo = numero === 2 ? 'text_aval2' : 'text_aval';
+  const el = document.getElementById(numero === 2 ? `text-aval2-${idColaborador}` : `text-aval-${idColaborador}`);
+  if (!el) return;
+  try {
+    const { error } = await supaClient.from('colaboradores').update({ [campo]: el.value }).eq('id_colaborador', idColaborador);
+    if (error) throw error;
+    await loadColaboradoresFromSupabase();
+    if (typeof window._renderColExperiencia === 'function') window._renderColExperiencia();
+    showToast('Avaliação salva!');
+  } catch (e) {
+    console.error('Erro ao salvar avaliação:', e);
+    showToast('Erro ao salvar avaliação: ' + (e.message || e));
+  }
 };
 
 window.salvarObservacoesAvaliacao = async function(idCandidatura) {
