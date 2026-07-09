@@ -425,6 +425,8 @@ const ACADEMIA_MINART_URL = 'https://tecnologiaminart-hash.github.io/rh/academia
 let _colaboradoresSupabase = [];
 let _editingStatusColabId = null;
 let _historicoColaboradoresSupabase = [];
+let _ocorrenciasSupabase = [];
+let _editingOcorrenciaId = null;
 let _editingHistoricoColabId = null;
 let _cargos = []; // Para armazenar os cargos do Supabase
 let _statusEmployees = [];
@@ -896,6 +898,7 @@ const NAV = [
       { id: 'col-status', label: 'Informações Contratuais' },
       { id: 'col-temporarios', label: 'Colaboradores Temporários' },
       { id: 'col-experiencia', label: 'Colaboradores em Experiência' },
+      { id: 'col-ocorrencias', label: 'Ocorrências' },
       { id: 'col-documentos', label: 'Documentos' },
       { id: 'col-historico', label: 'Histórico de Carreira' },
     ]
@@ -1780,6 +1783,14 @@ function renderStatusTable() {
       if (sb === null) return -1;
       return window._statusOrdem === 'salario-desc' ? sb - sa : sa - sb;
     }
+    if (window._statusOrdem === 'admissao-desc' || window._statusOrdem === 'admissao-asc') {
+      const da = a.desde ? new Date(a.desde).getTime() : null;
+      const db = b.desde ? new Date(b.desde).getTime() : null;
+      if (da === null && db === null) return 0;
+      if (da === null) return 1;
+      if (db === null) return -1;
+      return window._statusOrdem === 'admissao-desc' ? db - da : da - db;
+    }
     return (a.nome_colaborador || '').localeCompare(b.nome_colaborador || '');
   });
 
@@ -1911,6 +1922,8 @@ function pageStatus() {
         <option value="cargo" ${window._statusOrdem === 'cargo' ? 'selected' : ''}>Cargo (A-Z)</option>
         <option value="salario-desc" ${window._statusOrdem === 'salario-desc' ? 'selected' : ''}>Salário (maior → menor)</option>
         <option value="salario-asc" ${window._statusOrdem === 'salario-asc' ? 'selected' : ''}>Salário (menor → maior)</option>
+        <option value="admissao-desc" ${window._statusOrdem === 'admissao-desc' ? 'selected' : ''}>Data de Admissão (maior para menor)</option>
+        <option value="admissao-asc" ${window._statusOrdem === 'admissao-asc' ? 'selected' : ''}>Data de Admissão (menor para maior)</option>
       </select>
     </div>
     <div style="overflow-x:auto">
@@ -2246,6 +2259,291 @@ window.filtrarExpCargo = function(valor) {
 window.ordenarExpTabela = function(valor) {
   window._expOrdem = valor;
   if (window._renderColExperiencia) window._renderColExperiencia();
+};
+
+// ------------------------------------------------------------
+// OCORRÊNCIAS
+// ------------------------------------------------------------
+const TIPOS_OCORRENCIA = [
+  'Advertência Verbal',
+  'Advertência Escrita',
+  'Suspensão',
+  'Elogio',
+  'Observação Administrativa',
+  'Acompanhamento',
+  'Licença Médica',
+  'Licença Maternidade',
+  'Licença Paternidade',
+  'Afastamento INSS',
+  'CAT',
+  'Acidente de Trabalho',
+  'Retorno ao Trabalho',
+  'Restrição Médica',
+  'Outro',
+];
+
+async function loadOcorrenciasFromSupabase() {
+  if (!supaClient) {
+    console.error('Supabase client não inicializado.');
+    return;
+  }
+  const { data, error } = await supaClient
+    .from('ocorrencias')
+    .select('*')
+    .order('data_ocorrencia', { ascending: false });
+
+  if (error) {
+    console.error('Erro ao carregar ocorrências:', error.message);
+    showToast('Erro ao carregar ocorrências.', 'danger');
+    _ocorrenciasSupabase = [];
+  } else {
+    _ocorrenciasSupabase = data || [];
+  }
+  if (window._renderOcorrencias) window._renderOcorrencias();
+}
+
+function nomeColaboradorPorId(id) {
+  const colab = (_colaboradoresSupabase || []).find(c => String(c.id_colaborador) === String(id));
+  return colab ? colab.nome_colaborador : 'N/A';
+}
+
+function pageOcorrencias() {
+  document.getElementById('topbar-actions').innerHTML = `<button type="button" class="btn btn-primary" onclick="openOcorrenciaModal()">+ Registrar</button>`;
+
+  if (!window._ocorrenciasFiltros) window._ocorrenciasFiltros = { colaborador: '', tipo: '' };
+  if (!window._ocorrenciasOrdem) window._ocorrenciasOrdem = 'data-desc';
+
+  const renderTabela = () => {
+    const tbody = document.getElementById('ocorrencias-tbody');
+    if (!tbody) return;
+
+    let lista = [..._ocorrenciasSupabase];
+    if (window._ocorrenciasFiltros.colaborador) lista = lista.filter(o => String(o.id_colaborador) === String(window._ocorrenciasFiltros.colaborador));
+    if (window._ocorrenciasFiltros.tipo) lista = lista.filter(o => o.tipo_ocorrencia === window._ocorrenciasFiltros.tipo);
+
+    lista.sort((a, b) => {
+      if (window._ocorrenciasOrdem === 'data-asc') return (a.data_ocorrencia || '').localeCompare(b.data_ocorrencia || '');
+      if (window._ocorrenciasOrdem === 'colaborador') return nomeColaboradorPorId(a.id_colaborador).localeCompare(nomeColaboradorPorId(b.id_colaborador));
+      if (window._ocorrenciasOrdem === 'tipo') return (a.tipo_ocorrencia || '').localeCompare(b.tipo_ocorrencia || '');
+      return (b.data_ocorrencia || '').localeCompare(a.data_ocorrencia || ''); // data-desc (padrão)
+    });
+
+    tbody.innerHTML = lista.length === 0
+      ? '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma ocorrência registrada.</td></tr>'
+      : lista.map(o => `
+        <tr>
+          <td><strong>${nomeColaboradorPorId(o.id_colaborador)}</strong></td>
+          <td>${o.tipo_ocorrencia || '—'}</td>
+          <td>${formatarDataBR(o.data_ocorrencia) || '—'}</td>
+          <td style="white-space:normal;max-width:320px">${(o.descricao || '—').replace(/</g,'&lt;')}</td>
+          <td>${(o.registrado_por || '—').replace(/</g,'&lt;')}</td>
+          <td>
+            <button class="action-btn" onclick="editarOcorrencia(${o.id_ocorrencia})">✎</button>
+            <button class="action-btn btn-danger" onclick="excluirOcorrencia(${o.id_ocorrencia})">✕</button>
+          </td>
+        </tr>`).join('');
+  };
+
+  window._renderOcorrencias = renderTabela;
+  Promise.resolve(!_colaboradoresSupabase || _colaboradoresSupabase.length === 0 ? loadColaboradoresFromSupabase() : null)
+    .then(() => loadOcorrenciasFromSupabase());
+
+  return `
+  <div style="font-size:13px;color:var(--text3);margin-bottom:16px">Registre advertências, licenças, afastamentos e observações administrativas dos colaboradores.</div>
+
+  <!-- Modal: Registrar/Editar Ocorrência -->
+  <div id="ocorrencia-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:6px;padding:32px;width:560px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="ocorrencia-modal-title">Registrar Ocorrência</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Tipo de Ocorrência</label>
+          <select class="form-select" id="oc-tipo">
+            <option value="">— Selecione —</option>
+            ${TIPOS_OCORRENCIA.map(t => `<option value="${t}">${t}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Colaborador</label>
+          <select class="form-select" id="oc-colaborador">
+            <option value="">— Selecione —</option>
+            ${(_colaboradoresSupabase || []).map(c => `<option value="${c.id_colaborador}">${c.nome_colaborador}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Data da Ocorrência</label>
+          <input class="form-input" type="date" id="oc-data">
+        </div>
+        <div class="form-group form-full">
+          <label class="form-label">Descrição</label>
+          <textarea class="form-input" id="oc-descricao" rows="4" placeholder="Detalhe o ocorrido..."></textarea>
+        </div>
+        <div class="form-group form-full">
+          <label class="form-label">Registrado Por</label>
+          <textarea class="form-input" id="oc-registrado-por" rows="2" placeholder="Nome de quem está registrando..."></textarea>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button class="btn" onclick="closeOcorrenciaModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="salvarOcorrencia()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">Ocorrências</span>
+      <input class="search-input" placeholder="Buscar ocorrência..." oninput="filtrarTabelaGenerica('ocorrencias-tbody', this.value)">
+    </div>
+    <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:var(--bg2)">
+      <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase">Filtrar:</span>
+      <select class="form-select" style="width:auto" onchange="filtrarOcorrenciasColaborador(this.value)">
+        <option value="">Todos os colaboradores</option>
+        ${(_colaboradoresSupabase || []).map(c => `<option value="${c.id_colaborador}" ${window._ocorrenciasFiltros.colaborador === String(c.id_colaborador) ? 'selected' : ''}>${c.nome_colaborador}</option>`).join('')}
+      </select>
+      <select class="form-select" style="width:auto" onchange="filtrarOcorrenciasTipo(this.value)">
+        <option value="">Todos os tipos</option>
+        ${TIPOS_OCORRENCIA.map(t => `<option value="${t}" ${window._ocorrenciasFiltros.tipo === t ? 'selected' : ''}>${t}</option>`).join('')}
+      </select>
+      <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-left:12px">Ordenar:</span>
+      <select class="form-select" style="width:auto" onchange="ordenarOcorrencias(this.value)">
+        <option value="data-desc" ${window._ocorrenciasOrdem === 'data-desc' ? 'selected' : ''}>Data (mais recente)</option>
+        <option value="data-asc" ${window._ocorrenciasOrdem === 'data-asc' ? 'selected' : ''}>Data (mais antiga)</option>
+        <option value="colaborador" ${window._ocorrenciasOrdem === 'colaborador' ? 'selected' : ''}>Colaborador (A-Z)</option>
+        <option value="tipo" ${window._ocorrenciasOrdem === 'tipo' ? 'selected' : ''}>Tipo (A-Z)</option>
+      </select>
+    </div>
+    <div style="overflow-x:auto">
+    <table style="white-space:nowrap">
+      <thead>
+        <tr>
+          <th style="min-width:180px">Colaborador</th>
+          <th style="min-width:170px">Tipo de Ocorrência</th>
+          <th>Data</th>
+          <th style="min-width:280px">Descrição</th>
+          <th style="min-width:140px">Registrado Por</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="ocorrencias-tbody">
+        <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando ocorrências...</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </div>`;
+}
+
+window.filtrarOcorrenciasColaborador = function(valor) {
+  if (!window._ocorrenciasFiltros) window._ocorrenciasFiltros = {};
+  window._ocorrenciasFiltros.colaborador = valor;
+  if (window._renderOcorrencias) window._renderOcorrencias();
+};
+window.filtrarOcorrenciasTipo = function(valor) {
+  if (!window._ocorrenciasFiltros) window._ocorrenciasFiltros = {};
+  window._ocorrenciasFiltros.tipo = valor;
+  if (window._renderOcorrencias) window._renderOcorrencias();
+};
+window.ordenarOcorrencias = function(valor) {
+  window._ocorrenciasOrdem = valor;
+  if (window._renderOcorrencias) window._renderOcorrencias();
+};
+
+window.openOcorrenciaModal = function(ocorrenciaId = null) {
+  _editingOcorrenciaId = ocorrenciaId;
+  const modalTitle = document.getElementById('ocorrencia-modal-title');
+  const ocTipo = document.getElementById('oc-tipo');
+  const ocColaborador = document.getElementById('oc-colaborador');
+  const ocData = document.getElementById('oc-data');
+  const ocDescricao = document.getElementById('oc-descricao');
+  const ocRegistradoPor = document.getElementById('oc-registrado-por');
+
+  if (ocorrenciaId) {
+    const oc = _ocorrenciasSupabase.find(o => String(o.id_ocorrencia) === String(ocorrenciaId));
+    if (!oc) return showToast('Ocorrência não encontrada.', 'danger');
+    modalTitle.textContent = 'Editar Ocorrência';
+    ocTipo.value = oc.tipo_ocorrencia || '';
+    ocColaborador.value = oc.id_colaborador || '';
+    ocData.value = oc.data_ocorrencia || '';
+    ocDescricao.value = oc.descricao || '';
+    ocRegistradoPor.value = oc.registrado_por || '';
+  } else {
+    modalTitle.textContent = 'Registrar Ocorrência';
+    ocTipo.value = '';
+    ocColaborador.value = '';
+    ocData.value = '';
+    ocDescricao.value = '';
+    ocRegistradoPor.value = '';
+  }
+
+  document.getElementById('ocorrencia-modal').style.display = 'flex';
+};
+
+window.closeOcorrenciaModal = function() {
+  document.getElementById('ocorrencia-modal').style.display = 'none';
+};
+
+window.editarOcorrencia = function(ocorrenciaId) {
+  window.openOcorrenciaModal(ocorrenciaId);
+};
+
+window.salvarOcorrencia = async function() {
+  const tipo = document.getElementById('oc-tipo').value;
+  const colaboradorId = document.getElementById('oc-colaborador').value;
+  const data = document.getElementById('oc-data').value;
+  const descricao = document.getElementById('oc-descricao').value.trim();
+  const registradoPor = document.getElementById('oc-registrado-por').value.trim();
+
+  if (!tipo || !colaboradorId || !data) {
+    showToast('Preencha o tipo, o colaborador e a data da ocorrência.', 'danger');
+    return;
+  }
+  if (!supaClient) return showToast('Supabase não está configurado.', 'danger');
+
+  const payload = {
+    tipo_ocorrencia: tipo,
+    id_colaborador: colaboradorId,
+    data_ocorrencia: data,
+    descricao: descricao || null,
+    registrado_por: registradoPor || null,
+  };
+
+  if (_editingOcorrenciaId) {
+    const { error } = await supaClient
+      .from('ocorrencias')
+      .update(payload)
+      .eq('id_ocorrencia', _editingOcorrenciaId);
+
+    if (error) {
+      console.error('Erro ao atualizar ocorrência:', error.message);
+      return showToast('Erro ao atualizar ocorrência.', 'danger');
+    }
+    showToast('Ocorrência atualizada com sucesso!');
+  } else {
+    const { error } = await supaClient
+      .from('ocorrencias')
+      .insert([payload]);
+
+    if (error) {
+      console.error('Erro ao registrar ocorrência:', error.message);
+      return showToast('Erro ao registrar ocorrência.', 'danger');
+    }
+    showToast('Ocorrência registrada com sucesso!');
+  }
+
+  window.closeOcorrenciaModal();
+  await loadOcorrenciasFromSupabase();
+};
+
+window.excluirOcorrencia = async function(ocorrenciaId) {
+  if (!confirm('Tem certeza que deseja excluir esta ocorrência? Esta ação não pode ser desfeita.')) return;
+
+  const { error } = await supaClient.from('ocorrencias').delete().eq('id_ocorrencia', ocorrenciaId);
+  if (error) {
+    console.error('Erro ao excluir ocorrência:', error.message);
+    return showToast('Erro ao excluir ocorrência.', 'danger');
+  }
+  showToast('Ocorrência excluída com sucesso.');
+  await loadOcorrenciasFromSupabase();
 };
 
 function viewStatusEmployee(colabId) {
@@ -2814,6 +3112,7 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
     'col-status':      pageStatus,
     'col-temporarios': pageColaboradoresTemporarios,
     'col-experiencia': pageColaboradoresExperiencia,
+    'col-ocorrencias': pageOcorrencias,
     'col-historico':   pageHistoricoCol,
     'col-historico-detalhe': pageHistoricoCarreiraDetalhe,
     'cont-candidatos': pageCandidatos,
