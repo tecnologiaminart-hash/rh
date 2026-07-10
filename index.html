@@ -2907,6 +2907,7 @@ function pageContratosAlinhamentos() {
               <div class="form-group" style="margin-bottom:8px">
                 <label class="form-label">Anexar Link da Avaliação</label>
                 <input class="form-input" id="ca-aval-link" placeholder="Cole o link da planilha de Avaliação">
+                <div id="ca-aval-link-view"></div>
               </div>
               <div class="form-group" style="margin-bottom:8px">
                 <label class="form-label">Status Finalização de Experiência</label>
@@ -2948,12 +2949,12 @@ function pageContratosAlinhamentos() {
             <div style="font-size:13px;font-weight:700;text-transform:uppercase;margin-bottom:14px;color:var(--text2)">Enviar Contrato Experiência & Efetivo</div>
             <div class="form-group" style="margin-bottom:16px">
               <label class="form-label">Anexar Contrato de Experiência</label>
-              <input class="form-input" type="file" id="ca-contrato-exp-arquivo" accept=".pdf,.jpg,.png,.jpeg">
+              <div id="ca-contrato-exp-input-wrap"><input class="form-input" type="file" id="ca-contrato-exp-arquivo" accept=".pdf,.jpg,.png,.jpeg"></div>
               <div id="ca-contrato-exp-link"></div>
             </div>
             <div class="form-group" style="margin-bottom:8px">
               <label class="form-label">Anexar Contrato Efetivo de Trabalho</label>
-              <input class="form-input" type="file" id="ca-contrato-efetivo-arquivo" accept=".pdf,.jpg,.png,.jpeg">
+              <div id="ca-contrato-efetivo-input-wrap"><input class="form-input" type="file" id="ca-contrato-efetivo-arquivo" accept=".pdf,.jpg,.png,.jpeg"></div>
               <div id="ca-contrato-efetivo-link"></div>
             </div>
             <button type="button" class="btn btn-primary" style="width:100%;margin-top:10px" onclick="salvarAnexosContrato()">Salvar Anexos</button>
@@ -3137,14 +3138,53 @@ function converterParaLinkDownloadDrive(url) {
   return url;
 }
 
-function renderAnexoLinks(url) {
+function renderVerLink(url, label) {
   if (!url) return '';
-  return `
-    <div style="display:flex;gap:12px;margin-top:6px">
-      <a href="${url}" target="_blank" rel="noopener" style="font-size:12px">👁 Ver</a>
-      <a href="${converterParaLinkDownloadDrive(url)}" style="font-size:12px">⬇ Baixar</a>
-    </div>`;
+  return `<div style="margin-top:6px"><a href="${url}" target="_blank" rel="noopener" style="font-size:12px">👁 ${label}</a></div>`;
 }
+
+// Renderiza o anexo (Contrato de Experiência ou Contrato Efetivo) da Coluna 4:
+// esconde o campo de arquivo enquanto já houver um link salvo (só mostra
+// Ver/Baixar/Excluir) e volta a exibir o campo assim que o anexo é excluído.
+function renderAnexoContratoColuna(campo) {
+  const ca = (_contratosAlinhamentos || []).find(x => String(x.id_colaborador) === String(_caModalColabId));
+  const url = ca ? ca[campo] : null;
+  const sufixo = campo === 'contrato_experiencia_url' ? 'exp' : 'efetivo';
+  const inputWrap = document.getElementById(`ca-contrato-${sufixo}-input-wrap`);
+  const linkDiv = document.getElementById(`ca-contrato-${sufixo}-link`);
+  if (inputWrap) inputWrap.style.display = url ? 'none' : '';
+  if (linkDiv) {
+    linkDiv.innerHTML = url ? `
+      <div style="display:flex;gap:12px;margin-top:6px;align-items:center;flex-wrap:wrap">
+        <a href="${url}" target="_blank" rel="noopener" style="font-size:12px">👁 Ver</a>
+        <a href="${converterParaLinkDownloadDrive(url)}" style="font-size:12px">⬇ Baixar</a>
+        <button type="button" class="btn btn-sm btn-danger" onclick="excluirAnexoContrato('${campo}')">🗑 Excluir</button>
+      </div>` : '';
+  }
+}
+
+window.excluirAnexoContrato = async function(campo) {
+  if (!_caModalColabId) return;
+  if (!confirm('Tem certeza que deseja excluir este anexo? Esta ação não pode ser desfeita.')) return;
+  if (!supaClient) return showToast('Supabase não está configurado.', 'danger');
+
+  const { error } = await supaClient
+    .from('contratos_alinhamentos')
+    .upsert({ id_colaborador: _caModalColabId, [campo]: null, updated_at: new Date().toISOString() }, { onConflict: 'id_colaborador' });
+
+  if (error) {
+    console.error('Erro ao excluir anexo:', error.message);
+    return showToast('Erro ao excluir anexo.', 'danger');
+  }
+
+  showToast('Anexo excluído com sucesso.');
+  await loadContratosAlinhamentosFromSupabase();
+  if (window._renderContratosAlinhamentos) window._renderContratosAlinhamentos();
+  const sufixo = campo === 'contrato_experiencia_url' ? 'exp' : 'efetivo';
+  const arquivoInput = document.getElementById(`ca-contrato-${sufixo}-arquivo`);
+  if (arquivoInput) arquivoInput.value = '';
+  renderAnexoContratoColuna(campo);
+};
 
 window.abrirContratoAlinhamentoModal = function(colabId) {
   _caModalColabId = colabId;
@@ -3165,12 +3205,13 @@ window.abrirContratoAlinhamentoModal = function(colabId) {
   document.getElementById('ca-aval2-data').value = (ca && ca.aval2_data) || '';
   document.getElementById('ca-aval2-obs').value = (ca && ca.aval2_observacoes) || '';
   document.getElementById('ca-aval-link').value = (ca && ca.aval_link) || '';
+  document.getElementById('ca-aval-link-view').innerHTML = renderVerLink(ca && ca.aval_link, 'Ver avaliação');
   document.getElementById('ca-status-finalizacao').value = (ca && ca.status_finalizacao_experiencia) || '';
   document.getElementById('ca-finalizacao-obs').value = (ca && ca.finalizacao_observacoes) || '';
   document.getElementById('ca-contrato-exp-arquivo').value = '';
-  document.getElementById('ca-contrato-exp-link').innerHTML = renderAnexoLinks(ca && ca.contrato_experiencia_url);
   document.getElementById('ca-contrato-efetivo-arquivo').value = '';
-  document.getElementById('ca-contrato-efetivo-link').innerHTML = renderAnexoLinks(ca && ca.contrato_efetivo_url);
+  renderAnexoContratoColuna('contrato_experiencia_url');
+  renderAnexoContratoColuna('contrato_efetivo_url');
   window.caAtualizarBlocoExperiencia();
 
   _editingExpectativaId = null;
@@ -3223,6 +3264,7 @@ window.salvarAvaliacaoExperiencia = async function() {
   showToast('Avaliação de Experiência salva com sucesso!');
   await loadContratosAlinhamentosFromSupabase();
   if (window._renderContratosAlinhamentos) window._renderContratosAlinhamentos();
+  document.getElementById('ca-aval-link-view').innerHTML = renderVerLink(payload.aval_link, 'Ver avaliação');
 };
 
 // Envia (ou mantém) os anexos de Contrato de Experiência e Contrato Efetivo de
@@ -3286,8 +3328,8 @@ window.salvarAnexosContrato = async function() {
 
   document.getElementById('ca-contrato-exp-arquivo').value = '';
   document.getElementById('ca-contrato-efetivo-arquivo').value = '';
-  document.getElementById('ca-contrato-exp-link').innerHTML = renderAnexoLinks(contratoExperienciaUrl);
-  document.getElementById('ca-contrato-efetivo-link').innerHTML = renderAnexoLinks(contratoEfetivoUrl);
+  renderAnexoContratoColuna('contrato_experiencia_url');
+  renderAnexoContratoColuna('contrato_efetivo_url');
 };
 
 window.mudarViewExpectativa = function(view) {
@@ -3314,7 +3356,7 @@ function renderExpectativaColuna() {
             <div style="font-size:13px;font-weight:600">${formatarDataBR(item.data_realizacao) || '—'}</div>
             <div style="font-size:12px;color:var(--text3)">${item.status_resultado || '—'}</div>
           </div>
-          ${item.url_arquivo ? `<button type="button" class="btn btn-sm" onclick="event.stopPropagation();window.open('${item.url_arquivo}','_blank')">🔗 Ver link</button>` : ''}
+          ${item.url_arquivo ? `<button type="button" class="btn btn-sm" onclick="event.stopPropagation();window.open('${item.url_arquivo}','_blank')">👁 Ver contrato</button>` : ''}
         </div>`).join('');
     return;
   }
@@ -3340,9 +3382,9 @@ function renderExpectativaColuna() {
       <textarea class="form-input" id="ca-exp-obs" rows="3">${(item && item.observacoes) || ''}</textarea>
     </div>
     <div class="form-group" style="margin-bottom:8px">
-      <label class="form-label">Enviar contrato de expectativa</label>
-      <input class="form-input" type="file" id="ca-exp-arquivo" accept=".pdf,.jpg,.png,.jpeg">
-      ${item && item.url_arquivo ? `<a href="${item.url_arquivo}" target="_blank" rel="noopener" style="font-size:12px;margin-top:6px;display:inline-block">📎 Ver arquivo enviado</a>` : ''}
+      ${item && item.url_arquivo
+        ? `<label class="form-label">Contrato de Expectativa</label><a href="${item.url_arquivo}" target="_blank" rel="noopener" style="font-size:12px;display:inline-block">👁 Ver contrato</a>`
+        : `<label class="form-label">Enviar contrato de expectativa</label><input class="form-input" type="file" id="ca-exp-arquivo" accept=".pdf,.jpg,.png,.jpeg">`}
     </div>
     <button type="button" class="btn btn-primary" style="width:100%;margin-top:6px" onclick="salvarContratoExpectativa()">${_editingExpectativaId ? 'Salvar Alterações' : 'Registrar'}</button>
   `;
@@ -3361,7 +3403,8 @@ window.salvarContratoExpectativa = async function() {
   const statusResultado = document.getElementById('ca-exp-status').value;
   const dataRealizacao = document.getElementById('ca-exp-data').value;
   const observacoes = document.getElementById('ca-exp-obs').value.trim();
-  const arquivo = document.getElementById('ca-exp-arquivo').files[0];
+  const arquivoInput = document.getElementById('ca-exp-arquivo');
+  const arquivo = arquivoInput ? arquivoInput.files[0] : null;
 
   if (!statusResultado || !dataRealizacao) {
     return showToast('Preencha o status resultado e a data de realização.', 'danger');
@@ -3442,7 +3485,7 @@ function renderDesempenhoColuna() {
             <div style="font-size:13px;font-weight:600">${formatarDataBR(item.data_realizacao) || '—'}</div>
             <div style="font-size:12px;color:var(--text3)">${item.status_resultado || '—'}</div>
           </div>
-          ${item.aval_link ? `<button type="button" class="btn btn-sm" onclick="event.stopPropagation();window.open('${item.aval_link}','_blank')">🔗 Ver link</button>` : ''}
+          ${item.aval_link ? `<button type="button" class="btn btn-sm" onclick="event.stopPropagation();window.open('${item.aval_link}','_blank')">👁 Ver avaliação</button>` : ''}
         </div>`).join('');
     return;
   }
@@ -3470,6 +3513,7 @@ function renderDesempenhoColuna() {
     <div class="form-group" style="margin-bottom:8px">
       <label class="form-label">Anexar Link da Avaliação</label>
       <input class="form-input" id="ca-des-link" placeholder="Cole o link da planilha de Avaliação" value="${((item && item.aval_link) || '').replace(/"/g,'&quot;')}">
+      ${renderVerLink(item && item.aval_link, 'Ver avaliação')}
     </div>
     <button type="button" class="btn btn-primary" style="width:100%;margin-top:6px" onclick="salvarAvaliacaoDesempenho()">${_editingDesempenhoId ? 'Salvar Alterações' : 'Registrar'}</button>
   `;
