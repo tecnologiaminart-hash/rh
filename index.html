@@ -7794,13 +7794,20 @@ function pageRelatorioColaborador() {
     <div class="form-group">
       <label class="form-label">Seções do Relatório</label>
       <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:6px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;font-weight:700">
+          <input type="checkbox" id="rel-secao-todas" onchange="toggleTodasSecoes(this.checked)"> Marcar todas
+        </label>
         ${SECOES_RELATORIO.map(s => `
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
-            <input type="checkbox" class="rel-secao-check" value="${s.key}" checked> ${s.label}
+            <input type="checkbox" class="rel-secao-check" value="${s.key}" onchange="onChangeSecaoRelatorio()"> ${s.label}
           </label>`).join('')}
       </div>
     </div>
     <div class="form-group" style="margin-top:16px;display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+      <div style="flex:1;min-width:240px">
+        <label class="form-label">Buscar Colaborador</label>
+        <input class="search-input" id="rel-colaborador-busca" placeholder="Buscar colaborador..." style="width:100%" oninput="filtrarSelectColaboradorRelatorio(this.value)">
+      </div>
       <div style="flex:1;min-width:240px">
         <label class="form-label">Selecionar Colaborador</label>
         <select class="form-select" id="rel-colaborador" onchange="gerarRelatorioColaborador(this.value)">
@@ -7816,6 +7823,51 @@ function pageRelatorioColaborador() {
 function secoesRelatorioSelecionadas() {
   const checks = document.querySelectorAll('.rel-secao-check:checked');
   return Array.from(checks).map(c => c.value);
+}
+
+window.filtrarSelectColaboradorRelatorio = function(query) {
+  const sel = document.getElementById('rel-colaborador');
+  if (!sel) return;
+  const q = String(query || '').trim().toLowerCase();
+  const valorAtual = sel.value;
+  const filtrados = (_colaboradoresSupabase || []).filter(c => !q || (c.nome_colaborador || '').toLowerCase().includes(q));
+  sel.innerHTML = '<option value="">— Selecione um colaborador —</option>' +
+    filtrados.map(c => `<option value="${c.id_colaborador}">${c.nome_colaborador}</option>`).join('');
+  if (valorAtual && filtrados.some(c => String(c.id_colaborador) === String(valorAtual))) {
+    sel.value = valorAtual;
+  }
+};
+
+window.toggleTodasSecoes = function(marcado) {
+  document.querySelectorAll('.rel-secao-check').forEach(c => { c.checked = marcado; });
+  const master = document.getElementById('rel-secao-todas');
+  if (master) master.indeterminate = false;
+  atualizarRelatorioAposMudarSecoes();
+};
+
+window.onChangeSecaoRelatorio = function() {
+  const checks = Array.from(document.querySelectorAll('.rel-secao-check'));
+  const todasMarcadas = checks.every(c => c.checked);
+  const nenhumaMarcada = checks.every(c => !c.checked);
+  const master = document.getElementById('rel-secao-todas');
+  if (master) {
+    master.checked = todasMarcadas;
+    master.indeterminate = !todasMarcadas && !nenhumaMarcada;
+  }
+  atualizarRelatorioAposMudarSecoes();
+};
+
+// Sem isso, marcar/desmarcar uma seção não atualizava nem a pré-visualização
+// nem window._relatorioAtual — então o PDF/XLSX baixado continuava refletindo
+// as seções de antes da mudança, exigindo recarregar a página pra corrigir.
+function atualizarRelatorioAposMudarSecoes() {
+  if (!window._relatorioAtual) return;
+  if (window._relatorioAtual.tipo === 'todos') {
+    window.gerarRelatorioTodos();
+    return;
+  }
+  const sel = document.getElementById('rel-colaborador');
+  if (sel && sel.value) window.gerarRelatorioColaborador(sel.value);
 }
 
 function montarDadosRelatorioColaborador(idColaborador) {
