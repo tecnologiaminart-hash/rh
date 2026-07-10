@@ -2709,6 +2709,7 @@ async function loadContratosAlinhamentosFromSupabase() {
   const { data, error } = await supaClient.from('contratos_alinhamentos').select('*');
   if (error) {
     console.error('Erro ao carregar contratos_alinhamentos:', error.message);
+    showToast('Erro ao carregar avaliações de experiência: ' + error.message, 'danger');
     _contratosAlinhamentos = [];
   } else {
     _contratosAlinhamentos = data || [];
@@ -2723,6 +2724,7 @@ async function loadContratosExpectativaFromSupabase() {
     .order('data_realizacao', { ascending: false });
   if (error) {
     console.error('Erro ao carregar contratos_expectativa:', error.message);
+    showToast('Erro ao carregar histórico de Contrato de Expectativa: ' + error.message, 'danger');
     _expectativaPorColab = {};
     return;
   }
@@ -2742,6 +2744,7 @@ async function loadContratosDesempenhoFromSupabase() {
     .order('data_realizacao', { ascending: false });
   if (error) {
     console.error('Erro ao carregar contratos_desempenho:', error.message);
+    showToast('Erro ao carregar histórico de Avaliação de Desempenho: ' + error.message, 'danger');
     _desempenhoPorColab = {};
     return;
   }
