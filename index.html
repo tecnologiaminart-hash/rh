@@ -2222,6 +2222,7 @@ function pageColaboradoresExperiencia() {
       ? '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhum colaborador em experiência encontrado.</td></tr>'
       : lista.map(c => {
           const cargoNome = c.cargos ? c.cargos.nome_cargo : '—';
+          const ca = (_contratosAlinhamentos || []).find(x => String(x.id_colaborador) === String(c.id_colaborador));
           return `
           <tr>
             <td><strong>${c.nome_colaborador}</strong></td>
@@ -2229,18 +2230,27 @@ function pageColaboradoresExperiencia() {
             <td>${formatarDataBR(c.desde) || '—'}</td>
             <td>${adicionarDiasDataBR(c.desde, 20) || '—'}</td>
             <td>
-              <input class="form-input" readonly id="text-aval-${c.id_colaborador}" value="${(c.text_aval1 || '').replace(/"/g, '&quot;')}" style="font-size:12px;padding:6px 8px;width:140px;cursor:pointer;background:var(--bg2)" placeholder="Clique para preencher..." title="Clique para abrir em tela cheia" onclick="abrirEditorTelaCheia('text-aval-${c.id_colaborador}', 'Anexar Avaliação 1 — ${(c.nome_colaborador || '').replace(/'/g, "\\'")}', () => salvarTextAval(${c.id_colaborador}, 1))">
+              <select class="form-select" style="font-size:12px;padding:6px 8px;width:140px" onchange="salvarStatusAvalExp(${c.id_colaborador}, 1, this.value)">
+                <option value="">— Selecione —</option>
+                ${STATUS_AVALIACAO_EXPERIENCIA.map(s => `<option ${ca && ca.aval1_status === s ? 'selected' : ''}>${s}</option>`).join('')}
+              </select>
             </td>
             <td>${adicionarDiasDataBR(c.desde, 85) || '—'}</td>
             <td>
-              <input class="form-input" readonly id="text-aval2-${c.id_colaborador}" value="${(c.text_aval2 || '').replace(/"/g, '&quot;')}" style="font-size:12px;padding:6px 8px;width:140px;cursor:pointer;background:var(--bg2)" placeholder="Clique para preencher..." title="Clique para abrir em tela cheia" onclick="abrirEditorTelaCheia('text-aval2-${c.id_colaborador}', 'Anexar Avaliação 2 — ${(c.nome_colaborador || '').replace(/'/g, "\\'")}', () => salvarTextAval(${c.id_colaborador}, 2))">
+              <select class="form-select" style="font-size:12px;padding:6px 8px;width:140px" onchange="salvarStatusAvalExp(${c.id_colaborador}, 2, this.value)">
+                <option value="">— Selecione —</option>
+                ${STATUS_AVALIACAO_EXPERIENCIA.map(s => `<option ${ca && ca.aval2_status === s ? 'selected' : ''}>${s}</option>`).join('')}
+              </select>
             </td>
           </tr>`;
         }).join('');
   };
 
   window._renderColExperiencia = renderTabela;
-  loadColaboradoresFromSupabase().then(renderTabela);
+  Promise.all([
+    loadColaboradoresFromSupabase(),
+    loadContratosAlinhamentosFromSupabase(),
+  ]).then(renderTabela);
 
   return `
   <div class="table-card">
@@ -2268,9 +2278,9 @@ function pageColaboradoresExperiencia() {
           <th style="min-width:160px">Cargo</th>
           <th>Desde</th>
           <th>Primeira Avaliação</th>
-          <th>Anexar Avaliação 1º</th>
+          <th>Status da Avaliação 1</th>
           <th>Segunda Avaliação</th>
-          <th>Anexar Avaliação 2º</th>
+          <th>Status da Avaliação 2</th>
         </tr>
       </thead>
       <tbody id="col-experiencia-tbody">
@@ -3387,6 +3397,7 @@ function renderExpectativaColuna() {
         : `<label class="form-label">Enviar contrato de expectativa</label><input class="form-input" type="file" id="ca-exp-arquivo" accept=".pdf,.jpg,.png,.jpeg">`}
     </div>
     <button type="button" class="btn btn-primary" style="width:100%;margin-top:6px" onclick="salvarContratoExpectativa()">${_editingExpectativaId ? 'Salvar Alterações' : 'Registrar'}</button>
+    ${_editingExpectativaId ? `<button type="button" class="btn btn-danger" style="width:100%;margin-top:6px" onclick="excluirContratoExpectativa(${_editingExpectativaId})">🗑 Excluir Registro</button>` : ''}
   `;
 }
 
@@ -3461,6 +3472,24 @@ window.salvarContratoExpectativa = async function() {
   renderExpectativaColuna();
 };
 
+window.excluirContratoExpectativa = async function(id) {
+  if (!confirm('Tem certeza que deseja excluir este registro? Esta ação não pode ser desfeita.')) return;
+  if (!supaClient) return showToast('Supabase não está configurado.', 'danger');
+
+  const { error } = await supaClient.from('contratos_expectativa').delete().eq('id_expectativa', id);
+  if (error) {
+    console.error('Erro ao excluir contrato de expectativa:', error.message);
+    return showToast('Erro ao excluir registro.', 'danger');
+  }
+
+  showToast('Registro excluído com sucesso.');
+  await loadContratosExpectativaFromSupabase();
+  if (window._renderContratosAlinhamentos) window._renderContratosAlinhamentos();
+  _editingExpectativaId = null;
+  window._caExpectativaView = 'historico';
+  renderExpectativaColuna();
+};
+
 window.mudarViewDesempenho = function(view) {
   window._caDesempenhoView = view;
   if (view === 'registrar') _editingDesempenhoId = null;
@@ -3516,6 +3545,7 @@ function renderDesempenhoColuna() {
       ${renderVerLink(item && item.aval_link, 'Ver avaliação')}
     </div>
     <button type="button" class="btn btn-primary" style="width:100%;margin-top:6px" onclick="salvarAvaliacaoDesempenho()">${_editingDesempenhoId ? 'Salvar Alterações' : 'Registrar'}</button>
+    ${_editingDesempenhoId ? `<button type="button" class="btn btn-danger" style="width:100%;margin-top:6px" onclick="excluirAvaliacaoDesempenho(${_editingDesempenhoId})">🗑 Excluir Registro</button>` : ''}
   `;
 }
 
@@ -3559,6 +3589,24 @@ window.salvarAvaliacaoDesempenho = async function() {
   }
 
   showToast('Avaliação de Desempenho salva com sucesso!');
+  await loadContratosDesempenhoFromSupabase();
+  if (window._renderContratosAlinhamentos) window._renderContratosAlinhamentos();
+  _editingDesempenhoId = null;
+  window._caDesempenhoView = 'historico';
+  renderDesempenhoColuna();
+};
+
+window.excluirAvaliacaoDesempenho = async function(id) {
+  if (!confirm('Tem certeza que deseja excluir este registro? Esta ação não pode ser desfeita.')) return;
+  if (!supaClient) return showToast('Supabase não está configurado.', 'danger');
+
+  const { error } = await supaClient.from('contratos_desempenho').delete().eq('id_desempenho', id);
+  if (error) {
+    console.error('Erro ao excluir avaliação de desempenho:', error.message);
+    return showToast('Erro ao excluir registro.', 'danger');
+  }
+
+  showToast('Registro excluído com sucesso.');
   await loadContratosDesempenhoFromSupabase();
   if (window._renderContratosAlinhamentos) window._renderContratosAlinhamentos();
   _editingDesempenhoId = null;
@@ -5390,19 +5438,24 @@ window.reprovarEntrevistaPresencial = function(idCandidatura) {
   atualizarStatusEntrevista(idCandidatura, 'Reprovado');
 };
 
-window.salvarTextAval = async function(idColaborador, numero) {
-  const campo = numero === 2 ? 'text_aval2' : 'text_aval1';
-  const el = document.getElementById(numero === 2 ? `text-aval2-${idColaborador}` : `text-aval-${idColaborador}`);
-  if (!el) return;
+// Status da Avaliação 1/2 em Colaboradores em Experiência é a mesma
+// informação de Contratos & Alinhamentos > Avaliação de Experiência
+// (contratos_alinhamentos.aval1_status/aval2_status) — editar aqui atualiza
+// lá e vice-versa.
+window.salvarStatusAvalExp = async function(idColaborador, numero, valor) {
+  const campo = numero === 2 ? 'aval2_status' : 'aval1_status';
   try {
-    const { error } = await supaClient.from('colaboradores').update({ [campo]: el.value }).eq('id_colaborador', idColaborador);
+    const { error } = await supaClient
+      .from('contratos_alinhamentos')
+      .upsert({ id_colaborador: idColaborador, [campo]: valor || null, updated_at: new Date().toISOString() }, { onConflict: 'id_colaborador' });
     if (error) throw error;
-    await loadColaboradoresFromSupabase();
+    await loadContratosAlinhamentosFromSupabase();
     if (typeof window._renderColExperiencia === 'function') window._renderColExperiencia();
-    showToast('Avaliação salva!');
+    if (typeof window._renderContratosAlinhamentos === 'function') window._renderContratosAlinhamentos();
+    showToast('Status da avaliação salvo!');
   } catch (e) {
-    console.error('Erro ao salvar avaliação:', e);
-    showToast('Erro ao salvar avaliação: ' + (e.message || e));
+    console.error('Erro ao salvar status da avaliação:', e);
+    showToast('Erro ao salvar status da avaliação: ' + (e.message || e), 'danger');
   }
 };
 
