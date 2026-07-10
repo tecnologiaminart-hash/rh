@@ -2756,14 +2756,53 @@ async function loadContratosDesempenhoFromSupabase() {
 function pageContratosAlinhamentos() {
   document.getElementById('topbar-actions').innerHTML = '';
 
+  if (!window._calinFiltros) window._calinFiltros = { cargo: [], tipoContrato: [], statusFinalizacao: [], status: ['Ativo', 'Pendente Documentação'] };
+  if (!window._calinOrdem) window._calinOrdem = 'nome';
+
   const renderTabela = () => {
     const tbody = document.getElementById('calin-tbody');
     if (!tbody) return;
 
-    const lista = [...(_colaboradoresSupabase || [])].sort((a, b) => (a.nome_colaborador || '').localeCompare(b.nome_colaborador || ''));
+    calinAtualizarLabelFiltro('cargo');
+    calinAtualizarLabelFiltro('tipoContrato');
+    calinAtualizarLabelFiltro('statusFinalizacao');
+    calinAtualizarLabelFiltro('status');
+
+    let lista = [...(_colaboradoresSupabase || [])];
+    if (window._calinFiltros.status.length) lista = lista.filter(c => window._calinFiltros.status.includes(c.status_colaborador));
+    if (window._calinFiltros.cargo.length) lista = lista.filter(c => window._calinFiltros.cargo.includes(c.cargos ? c.cargos.nome_cargo : ''));
+    if (window._calinFiltros.tipoContrato.length) lista = lista.filter(c => window._calinFiltros.tipoContrato.includes(c.tipo_de_contrato));
+    if (window._calinFiltros.statusFinalizacao.length) {
+      lista = lista.filter(c => {
+        const ca = (_contratosAlinhamentos || []).find(x => String(x.id_colaborador) === String(c.id_colaborador));
+        const sf = (ca && ca.status_finalizacao_experiencia) || '—';
+        return window._calinFiltros.statusFinalizacao.includes(sf);
+      });
+    }
+
+    lista.sort((a, b) => {
+      const ordem = window._calinOrdem;
+      if (ordem === 'cargo') return (a.cargos ? a.cargos.nome_cargo : '').localeCompare(b.cargos ? b.cargos.nome_cargo : '');
+      if (ordem === 'status-finalizacao') {
+        const sfA = ((_contratosAlinhamentos || []).find(x => String(x.id_colaborador) === String(a.id_colaborador)) || {}).status_finalizacao_experiencia || '—';
+        const sfB = ((_contratosAlinhamentos || []).find(x => String(x.id_colaborador) === String(b.id_colaborador)) || {}).status_finalizacao_experiencia || '—';
+        return sfA.localeCompare(sfB);
+      }
+      if (ordem === 'desempenho-desc' || ordem === 'desempenho-asc') {
+        const da = ((_desempenhoPorColab[a.id_colaborador] || [])[0] || {}).data_realizacao || '';
+        const db = ((_desempenhoPorColab[b.id_colaborador] || [])[0] || {}).data_realizacao || '';
+        return ordem === 'desempenho-desc' ? db.localeCompare(da) : da.localeCompare(db);
+      }
+      if (ordem === 'expectativa-desc' || ordem === 'expectativa-asc') {
+        const da = ((_expectativaPorColab[a.id_colaborador] || [])[0] || {}).data_realizacao || '';
+        const db = ((_expectativaPorColab[b.id_colaborador] || [])[0] || {}).data_realizacao || '';
+        return ordem === 'expectativa-desc' ? db.localeCompare(da) : da.localeCompare(db);
+      }
+      return (a.nome_colaborador || '').localeCompare(b.nome_colaborador || '');
+    });
 
     tbody.innerHTML = lista.length === 0
-      ? '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhum colaborador encontrado.</td></tr>'
+      ? '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Nenhum colaborador encontrado.</td></tr>'
       : lista.map(c => {
           const cid = c.id_colaborador;
           const cargoNome = c.cargos ? c.cargos.nome_cargo : '—';
@@ -2771,19 +2810,24 @@ function pageContratosAlinhamentos() {
           const statusFinal = (ca && ca.status_finalizacao_experiencia) || '—';
           const ultimaExpectativa = (_expectativaPorColab[cid] || [])[0];
           const ultimoDesempenho = (_desempenhoPorColab[cid] || [])[0];
-          const statusBadgeClass = c.status_colaborador === 'Ativo' ? 'badge-active'
-            : c.status_colaborador === 'Inativo' ? 'badge-gray' : 'badge-inactive';
           return `
           <tr style="cursor:pointer" onclick="abrirContratoAlinhamentoModal(${cid})">
             <td><strong>${c.nome_colaborador}</strong></td>
-            <td>${c.tipo_de_contrato || '—'}</td>
             <td>${cargoNome}</td>
-            <td><span class="badge ${statusBadgeClass}">${c.status_colaborador || '—'}</span></td>
+            <td>${c.tipo_de_contrato || '—'}</td>
             <td>${statusFinal}</td>
             <td>${ultimoDesempenho ? (formatarDataBR(ultimoDesempenho.data_realizacao) || '—') : '—'}</td>
             <td>${ultimaExpectativa ? (formatarDataBR(ultimaExpectativa.data_realizacao) || '—') : '—'}</td>
           </tr>`;
         }).join('');
+
+    const contagemEl = document.getElementById('calin-contagem');
+    if (contagemEl) {
+      const total = (_colaboradoresSupabase || []).length;
+      contagemEl.textContent = lista.length === total
+        ? `${total} colaborador${total === 1 ? '' : 'es'}`
+        : `${lista.length} de ${total} colaboradores`;
+    }
   };
 
   window._renderContratosAlinhamentos = renderTabela;
@@ -2911,26 +2955,162 @@ function pageContratosAlinhamentos() {
       <span class="table-title">Acompanhamento</span>
       <input class="search-input" placeholder="Buscar colaborador..." oninput="filtrarTabelaGenerica('calin-tbody', this.value)">
     </div>
+    <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:var(--bg2)">
+      <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase">Filtrar:</span>
+      <div class="ms-dropdown">
+        <button type="button" class="ms-dropdown-btn" onclick="calinToggleDropdown('cargo')">
+          <span id="calin-ms-label-cargo">Todos os cargos</span><span>▾</span>
+        </button>
+        <div class="ms-dropdown-panel" id="calin-ms-panel-cargo"></div>
+      </div>
+      <div class="ms-dropdown">
+        <button type="button" class="ms-dropdown-btn" onclick="calinToggleDropdown('tipoContrato')">
+          <span id="calin-ms-label-tipoContrato">Todos os tipos de contrato</span><span>▾</span>
+        </button>
+        <div class="ms-dropdown-panel" id="calin-ms-panel-tipoContrato"></div>
+      </div>
+      <div class="ms-dropdown">
+        <button type="button" class="ms-dropdown-btn" onclick="calinToggleDropdown('statusFinalizacao')">
+          <span id="calin-ms-label-statusFinalizacao">Todos os status de finalização</span><span>▾</span>
+        </button>
+        <div class="ms-dropdown-panel" id="calin-ms-panel-statusFinalizacao"></div>
+      </div>
+      <div class="ms-dropdown">
+        <button type="button" class="ms-dropdown-btn" onclick="calinToggleDropdown('status')">
+          <span id="calin-ms-label-status">Status</span><span>▾</span>
+        </button>
+        <div class="ms-dropdown-panel" id="calin-ms-panel-status"></div>
+      </div>
+      <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-left:12px">Ordenar:</span>
+      <select class="form-select" style="width:220px" onchange="calinOrdenar(this.value)">
+        <option value="nome" ${window._calinOrdem === 'nome' ? 'selected' : ''}>Colaborador (A-Z)</option>
+        <option value="cargo" ${window._calinOrdem === 'cargo' ? 'selected' : ''}>Cargo (A-Z)</option>
+        <option value="status-finalizacao" ${window._calinOrdem === 'status-finalizacao' ? 'selected' : ''}>Status Finalização (A-Z)</option>
+        <option value="desempenho-desc" ${window._calinOrdem === 'desempenho-desc' ? 'selected' : ''}>Últ. Aval. Desempenho (mais recente)</option>
+        <option value="desempenho-asc" ${window._calinOrdem === 'desempenho-asc' ? 'selected' : ''}>Últ. Aval. Desempenho (mais antiga)</option>
+        <option value="expectativa-desc" ${window._calinOrdem === 'expectativa-desc' ? 'selected' : ''}>Últ. Contrato Expectativa (mais recente)</option>
+        <option value="expectativa-asc" ${window._calinOrdem === 'expectativa-asc' ? 'selected' : ''}>Últ. Contrato Expectativa (mais antiga)</option>
+      </select>
+    </div>
     <div style="overflow-x:auto">
     <table style="white-space:nowrap">
       <thead>
         <tr>
           <th style="min-width:200px">Colaborador</th>
-          <th>Tipo de Contrato</th>
           <th style="min-width:160px">Cargo</th>
-          <th>Status</th>
+          <th>Tipo de Contrato</th>
           <th>Status Finalização Experiência</th>
           <th>Última Aval. Desempenho</th>
           <th>Último Contrato Expectativa</th>
         </tr>
       </thead>
       <tbody id="calin-tbody">
-        <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
+        <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
       </tbody>
     </table>
     </div>
+    <div class="table-pagination"><span id="calin-contagem"></span></div>
   </div>`;
 }
+
+function calinOpcoesFiltro(nome) {
+  if (nome === 'cargo') {
+    const nomes = [...new Set((_colaboradoresSupabase || []).map(c => c.cargos ? c.cargos.nome_cargo : null).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    return nomes.map(n => ({ value: n, label: n }));
+  }
+  if (nome === 'tipoContrato') {
+    return ['Efetivo', 'Experiência', 'Temporária'].map(t => ({ value: t, label: t }));
+  }
+  if (nome === 'statusFinalizacao') {
+    return [{ value: '—', label: 'Sem registro' }, ...STATUS_FINALIZACAO_EXPERIENCIA.map(s => ({ value: s, label: s }))];
+  }
+  if (nome === 'status') {
+    return ['Ativo', 'Inativo', 'Férias', 'Afastado', 'Pendente Documentação'].map(s => ({ value: s, label: s }));
+  }
+  return [];
+}
+
+function calinRotuloPadrao(nome) {
+  return {
+    cargo: 'Todos os cargos',
+    tipoContrato: 'Todos os tipos de contrato',
+    statusFinalizacao: 'Todos os status de finalização',
+    status: 'Nenhum status selecionado',
+  }[nome];
+}
+
+function calinAtualizarLabelFiltro(nome) {
+  const label = document.getElementById(`calin-ms-label-${nome}`);
+  if (!label) return;
+  const selecionados = (window._calinFiltros && window._calinFiltros[nome]) || [];
+  const opcoes = calinOpcoesFiltro(nome);
+  if (selecionados.length === 0) {
+    label.textContent = calinRotuloPadrao(nome);
+  } else if (selecionados.length === 1) {
+    const opt = opcoes.find(o => o.value === selecionados[0]);
+    label.textContent = opt ? opt.label : selecionados[0];
+  } else {
+    label.textContent = `${selecionados.length} selecionados`;
+  }
+}
+
+function calinRenderPainelFiltro(nome) {
+  const panel = document.getElementById(`calin-ms-panel-${nome}`);
+  if (!panel) return;
+  const opcoes = calinOpcoesFiltro(nome);
+  const selecionados = (window._calinFiltros && window._calinFiltros[nome]) || [];
+  panel.innerHTML = `
+    ${opcoes.length ? opcoes.map(o => `
+      <label class="ms-option">
+        <input type="checkbox" value="${o.value}" ${selecionados.includes(o.value) ? 'checked' : ''} onchange="calinToggleOpcaoFiltro('${nome}', this.value, this.checked)">
+        <span>${o.label}</span>
+      </label>`).join('') : '<div style="padding:8px;color:var(--text3);font-size:12px">Nenhuma opção disponível.</div>'}
+    <div class="ms-actions">
+      <button type="button" class="btn btn-sm" onclick="calinSelecionarTodosFiltro('${nome}')">Selecionar todos</button>
+      <button type="button" class="btn btn-sm" onclick="calinLimparFiltro('${nome}')">Limpar</button>
+    </div>
+  `;
+  calinAtualizarLabelFiltro(nome);
+}
+
+window.calinToggleDropdown = function(nome) {
+  const panel = document.getElementById(`calin-ms-panel-${nome}`);
+  if (!panel) return;
+  const estaAberto = panel.classList.contains('open');
+  document.querySelectorAll('.ms-dropdown-panel.open').forEach(p => p.classList.remove('open'));
+  if (!estaAberto) {
+    calinRenderPainelFiltro(nome);
+    panel.classList.add('open');
+  }
+};
+
+window.calinToggleOpcaoFiltro = function(nome, valor, marcado) {
+  if (!window._calinFiltros) window._calinFiltros = { cargo: [], tipoContrato: [], statusFinalizacao: [], status: [] };
+  const set = new Set(window._calinFiltros[nome] || []);
+  if (marcado) set.add(valor); else set.delete(valor);
+  window._calinFiltros[nome] = [...set];
+  calinAtualizarLabelFiltro(nome);
+  if (window._renderContratosAlinhamentos) window._renderContratosAlinhamentos();
+};
+
+window.calinSelecionarTodosFiltro = function(nome) {
+  if (!window._calinFiltros) window._calinFiltros = { cargo: [], tipoContrato: [], statusFinalizacao: [], status: [] };
+  window._calinFiltros[nome] = calinOpcoesFiltro(nome).map(o => o.value);
+  calinRenderPainelFiltro(nome);
+  if (window._renderContratosAlinhamentos) window._renderContratosAlinhamentos();
+};
+
+window.calinLimparFiltro = function(nome) {
+  if (!window._calinFiltros) window._calinFiltros = { cargo: [], tipoContrato: [], statusFinalizacao: [], status: [] };
+  window._calinFiltros[nome] = [];
+  calinRenderPainelFiltro(nome);
+  if (window._renderContratosAlinhamentos) window._renderContratosAlinhamentos();
+};
+
+window.calinOrdenar = function(valor) {
+  window._calinOrdem = valor;
+  if (window._renderContratosAlinhamentos) window._renderContratosAlinhamentos();
+};
 
 window.abrirContratoAlinhamentoModal = function(colabId) {
   _caModalColabId = colabId;
