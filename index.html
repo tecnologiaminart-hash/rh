@@ -7766,7 +7766,7 @@ const SECOES_RELATORIO = [
   { key: 'pessoais', label: 'Dados Pessoais' },
   { key: 'epis', label: 'EPIs / Tamanhos' },
   { key: 'perfil', label: 'Mapeamento de Perfil' },
-  { key: 'documentos', label: 'Documentos Enviados' },
+  { key: 'ocorrencias', label: 'Ocorrências' },
 ];
 
 function pageRelatorioColaborador() {
@@ -7786,7 +7786,7 @@ function pageRelatorioColaborador() {
     loadColaboradorHistoricoForApp(),
     loadDadosPessoaisEpiForApp(),
     loadMapeamentoPerfilForApp(),
-    loadDocumentosFromSupabase(),
+    loadOcorrenciasFromSupabase(),
   ]).then(popularSelect);
 
   return `
@@ -7804,9 +7804,10 @@ function pageRelatorioColaborador() {
       </div>
     </div>
     <div class="form-group" style="margin-top:16px;display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
-      <div style="flex:1;min-width:240px">
+      <div class="ms-dropdown" style="flex:1;min-width:240px">
         <label class="form-label">Buscar Colaborador</label>
-        <input class="search-input" id="rel-colaborador-busca" placeholder="Buscar colaborador..." style="width:100%" oninput="filtrarSelectColaboradorRelatorio(this.value)">
+        <input class="search-input" id="rel-colaborador-busca" placeholder="Buscar colaborador..." style="width:100%" autocomplete="off" oninput="filtrarSelectColaboradorRelatorio(this.value)" onfocus="filtrarSelectColaboradorRelatorio(this.value)">
+        <div class="ms-dropdown-panel" id="rel-colaborador-sugestoes" style="width:100%"></div>
       </div>
       <div style="flex:1;min-width:240px">
         <label class="form-label">Selecionar Colaborador</label>
@@ -7827,15 +7828,38 @@ function secoesRelatorioSelecionadas() {
 
 window.filtrarSelectColaboradorRelatorio = function(query) {
   const sel = document.getElementById('rel-colaborador');
+  const painel = document.getElementById('rel-colaborador-sugestoes');
   if (!sel) return;
   const q = String(query || '').trim().toLowerCase();
   const valorAtual = sel.value;
   const filtrados = (_colaboradoresSupabase || []).filter(c => !q || (c.nome_colaborador || '').toLowerCase().includes(q));
+
   sel.innerHTML = '<option value="">— Selecione um colaborador —</option>' +
     filtrados.map(c => `<option value="${c.id_colaborador}">${c.nome_colaborador}</option>`).join('');
   if (valorAtual && filtrados.some(c => String(c.id_colaborador) === String(valorAtual))) {
     sel.value = valorAtual;
   }
+
+  if (!painel) return;
+  if (!q) {
+    painel.classList.remove('open');
+    painel.innerHTML = '';
+    return;
+  }
+  painel.innerHTML = filtrados.length === 0
+    ? '<div style="padding:8px;color:var(--text3);font-size:12px">Nenhum colaborador encontrado.</div>'
+    : filtrados.slice(0, 30).map(c => `<div class="ms-option" onclick="selecionarColaboradorRelatorio(${c.id_colaborador}, '${(c.nome_colaborador || '').replace(/'/g, "\\'")}')">${c.nome_colaborador}</div>`).join('');
+  painel.classList.add('open');
+};
+
+window.selecionarColaboradorRelatorio = function(idColaborador, nome) {
+  const sel = document.getElementById('rel-colaborador');
+  const busca = document.getElementById('rel-colaborador-busca');
+  const painel = document.getElementById('rel-colaborador-sugestoes');
+  if (sel) sel.value = idColaborador;
+  if (busca) busca.value = nome;
+  if (painel) { painel.classList.remove('open'); painel.innerHTML = ''; }
+  window.gerarRelatorioColaborador(idColaborador);
 };
 
 window.toggleTodasSecoes = function(marcado) {
@@ -7878,13 +7902,15 @@ function montarDadosRelatorioColaborador(idColaborador) {
     .sort((a, b) => new Date(b.periodo_inicio || 0) - new Date(a.periodo_inicio || 0));
   const dadosPessoais = (window._dadosPessoaisEpi || []).find(d => String(d.id_colaborador) === String(idColaborador));
   const perfil = (window._mapeamentoPerfil || []).find(m => String(m.id_colaborador) === String(idColaborador));
-  const documentos = window._documentosPorColab[idColaborador] || window._documentosPorColab[colab.id_colaborador] || [];
-  return { colab, historico, dadosPessoais, perfil, documentos };
+  const ocorrencias = (_ocorrenciasSupabase || [])
+    .filter(o => String(o.id_colaborador) === String(idColaborador))
+    .sort((a, b) => (b.data_ocorrencia || '').localeCompare(a.data_ocorrencia || ''));
+  return { colab, historico, dadosPessoais, perfil, ocorrencias };
 }
 
 // Monta o miolo HTML (sem o card externo) de um colaborador, respeitando as seções escolhidas.
 function construirHtmlSecoesColaborador(dadosColab, secoes) {
-  const { colab, historico, dadosPessoais, perfil, documentos } = dadosColab;
+  const { colab, historico, dadosPessoais, perfil, ocorrencias } = dadosColab;
   const linha = (label, valor) => `<div style="display:flex;padding:6px 0;border-bottom:1px solid var(--bg2);font-size:13px"><div style="width:240px;color:var(--text3);flex-shrink:0">${label}</div><div style="flex:1">${valor || '—'}</div></div>`;
   const salarioNum = salarioBaseDoColaborador(colab);
   const salarioFmt = salarioNum !== null ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(salarioNum) : '—';
@@ -7979,21 +8005,23 @@ function construirHtmlSecoesColaborador(dadosColab, secoes) {
       `}`;
   }
 
-  if (secoes.includes('documentos')) {
+  if (secoes.includes('ocorrencias')) {
     html += `
-      <div class="form-section-title" style="margin-top:24px">Documentos Enviados</div>
-      ${documentos.length === 0 ? '<div style="font-size:13px;color:var(--text3);padding:8px 0">Nenhum documento enviado.</div>' : `
+      <div class="form-section-title" style="margin-top:24px">Ocorrências</div>
+      ${ocorrencias.length === 0 ? '<div style="font-size:13px;color:var(--text3);padding:8px 0">Nenhuma ocorrência registrada.</div>' : `
       <table style="width:100%;margin-top:8px">
         <thead><tr>
           <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Tipo</th>
-          <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Data de Envio</th>
-          <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Ações</th>
+          <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Data</th>
+          <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Descrição</th>
+          <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Registrado Por</th>
         </tr></thead>
-        <tbody>${documentos.map(d => `
+        <tbody>${ocorrencias.map(o => `
           <tr>
-            <td style="padding:6px 0;font-size:13px">${d.tipo || '—'}</td>
-            <td style="padding:6px 0;font-size:13px">${d.data || '—'}</td>
-            <td style="padding:6px 0">${d.url ? `<button class="action-btn" title="Visualizar" onclick="visualizarDocumento('${d.url}')">👁</button>` : '—'}</td>
+            <td style="padding:6px 0;font-size:13px">${o.tipo_ocorrencia || '—'}</td>
+            <td style="padding:6px 0;font-size:13px">${formatarDataBR(o.data_ocorrencia) || '—'}</td>
+            <td style="padding:6px 0;font-size:13px">${o.descricao || '—'}</td>
+            <td style="padding:6px 0;font-size:13px">${o.registrado_por || '—'}</td>
           </tr>`).join('')}</tbody>
       </table>`}`;
   }
@@ -8081,7 +8109,7 @@ window.gerarRelatorioTodos = function() {
 // Escreve as seções de um colaborador no documento PDF, usando state.y como cursor
 // vertical compartilhado (objeto mutável, já que números não passam por referência).
 function escreverColaboradorNoPdf(doc, state, dadosColab, secoes, margemEsq) {
-  const { colab, historico, dadosPessoais, perfil, documentos } = dadosColab;
+  const { colab, historico, dadosPessoais, perfil, ocorrencias } = dadosColab;
 
   const checarQuebra = (qtdLinhas) => { if (state.y + qtdLinhas * 6 > 280) { doc.addPage(); state.y = 18; } };
   const titulo = (texto) => {
@@ -8194,12 +8222,18 @@ function escreverColaboradorNoPdf(doc, state, dadosColab, secoes, margemEsq) {
     }
   }
 
-  if (secoes.includes('documentos')) {
-    titulo('Documentos Enviados');
-    if (documentos.length === 0) {
-      campo('Documentos', 'Nenhum documento enviado.');
+  if (secoes.includes('ocorrencias')) {
+    titulo('Ocorrências');
+    if (ocorrencias.length === 0) {
+      campo('Ocorrências', 'Nenhuma ocorrência registrada.');
     } else {
-      documentos.forEach(d => campo(d.tipo || 'Documento', d.data || '—'));
+      ocorrencias.forEach(o => {
+        campo('Tipo', o.tipo_ocorrencia || '—');
+        campo('Data', formatarDataBR(o.data_ocorrencia) || '—');
+        campo('Descrição', o.descricao || '—');
+        campo('Registrado Por', o.registrado_por || '—');
+        state.y += 2;
+      });
     }
   }
 }
@@ -8260,102 +8294,139 @@ window.baixarRelatorioPdf = async function() {
   doc.save(nomeArquivo);
 };
 
+// Monta, para cada seção, o título da aba e a tabela (aoa: header + 1 linha por
+// colaborador/registro) — reaproveitado tanto para as abas por seção (relatório
+// de "todos") quanto para a aba única consolidada (relatório individual, ou a
+// aba extra do relatório de "todos").
+function construirBlocosSecoesRelatorio(colaboradores) {
+  const blocos = {};
+
+  blocos.contratuais = {
+    titulo: 'Dados Contratuais',
+    linhas: [['Nome', 'Cargo', 'Status', 'Tipo de Contrato', 'Período do Contrato', 'Prorrogação', 'Salário Base', 'Data de Admissão']],
+  };
+  colaboradores.forEach(({ colab }) => {
+    const salarioNum = salarioBaseDoColaborador(colab);
+    blocos.contratuais.linhas.push([
+      colab.nome_colaborador || '',
+      colab.cargos ? colab.cargos.nome_cargo : '',
+      colab.status_colaborador || '',
+      colab.tipo_de_contrato || '',
+      colab.tipo_de_contrato === 'Temporária' ? (colab.periodo_contrato || '') : '',
+      colab.tipo_de_contrato === 'Temporária' ? (colab.prorrogacao_contrato || '') : '',
+      salarioNum !== null ? salarioNum : '',
+      formatarDataBR(colab.desde) || '',
+    ]);
+  });
+
+  blocos.historico = { titulo: 'Histórico de Carreira', linhas: [['Nome', 'Período Início', 'Período Fim', 'Cargo', 'Salário', 'Motivo']] };
+  colaboradores.forEach(({ colab, historico }) => {
+    (historico || []).forEach(h => {
+      blocos.historico.linhas.push([
+        colab.nome_colaborador || '',
+        formatarDataBR(h.periodo_inicio) || '',
+        formatarDataBR(h.periodo_fim) || 'Atual',
+        nomeCargoPorId(h.id_cargos) || '',
+        h.salario_hist !== null && h.salario_hist !== undefined ? h.salario_hist : '',
+        h.motivo || '',
+      ]);
+    });
+  });
+
+  blocos.pessoais = { titulo: 'Dados Pessoais', linhas: [['Nome', 'CPF', 'RG', 'Data de Nascimento', 'Telefone', 'E-mail', 'Endereço', 'Telefone Emergência', 'Estado Civil', 'Escolaridade', 'PIX', 'Vale-Transporte']] };
+  colaboradores.forEach(({ colab, dadosPessoais: d }) => {
+    blocos.pessoais.linhas.push([
+      colab.nome_colaborador || '',
+      d?.cpf || '', d?.rg || '', formatarDataBR(d?.data_nascimento) || '',
+      d?.telefone || '', d?.email || '', d?.endereco || '', d?.telefone_emergencia || '',
+      d?.estado_civil || '', d?.escolaridade || '', d?.pix || '', d?.['vale-transporte'] || '',
+    ]);
+  });
+
+  blocos.epis = { titulo: 'EPIs / Tamanhos', linhas: [['Nome', 'Camisa', 'Calça', 'Botina', 'Jaleco', 'Luva Raspa', 'Luva Lavagem']] };
+  colaboradores.forEach(({ colab, dadosPessoais: d }) => {
+    blocos.epis.linhas.push([
+      colab.nome_colaborador || '',
+      d?.epi_camisa || '', d?.epi_calca || '', d?.epi_botina || '',
+      d?.epi_jaleco || '', d?.epi_luva_raspa || '', d?.epi_luva_lavagem || '',
+    ]);
+  });
+
+  blocos.perfil = { titulo: 'Mapeamento de Perfil', linhas: [['Nome', 'Como gosta de ser chamado(a)', 'Hobbies', 'Prato/Doce preferido', 'Pretende ter filhos?', 'Grande sonho pessoal', 'Metas do ano vigente', 'Talentos e dons', 'Desafios pessoais', 'Expectativa na empresa', 'Pontos fortes', 'A desenvolver', 'Habilidades profissionais', 'Perfil DISC (1ª)', 'Perfil DISC (2ª)', 'Comunicação ideal', '3 principais valores']] };
+  colaboradores.forEach(({ colab, perfil: p }) => {
+    blocos.perfil.linhas.push([
+      colab.nome_colaborador || '',
+      p?.como_gosta_ser_chamado || '', p?.hobbies || '', p?.prato_doce_preferido || '',
+      p?.pretende_ter_filhos || '', p?.grande_sonho_pessoal || '', p?.metas_ano_vigente || '',
+      p?.talentos_dons || '', p?.desafios_pessoais || '', p?.expectativa_empresa || '',
+      p?.pontos_fortes || '', p?.a_desenvolver || '', p?.habilidades_profissionais || '',
+      p?.perfil_disc_1 || '', p?.perfil_disc_2 || '', p?.comunicacao_ideal || '', p?.valores_principais || '',
+    ]);
+  });
+
+  blocos.ocorrencias = { titulo: 'Ocorrências', linhas: [['Nome', 'Tipo', 'Data', 'Descrição', 'Registrado Por']] };
+  colaboradores.forEach(({ colab, ocorrencias }) => {
+    (ocorrencias || []).forEach(o => {
+      blocos.ocorrencias.linhas.push([
+        colab.nome_colaborador || '',
+        o.tipo_ocorrencia || '',
+        formatarDataBR(o.data_ocorrencia) || '',
+        o.descricao || '',
+        o.registrado_por || '',
+      ]);
+    });
+  });
+
+  return blocos;
+}
+
+const NOME_ABA_SECAO_RELATORIO = {
+  contratuais: 'Dados Contratuais',
+  historico: 'Histórico de Carreira',
+  pessoais: 'Dados Pessoais',
+  epis: 'EPIs',
+  perfil: 'Mapeamento de Perfil',
+  ocorrencias: 'Ocorrências',
+};
+
+// Empilha os blocos das seções escolhidas numa única lista de linhas (aoa),
+// com o título da seção antes de cada tabela — usado pra gerar 1 guia só.
+function montarLinhasConsolidadas(secoes, blocos) {
+  const linhas = [];
+  secoes.forEach(chave => {
+    const bloco = blocos[chave];
+    if (!bloco) return;
+    linhas.push([bloco.titulo]);
+    bloco.linhas.forEach(l => linhas.push(l));
+    linhas.push([]);
+  });
+  return linhas;
+}
+
 window.baixarRelatorioXlsx = function() {
   if (!window.XLSX || !window._relatorioAtual || !window._relatorioAtual.colaboradores || window._relatorioAtual.colaboradores.length === 0) {
     showToast('Gere o relatório antes de baixar o XLSX.');
     return;
   }
   const { colaboradores, secoes, tipo } = window._relatorioAtual;
-  const wb = XLSX.utils.book_new();
-
-  if (secoes.includes('contratuais')) {
-    const linhas = [['Nome', 'Cargo', 'Status', 'Tipo de Contrato', 'Período do Contrato', 'Prorrogação', 'Salário Base', 'Data de Admissão']];
-    colaboradores.forEach(({ colab }) => {
-      const salarioNum = salarioBaseDoColaborador(colab);
-      linhas.push([
-        colab.nome_colaborador || '',
-        colab.cargos ? colab.cargos.nome_cargo : '',
-        colab.status_colaborador || '',
-        colab.tipo_de_contrato || '',
-        colab.tipo_de_contrato === 'Temporária' ? (colab.periodo_contrato || '') : '',
-        colab.tipo_de_contrato === 'Temporária' ? (colab.prorrogacao_contrato || '') : '',
-        salarioNum !== null ? salarioNum : '',
-        formatarDataBR(colab.desde) || '',
-      ]);
-    });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), 'Dados Contratuais');
-  }
-
-  if (secoes.includes('historico')) {
-    const linhas = [['Nome', 'Período Início', 'Período Fim', 'Cargo', 'Salário', 'Motivo']];
-    colaboradores.forEach(({ colab, historico }) => {
-      (historico || []).forEach(h => {
-        linhas.push([
-          colab.nome_colaborador || '',
-          formatarDataBR(h.periodo_inicio) || '',
-          formatarDataBR(h.periodo_fim) || 'Atual',
-          nomeCargoPorId(h.id_cargos) || '',
-          h.salario_hist !== null && h.salario_hist !== undefined ? h.salario_hist : '',
-          h.motivo || '',
-        ]);
-      });
-    });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), 'Histórico de Carreira');
-  }
-
-  if (secoes.includes('pessoais')) {
-    const linhas = [['Nome', 'CPF', 'RG', 'Data de Nascimento', 'Telefone', 'E-mail', 'Endereço', 'Telefone Emergência', 'Estado Civil', 'Escolaridade', 'PIX', 'Vale-Transporte']];
-    colaboradores.forEach(({ colab, dadosPessoais: d }) => {
-      linhas.push([
-        colab.nome_colaborador || '',
-        d?.cpf || '', d?.rg || '', formatarDataBR(d?.data_nascimento) || '',
-        d?.telefone || '', d?.email || '', d?.endereco || '', d?.telefone_emergencia || '',
-        d?.estado_civil || '', d?.escolaridade || '', d?.pix || '', d?.['vale-transporte'] || '',
-      ]);
-    });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), 'Dados Pessoais');
-  }
-
-  if (secoes.includes('epis')) {
-    const linhas = [['Nome', 'Camisa', 'Calça', 'Botina', 'Jaleco', 'Luva Raspa', 'Luva Lavagem']];
-    colaboradores.forEach(({ colab, dadosPessoais: d }) => {
-      linhas.push([
-        colab.nome_colaborador || '',
-        d?.epi_camisa || '', d?.epi_calca || '', d?.epi_botina || '',
-        d?.epi_jaleco || '', d?.epi_luva_raspa || '', d?.epi_luva_lavagem || '',
-      ]);
-    });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), 'EPIs');
-  }
-
-  if (secoes.includes('perfil')) {
-    const linhas = [['Nome', 'Como gosta de ser chamado(a)', 'Hobbies', 'Prato/Doce preferido', 'Pretende ter filhos?', 'Grande sonho pessoal', 'Metas do ano vigente', 'Talentos e dons', 'Desafios pessoais', 'Expectativa na empresa', 'Pontos fortes', 'A desenvolver', 'Habilidades profissionais', 'Perfil DISC (1ª)', 'Perfil DISC (2ª)', 'Comunicação ideal', '3 principais valores']];
-    colaboradores.forEach(({ colab, perfil: p }) => {
-      linhas.push([
-        colab.nome_colaborador || '',
-        p?.como_gosta_ser_chamado || '', p?.hobbies || '', p?.prato_doce_preferido || '',
-        p?.pretende_ter_filhos || '', p?.grande_sonho_pessoal || '', p?.metas_ano_vigente || '',
-        p?.talentos_dons || '', p?.desafios_pessoais || '', p?.expectativa_empresa || '',
-        p?.pontos_fortes || '', p?.a_desenvolver || '', p?.habilidades_profissionais || '',
-        p?.perfil_disc_1 || '', p?.perfil_disc_2 || '', p?.comunicacao_ideal || '', p?.valores_principais || '',
-      ]);
-    });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), 'Mapeamento de Perfil');
-  }
-
-  if (secoes.includes('documentos')) {
-    const linhas = [['Nome', 'Tipo', 'Data de Envio', 'URL do Arquivo']];
-    colaboradores.forEach(({ colab, documentos }) => {
-      (documentos || []).forEach(d => {
-        linhas.push([colab.nome_colaborador || '', d.tipo || '', d.data || '', d.url || '']);
-      });
-    });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), 'Documentos');
-  }
-
-  if (wb.SheetNames.length === 0) {
+  if (secoes.length === 0) {
     showToast('Selecione ao menos uma seção para gerar o XLSX.');
     return;
+  }
+
+  const blocos = construirBlocosSecoesRelatorio(colaboradores);
+  const wb = XLSX.utils.book_new();
+
+  if (tipo === 'todos') {
+    // Uma guia por seção (como já era) + uma guia extra só com tudo junto.
+    secoes.forEach(chave => {
+      const bloco = blocos[chave];
+      if (bloco) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(bloco.linhas), NOME_ABA_SECAO_RELATORIO[chave] || chave);
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(montarLinhasConsolidadas(secoes, blocos)), 'Todos - Completo');
+  } else {
+    // Um único colaborador: tudo numa guia só.
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(montarLinhasConsolidadas(secoes, blocos)), 'Relatório Completo');
   }
 
   const nomeArquivo = tipo === 'todos'
