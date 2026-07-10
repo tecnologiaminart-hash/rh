@@ -2845,7 +2845,7 @@ function pageContratosAlinhamentos() {
 
   <!-- Modal: Acompanhamento do Colaborador -->
   <div id="ca-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;padding:20px;">
-    <div style="background:#fff;border-radius:8px;width:100%;max-width:1200px;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 12px 60px rgba(0,0,0,.3);overflow:hidden">
+    <div style="background:#fff;border-radius:8px;width:100%;max-width:1520px;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 12px 60px rgba(0,0,0,.3);overflow:hidden">
       <div style="padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
         <div>
           <div style="font-size:16px;font-weight:700" id="ca-modal-nome">Colaborador</div>
@@ -2854,7 +2854,7 @@ function pageContratosAlinhamentos() {
         <button type="button" class="btn btn-sm" onclick="fecharContratoAlinhamentoModal()">✕ Fechar</button>
       </div>
       <div style="flex:1;overflow-y:auto;padding:24px">
-        <div style="display:grid;grid-template-columns:repeat(3,minmax(240px,1fr));gap:20px;align-items:start">
+        <div style="display:grid;grid-template-columns:repeat(4,minmax(220px,1fr));gap:20px;align-items:start">
 
           <!-- Coluna 1: Avaliação de Experiência -->
           <div style="border:1px solid var(--border);border-radius:6px;padding:16px">
@@ -2917,11 +2917,6 @@ function pageContratosAlinhamentos() {
                 <textarea class="form-input" id="ca-finalizacao-obs" rows="2"></textarea>
               </div>
             </div>
-            <div class="form-group" style="margin-bottom:8px;margin-top:8px">
-              <label class="form-label">Anexar Contrato de Experiência</label>
-              <input class="form-input" type="file" id="ca-contrato-exp-arquivo" accept=".pdf,.jpg,.png,.jpeg">
-              <div id="ca-contrato-exp-link"></div>
-            </div>
             <button type="button" class="btn btn-primary" style="width:100%;margin-top:10px" onclick="salvarAvaliacaoExperiencia()">Salvar Avaliação de Experiência</button>
           </div>
 
@@ -2943,6 +2938,22 @@ function pageContratosAlinhamentos() {
               <button type="button" class="btn btn-sm" id="ca-des-tab-historico" onclick="mudarViewDesempenho('historico')">Histórico</button>
             </div>
             <div id="ca-desempenho-corpo"></div>
+          </div>
+
+          <!-- Coluna 4: Enviar Contrato Experiência & Efetivo -->
+          <div style="border:1px solid var(--border);border-radius:6px;padding:16px">
+            <div style="font-size:13px;font-weight:700;text-transform:uppercase;margin-bottom:14px;color:var(--text2)">Enviar Contrato Experiência & Efetivo</div>
+            <div class="form-group" style="margin-bottom:16px">
+              <label class="form-label">Anexar Contrato de Experiência</label>
+              <input class="form-input" type="file" id="ca-contrato-exp-arquivo" accept=".pdf,.jpg,.png,.jpeg">
+              <div id="ca-contrato-exp-link"></div>
+            </div>
+            <div class="form-group" style="margin-bottom:8px">
+              <label class="form-label">Anexar Contrato Efetivo de Trabalho</label>
+              <input class="form-input" type="file" id="ca-contrato-efetivo-arquivo" accept=".pdf,.jpg,.png,.jpeg">
+              <div id="ca-contrato-efetivo-link"></div>
+            </div>
+            <button type="button" class="btn btn-primary" style="width:100%;margin-top:10px" onclick="salvarAnexosContrato()">Salvar Anexos</button>
           </div>
 
         </div>
@@ -3112,6 +3123,26 @@ window.calinOrdenar = function(valor) {
   if (window._renderContratosAlinhamentos) window._renderContratosAlinhamentos();
 };
 
+// Google Drive não deixa forçar download em links "view" comuns (o attribute
+// "download" é ignorado em recursos de outra origem); convertendo para o
+// endpoint "uc?export=download" o Drive entrega o arquivo direto, sem abrir o
+// visualizador — assim dá pra oferecer "Ver" e "Baixar" como ações distintas.
+function converterParaLinkDownloadDrive(url) {
+  if (!url) return url;
+  const m = String(url).match(/\/d\/([a-zA-Z0-9_-]+)/) || String(url).match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (m && m[1]) return `https://drive.google.com/uc?export=download&id=${m[1]}`;
+  return url;
+}
+
+function renderAnexoLinks(url) {
+  if (!url) return '';
+  return `
+    <div style="display:flex;gap:12px;margin-top:6px">
+      <a href="${url}" target="_blank" rel="noopener" style="font-size:12px">👁 Ver</a>
+      <a href="${converterParaLinkDownloadDrive(url)}" style="font-size:12px">⬇ Baixar</a>
+    </div>`;
+}
+
 window.abrirContratoAlinhamentoModal = function(colabId) {
   _caModalColabId = colabId;
   const colab = (_colaboradoresSupabase || []).find(c => String(c.id_colaborador) === String(colabId));
@@ -3134,9 +3165,9 @@ window.abrirContratoAlinhamentoModal = function(colabId) {
   document.getElementById('ca-status-finalizacao').value = (ca && ca.status_finalizacao_experiencia) || '';
   document.getElementById('ca-finalizacao-obs').value = (ca && ca.finalizacao_observacoes) || '';
   document.getElementById('ca-contrato-exp-arquivo').value = '';
-  document.getElementById('ca-contrato-exp-link').innerHTML = (ca && ca.contrato_experiencia_url)
-    ? `<a href="${ca.contrato_experiencia_url}" target="_blank" rel="noopener" style="font-size:12px;margin-top:6px;display:inline-block">📎 Ver contrato enviado</a>`
-    : '';
+  document.getElementById('ca-contrato-exp-link').innerHTML = renderAnexoLinks(ca && ca.contrato_experiencia_url);
+  document.getElementById('ca-contrato-efetivo-arquivo').value = '';
+  document.getElementById('ca-contrato-efetivo-link').innerHTML = renderAnexoLinks(ca && ca.contrato_efetivo_url);
   window.caAtualizarBlocoExperiencia();
 
   _editingExpectativaId = null;
@@ -3162,28 +3193,6 @@ window.salvarAvaliacaoExperiencia = async function() {
   if (!_caModalColabId) return;
   if (!supaClient) return showToast('Supabase não está configurado.', 'danger');
 
-  const arquivo = document.getElementById('ca-contrato-exp-arquivo').files[0];
-  const caAtual = (_contratosAlinhamentos || []).find(x => String(x.id_colaborador) === String(_caModalColabId));
-  let contratoExperienciaUrl = caAtual ? (caAtual.contrato_experiencia_url || null) : null;
-
-  if (arquivo) {
-    try {
-      const driveFolderId = await window.obterDriveFolderIdParaColaborador(_caModalColabId);
-      if (!driveFolderId) return showToast('Pasta de documentos não encontrada para este colaborador.', 'danger');
-      contratoExperienciaUrl = await window.enviarArquivoParaDrive(arquivo, { cid: _caModalColabId, tipo: 'Contrato de Experiência', driveFolderId });
-      // Também registra o arquivo na aba Documentos, para ficar no mesmo local de sempre.
-      await supaClient.from('documentos').insert([{
-        id_colaborador: _caModalColabId,
-        tipo_doc: 'Contrato de Experiência',
-        data_envio_doc: new Date().toISOString().slice(0, 10),
-        url_arquivo: contratoExperienciaUrl,
-      }]);
-    } catch (err) {
-      console.error('Erro ao enviar contrato de experiência:', err);
-      return showToast('Falha ao enviar o arquivo do contrato de experiência.', 'danger');
-    }
-  }
-
   const payload = {
     id_colaborador: _caModalColabId,
     tipo_contrato_avaliacao: document.getElementById('ca-tipo-contrato').value,
@@ -3196,7 +3205,6 @@ window.salvarAvaliacaoExperiencia = async function() {
     aval_link: document.getElementById('ca-aval-link').value.trim() || null,
     status_finalizacao_experiencia: document.getElementById('ca-status-finalizacao').value || null,
     finalizacao_observacoes: document.getElementById('ca-finalizacao-obs').value.trim() || null,
-    contrato_experiencia_url: contratoExperienciaUrl,
     updated_at: new Date().toISOString(),
   };
 
@@ -3212,11 +3220,71 @@ window.salvarAvaliacaoExperiencia = async function() {
   showToast('Avaliação de Experiência salva com sucesso!');
   await loadContratosAlinhamentosFromSupabase();
   if (window._renderContratosAlinhamentos) window._renderContratosAlinhamentos();
-  const caAtualizado = (_contratosAlinhamentos || []).find(x => String(x.id_colaborador) === String(_caModalColabId));
+};
+
+// Envia (ou mantém) os anexos de Contrato de Experiência e Contrato Efetivo de
+// Trabalho. Cada arquivo é opcional nesse "Salvar": se o campo estiver vazio,
+// o link já salvo anteriormente (se houver) é preservado, já que o upsert só
+// atualiza as colunas informadas no payload.
+window.salvarAnexosContrato = async function() {
+  if (!_caModalColabId) return;
+  if (!supaClient) return showToast('Supabase não está configurado.', 'danger');
+
+  const caAtual = (_contratosAlinhamentos || []).find(x => String(x.id_colaborador) === String(_caModalColabId));
+  const arquivoExperiencia = document.getElementById('ca-contrato-exp-arquivo').files[0];
+  const arquivoEfetivo = document.getElementById('ca-contrato-efetivo-arquivo').files[0];
+
+  let contratoExperienciaUrl = caAtual ? (caAtual.contrato_experiencia_url || null) : null;
+  let contratoEfetivoUrl = caAtual ? (caAtual.contrato_efetivo_url || null) : null;
+
+  async function enviarAnexo(arquivo, tipo) {
+    const driveFolderId = await window.obterDriveFolderIdParaColaborador(_caModalColabId);
+    if (!driveFolderId) throw new Error('Pasta de documentos não encontrada para este colaborador.');
+    const url = await window.enviarArquivoParaDrive(arquivo, { cid: _caModalColabId, tipo, driveFolderId });
+    // Também registra o arquivo na aba Documentos, para ficar no mesmo local de sempre.
+    await supaClient.from('documentos').insert([{
+      id_colaborador: _caModalColabId,
+      tipo_doc: tipo,
+      data_envio_doc: new Date().toISOString().slice(0, 10),
+      url_arquivo: url,
+    }]);
+    return url;
+  }
+
+  if (!arquivoExperiencia && !arquivoEfetivo) {
+    return showToast('Selecione ao menos um arquivo para enviar.', 'danger');
+  }
+
+  try {
+    if (arquivoExperiencia) contratoExperienciaUrl = await enviarAnexo(arquivoExperiencia, 'Contrato de Experiência');
+    if (arquivoEfetivo) contratoEfetivoUrl = await enviarAnexo(arquivoEfetivo, 'Contrato Efetivo de Trabalho');
+  } catch (err) {
+    console.error('Erro ao enviar anexos de contrato:', err);
+    return showToast(err.message || 'Falha ao enviar os anexos.', 'danger');
+  }
+
+  const { error } = await supaClient
+    .from('contratos_alinhamentos')
+    .upsert({
+      id_colaborador: _caModalColabId,
+      contrato_experiencia_url: contratoExperienciaUrl,
+      contrato_efetivo_url: contratoEfetivoUrl,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'id_colaborador' });
+
+  if (error) {
+    console.error('Erro ao salvar anexos de contrato:', error.message);
+    return showToast('Erro ao salvar anexos de contrato.', 'danger');
+  }
+
+  showToast('Anexos salvos com sucesso!');
+  await loadContratosAlinhamentosFromSupabase();
+  if (window._renderContratosAlinhamentos) window._renderContratosAlinhamentos();
+
   document.getElementById('ca-contrato-exp-arquivo').value = '';
-  document.getElementById('ca-contrato-exp-link').innerHTML = (caAtualizado && caAtualizado.contrato_experiencia_url)
-    ? `<a href="${caAtualizado.contrato_experiencia_url}" target="_blank" rel="noopener" style="font-size:12px;margin-top:6px;display:inline-block">📎 Ver contrato enviado</a>`
-    : '';
+  document.getElementById('ca-contrato-efetivo-arquivo').value = '';
+  document.getElementById('ca-contrato-exp-link').innerHTML = renderAnexoLinks(contratoExperienciaUrl);
+  document.getElementById('ca-contrato-efetivo-link').innerHTML = renderAnexoLinks(contratoEfetivoUrl);
 };
 
 window.mudarViewExpectativa = function(view) {
@@ -3238,9 +3306,12 @@ function renderExpectativaColuna() {
     corpo.innerHTML = lista.length === 0
       ? '<div style="padding:16px 0;color:var(--text3);font-size:13px;text-align:center">Nenhum registro ainda.</div>'
       : lista.map(item => `
-        <div style="padding:10px 12px;border:1px solid var(--border);border-radius:4px;margin-bottom:8px;cursor:pointer" onclick="editarExpectativa(${item.id_expectativa})">
-          <div style="font-size:13px;font-weight:600">${formatarDataBR(item.data_realizacao) || '—'}</div>
-          <div style="font-size:12px;color:var(--text3)">${item.status_resultado || '—'}</div>
+        <div style="padding:10px 12px;border:1px solid var(--border);border-radius:4px;margin-bottom:8px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px" onclick="editarExpectativa(${item.id_expectativa})">
+          <div>
+            <div style="font-size:13px;font-weight:600">${formatarDataBR(item.data_realizacao) || '—'}</div>
+            <div style="font-size:12px;color:var(--text3)">${item.status_resultado || '—'}</div>
+          </div>
+          ${item.url_arquivo ? `<button type="button" class="btn btn-sm" onclick="event.stopPropagation();window.open('${item.url_arquivo}','_blank')">🔗 Ver link</button>` : ''}
         </div>`).join('');
     return;
   }
@@ -3363,9 +3434,12 @@ function renderDesempenhoColuna() {
     corpo.innerHTML = lista.length === 0
       ? '<div style="padding:16px 0;color:var(--text3);font-size:13px;text-align:center">Nenhum registro ainda.</div>'
       : lista.map(item => `
-        <div style="padding:10px 12px;border:1px solid var(--border);border-radius:4px;margin-bottom:8px;cursor:pointer" onclick="editarDesempenho(${item.id_desempenho})">
-          <div style="font-size:13px;font-weight:600">${formatarDataBR(item.data_realizacao) || '—'}</div>
-          <div style="font-size:12px;color:var(--text3)">${item.status_resultado || '—'}</div>
+        <div style="padding:10px 12px;border:1px solid var(--border);border-radius:4px;margin-bottom:8px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px" onclick="editarDesempenho(${item.id_desempenho})">
+          <div>
+            <div style="font-size:13px;font-weight:600">${formatarDataBR(item.data_realizacao) || '—'}</div>
+            <div style="font-size:12px;color:var(--text3)">${item.status_resultado || '—'}</div>
+          </div>
+          ${item.aval_link ? `<button type="button" class="btn btn-sm" onclick="event.stopPropagation();window.open('${item.aval_link}','_blank')">🔗 Ver link</button>` : ''}
         </div>`).join('');
     return;
   }
