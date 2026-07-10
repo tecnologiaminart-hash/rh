@@ -446,6 +446,12 @@ let _historicoColaboradoresSupabase = [];
 let _ocorrenciasSupabase = [];
 let _editingOcorrenciaId = null;
 let _editingHistoricoColabId = null;
+let _contratosAlinhamentos = [];
+let _expectativaPorColab = {};
+let _desempenhoPorColab = {};
+let _caModalColabId = null;
+let _editingExpectativaId = null;
+let _editingDesempenhoId = null;
 let _cargos = []; // Para armazenar os cargos do Supabase
 let _statusEmployees = [];
   
@@ -919,6 +925,12 @@ const NAV = [
       { id: 'col-ocorrencias', label: 'Ocorrências' },
       { id: 'col-documentos', label: 'Documentos' },
       { id: 'col-historico', label: 'Histórico de Carreira' },
+    ]
+  },
+  {
+    id: 'contratos-alinhamentos', label: 'Contratos & Alinhamentos', icon: '◈',
+    subs: [
+      { id: 'calin-acompanhamento', label: 'Acompanhamento' },
     ]
   },
   {
@@ -2684,6 +2696,575 @@ window.excluirOcorrencia = async function(ocorrenciaId) {
   await loadOcorrenciasFromSupabase();
 };
 
+// ------------------------------------------------------------
+// CONTRATOS & ALINHAMENTOS > ACOMPANHAMENTO
+// ------------------------------------------------------------
+const STATUS_AVALIACAO_EXPERIENCIA = ['Pendente', 'Bom', 'Médio', 'Ruim'];
+const STATUS_FINALIZACAO_EXPERIENCIA = ['Efetivado', 'Em andamento', 'Rescindido', 'Não Assinado'];
+const STATUS_CONTRATO_EXPECTATIVA = ['Alinhado Assinado', 'Divergente'];
+const STATUS_AVALIACAO_DESEMPENHO = ['Abaixo do esperado', 'Atingido 100%', 'Inativo', 'Metas Pactuadas'];
+
+async function loadContratosAlinhamentosFromSupabase() {
+  if (!supaClient) return;
+  const { data, error } = await supaClient.from('contratos_alinhamentos').select('*');
+  if (error) {
+    console.error('Erro ao carregar contratos_alinhamentos:', error.message);
+    _contratosAlinhamentos = [];
+  } else {
+    _contratosAlinhamentos = data || [];
+  }
+}
+
+async function loadContratosExpectativaFromSupabase() {
+  if (!supaClient) return;
+  const { data, error } = await supaClient
+    .from('contratos_expectativa')
+    .select('*')
+    .order('data_realizacao', { ascending: false });
+  if (error) {
+    console.error('Erro ao carregar contratos_expectativa:', error.message);
+    _expectativaPorColab = {};
+    return;
+  }
+  const porColab = {};
+  (data || []).forEach(row => {
+    if (!porColab[row.id_colaborador]) porColab[row.id_colaborador] = [];
+    porColab[row.id_colaborador].push(row);
+  });
+  _expectativaPorColab = porColab;
+}
+
+async function loadContratosDesempenhoFromSupabase() {
+  if (!supaClient) return;
+  const { data, error } = await supaClient
+    .from('contratos_desempenho')
+    .select('*')
+    .order('data_realizacao', { ascending: false });
+  if (error) {
+    console.error('Erro ao carregar contratos_desempenho:', error.message);
+    _desempenhoPorColab = {};
+    return;
+  }
+  const porColab = {};
+  (data || []).forEach(row => {
+    if (!porColab[row.id_colaborador]) porColab[row.id_colaborador] = [];
+    porColab[row.id_colaborador].push(row);
+  });
+  _desempenhoPorColab = porColab;
+}
+
+function pageContratosAlinhamentos() {
+  document.getElementById('topbar-actions').innerHTML = '';
+
+  const renderTabela = () => {
+    const tbody = document.getElementById('calin-tbody');
+    if (!tbody) return;
+
+    const lista = [...(_colaboradoresSupabase || [])].sort((a, b) => (a.nome_colaborador || '').localeCompare(b.nome_colaborador || ''));
+
+    tbody.innerHTML = lista.length === 0
+      ? '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhum colaborador encontrado.</td></tr>'
+      : lista.map(c => {
+          const cid = c.id_colaborador;
+          const cargoNome = c.cargos ? c.cargos.nome_cargo : '—';
+          const ca = (_contratosAlinhamentos || []).find(x => String(x.id_colaborador) === String(cid));
+          const statusFinal = (ca && ca.status_finalizacao_experiencia) || '—';
+          const ultimaExpectativa = (_expectativaPorColab[cid] || [])[0];
+          const ultimoDesempenho = (_desempenhoPorColab[cid] || [])[0];
+          const statusBadgeClass = c.status_colaborador === 'Ativo' ? 'badge-active'
+            : c.status_colaborador === 'Inativo' ? 'badge-gray' : 'badge-inactive';
+          return `
+          <tr style="cursor:pointer" onclick="abrirContratoAlinhamentoModal(${cid})">
+            <td><strong>${c.nome_colaborador}</strong></td>
+            <td>${c.tipo_de_contrato || '—'}</td>
+            <td>${cargoNome}</td>
+            <td><span class="badge ${statusBadgeClass}">${c.status_colaborador || '—'}</span></td>
+            <td>${statusFinal}</td>
+            <td>${ultimoDesempenho ? (formatarDataBR(ultimoDesempenho.data_realizacao) || '—') : '—'}</td>
+            <td>${ultimaExpectativa ? (formatarDataBR(ultimaExpectativa.data_realizacao) || '—') : '—'}</td>
+          </tr>`;
+        }).join('');
+  };
+
+  window._renderContratosAlinhamentos = renderTabela;
+
+  Promise.resolve(!_colaboradoresSupabase || _colaboradoresSupabase.length === 0 ? loadColaboradoresFromSupabase() : null)
+    .then(() => Promise.all([
+      loadContratosAlinhamentosFromSupabase(),
+      loadContratosExpectativaFromSupabase(),
+      loadContratosDesempenhoFromSupabase(),
+    ]))
+    .then(renderTabela);
+
+  return `
+  <div style="font-size:13px;color:var(--text3);margin-bottom:16px">Acompanhe a avaliação de experiência, o contrato de expectativa e a avaliação de desempenho de cada colaborador.</div>
+
+  <!-- Modal: Acompanhamento do Colaborador -->
+  <div id="ca-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;padding:20px;">
+    <div style="background:#fff;border-radius:8px;width:100%;max-width:1200px;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 12px 60px rgba(0,0,0,.3);overflow:hidden">
+      <div style="padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+        <div>
+          <div style="font-size:16px;font-weight:700" id="ca-modal-nome">Colaborador</div>
+          <div style="font-size:12px;color:var(--text3)" id="ca-modal-cargo">Cargo</div>
+        </div>
+        <button type="button" class="btn btn-sm" onclick="fecharContratoAlinhamentoModal()">✕ Fechar</button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:24px">
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(240px,1fr));gap:20px;align-items:start">
+
+          <!-- Coluna 1: Avaliação de Experiência -->
+          <div style="border:1px solid var(--border);border-radius:6px;padding:16px">
+            <div style="font-size:13px;font-weight:700;text-transform:uppercase;margin-bottom:14px;color:var(--text2)">Avaliação de Experiência</div>
+            <div class="form-group" style="margin-bottom:12px">
+              <label class="form-label">Tipo de Contrato</label>
+              <select class="form-select" id="ca-tipo-contrato" onchange="caAtualizarBlocoExperiencia()">
+                <option value="Experiência">Experiência</option>
+                <option value="Efetivo">Efetivo</option>
+              </select>
+            </div>
+            <div id="ca-exp-bloco">
+              <div style="font-size:12px;font-weight:700;margin:14px 0 8px;color:var(--text3);text-transform:uppercase">Avaliação 1</div>
+              <div class="form-group" style="margin-bottom:8px">
+                <label class="form-label">Status Avaliação 1</label>
+                <select class="form-select" id="ca-aval1-status">
+                  <option value="">— Selecione —</option>
+                  ${STATUS_AVALIACAO_EXPERIENCIA.map(s => `<option>${s}</option>`).join('')}
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:8px">
+                <label class="form-label">Data realização</label>
+                <input class="form-input" type="date" id="ca-aval1-data">
+              </div>
+              <div class="form-group" style="margin-bottom:8px">
+                <label class="form-label">Observações</label>
+                <textarea class="form-input" id="ca-aval1-obs" rows="2"></textarea>
+              </div>
+
+              <div style="font-size:12px;font-weight:700;margin:14px 0 8px;color:var(--text3);text-transform:uppercase">Avaliação 2</div>
+              <div class="form-group" style="margin-bottom:8px">
+                <label class="form-label">Status Avaliação 2</label>
+                <select class="form-select" id="ca-aval2-status">
+                  <option value="">— Selecione —</option>
+                  ${STATUS_AVALIACAO_EXPERIENCIA.map(s => `<option>${s}</option>`).join('')}
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:8px">
+                <label class="form-label">Data realização</label>
+                <input class="form-input" type="date" id="ca-aval2-data">
+              </div>
+              <div class="form-group" style="margin-bottom:8px">
+                <label class="form-label">Observações</label>
+                <textarea class="form-input" id="ca-aval2-obs" rows="2"></textarea>
+              </div>
+
+              <div class="form-group" style="margin-bottom:8px">
+                <label class="form-label">Anexar Link da Avaliação</label>
+                <input class="form-input" id="ca-aval-link" placeholder="Cole o link da planilha de Avaliação">
+              </div>
+              <div class="form-group" style="margin-bottom:8px">
+                <label class="form-label">Status Finalização de Experiência</label>
+                <select class="form-select" id="ca-status-finalizacao">
+                  <option value="">— Selecione —</option>
+                  ${STATUS_FINALIZACAO_EXPERIENCIA.map(s => `<option>${s}</option>`).join('')}
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:8px">
+                <label class="form-label">Observações</label>
+                <textarea class="form-input" id="ca-finalizacao-obs" rows="2"></textarea>
+              </div>
+            </div>
+            <div class="form-group" style="margin-bottom:8px;margin-top:8px">
+              <label class="form-label">Anexar Contrato de Experiência</label>
+              <input class="form-input" type="file" id="ca-contrato-exp-arquivo" accept=".pdf,.jpg,.png,.jpeg">
+              <div id="ca-contrato-exp-link"></div>
+            </div>
+            <button type="button" class="btn btn-primary" style="width:100%;margin-top:10px" onclick="salvarAvaliacaoExperiencia()">Salvar Avaliação de Experiência</button>
+          </div>
+
+          <!-- Coluna 2: Contrato de Expectativa -->
+          <div style="border:1px solid var(--border);border-radius:6px;padding:16px">
+            <div style="font-size:13px;font-weight:700;text-transform:uppercase;margin-bottom:14px;color:var(--text2)">Contrato de Expectativa</div>
+            <div style="display:flex;gap:8px;margin-bottom:14px">
+              <button type="button" class="btn btn-sm" id="ca-exp-tab-registrar" onclick="mudarViewExpectativa('registrar')">Registrar</button>
+              <button type="button" class="btn btn-sm" id="ca-exp-tab-historico" onclick="mudarViewExpectativa('historico')">Histórico</button>
+            </div>
+            <div id="ca-expectativa-corpo"></div>
+          </div>
+
+          <!-- Coluna 3: Avaliação de Desempenho -->
+          <div style="border:1px solid var(--border);border-radius:6px;padding:16px">
+            <div style="font-size:13px;font-weight:700;text-transform:uppercase;margin-bottom:14px;color:var(--text2)">Avaliação de Desempenho</div>
+            <div style="display:flex;gap:8px;margin-bottom:14px">
+              <button type="button" class="btn btn-sm" id="ca-des-tab-registrar" onclick="mudarViewDesempenho('registrar')">Registrar</button>
+              <button type="button" class="btn btn-sm" id="ca-des-tab-historico" onclick="mudarViewDesempenho('historico')">Histórico</button>
+            </div>
+            <div id="ca-desempenho-corpo"></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">Acompanhamento</span>
+      <input class="search-input" placeholder="Buscar colaborador..." oninput="filtrarTabelaGenerica('calin-tbody', this.value)">
+    </div>
+    <div style="overflow-x:auto">
+    <table style="white-space:nowrap">
+      <thead>
+        <tr>
+          <th style="min-width:200px">Colaborador</th>
+          <th>Tipo de Contrato</th>
+          <th style="min-width:160px">Cargo</th>
+          <th>Status</th>
+          <th>Status Finalização Experiência</th>
+          <th>Última Aval. Desempenho</th>
+          <th>Último Contrato Expectativa</th>
+        </tr>
+      </thead>
+      <tbody id="calin-tbody">
+        <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </div>`;
+}
+
+window.abrirContratoAlinhamentoModal = function(colabId) {
+  _caModalColabId = colabId;
+  const colab = (_colaboradoresSupabase || []).find(c => String(c.id_colaborador) === String(colabId));
+  if (!colab) return showToast('Colaborador não encontrado.', 'danger');
+
+  document.getElementById('ca-modal-nome').textContent = colab.nome_colaborador;
+  document.getElementById('ca-modal-cargo').textContent = colab.cargos ? colab.cargos.nome_cargo : '—';
+
+  const ca = (_contratosAlinhamentos || []).find(x => String(x.id_colaborador) === String(colabId)) || null;
+
+  const tipoInicial = (ca && ca.tipo_contrato_avaliacao) || (colab.tipo_de_contrato === 'Experiência' ? 'Experiência' : 'Efetivo');
+  document.getElementById('ca-tipo-contrato').value = tipoInicial;
+  document.getElementById('ca-aval1-status').value = (ca && ca.aval1_status) || '';
+  document.getElementById('ca-aval1-data').value = (ca && ca.aval1_data) || '';
+  document.getElementById('ca-aval1-obs').value = (ca && ca.aval1_observacoes) || '';
+  document.getElementById('ca-aval2-status').value = (ca && ca.aval2_status) || '';
+  document.getElementById('ca-aval2-data').value = (ca && ca.aval2_data) || '';
+  document.getElementById('ca-aval2-obs').value = (ca && ca.aval2_observacoes) || '';
+  document.getElementById('ca-aval-link').value = (ca && ca.aval_link) || '';
+  document.getElementById('ca-status-finalizacao').value = (ca && ca.status_finalizacao_experiencia) || '';
+  document.getElementById('ca-finalizacao-obs').value = (ca && ca.finalizacao_observacoes) || '';
+  document.getElementById('ca-contrato-exp-arquivo').value = '';
+  document.getElementById('ca-contrato-exp-link').innerHTML = (ca && ca.contrato_experiencia_url)
+    ? `<a href="${ca.contrato_experiencia_url}" target="_blank" rel="noopener" style="font-size:12px;margin-top:6px;display:inline-block">📎 Ver contrato enviado</a>`
+    : '';
+  window.caAtualizarBlocoExperiencia();
+
+  _editingExpectativaId = null;
+  _editingDesempenhoId = null;
+  window._caExpectativaView = 'registrar';
+  window._caDesempenhoView = 'registrar';
+  renderExpectativaColuna();
+  renderDesempenhoColuna();
+
+  document.getElementById('ca-modal').style.display = 'flex';
+};
+
+window.fecharContratoAlinhamentoModal = function() {
+  document.getElementById('ca-modal').style.display = 'none';
+};
+
+window.caAtualizarBlocoExperiencia = function() {
+  const tipo = document.getElementById('ca-tipo-contrato').value;
+  document.getElementById('ca-exp-bloco').style.display = tipo === 'Experiência' ? '' : 'none';
+};
+
+window.salvarAvaliacaoExperiencia = async function() {
+  if (!_caModalColabId) return;
+  if (!supaClient) return showToast('Supabase não está configurado.', 'danger');
+
+  const arquivo = document.getElementById('ca-contrato-exp-arquivo').files[0];
+  const caAtual = (_contratosAlinhamentos || []).find(x => String(x.id_colaborador) === String(_caModalColabId));
+  let contratoExperienciaUrl = caAtual ? (caAtual.contrato_experiencia_url || null) : null;
+
+  if (arquivo) {
+    try {
+      const driveFolderId = await window.obterDriveFolderIdParaColaborador(_caModalColabId);
+      if (!driveFolderId) return showToast('Pasta de documentos não encontrada para este colaborador.', 'danger');
+      contratoExperienciaUrl = await window.enviarArquivoParaDrive(arquivo, { cid: _caModalColabId, tipo: 'Contrato de Experiência', driveFolderId });
+      // Também registra o arquivo na aba Documentos, para ficar no mesmo local de sempre.
+      await supaClient.from('documentos').insert([{
+        id_colaborador: _caModalColabId,
+        tipo_doc: 'Contrato de Experiência',
+        data_envio_doc: new Date().toISOString().slice(0, 10),
+        url_arquivo: contratoExperienciaUrl,
+      }]);
+    } catch (err) {
+      console.error('Erro ao enviar contrato de experiência:', err);
+      return showToast('Falha ao enviar o arquivo do contrato de experiência.', 'danger');
+    }
+  }
+
+  const payload = {
+    id_colaborador: _caModalColabId,
+    tipo_contrato_avaliacao: document.getElementById('ca-tipo-contrato').value,
+    aval1_status: document.getElementById('ca-aval1-status').value || null,
+    aval1_data: document.getElementById('ca-aval1-data').value || null,
+    aval1_observacoes: document.getElementById('ca-aval1-obs').value.trim() || null,
+    aval2_status: document.getElementById('ca-aval2-status').value || null,
+    aval2_data: document.getElementById('ca-aval2-data').value || null,
+    aval2_observacoes: document.getElementById('ca-aval2-obs').value.trim() || null,
+    aval_link: document.getElementById('ca-aval-link').value.trim() || null,
+    status_finalizacao_experiencia: document.getElementById('ca-status-finalizacao').value || null,
+    finalizacao_observacoes: document.getElementById('ca-finalizacao-obs').value.trim() || null,
+    contrato_experiencia_url: contratoExperienciaUrl,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await supaClient
+    .from('contratos_alinhamentos')
+    .upsert(payload, { onConflict: 'id_colaborador' });
+
+  if (error) {
+    console.error('Erro ao salvar avaliação de experiência:', error.message);
+    return showToast('Erro ao salvar avaliação de experiência.', 'danger');
+  }
+
+  showToast('Avaliação de Experiência salva com sucesso!');
+  await loadContratosAlinhamentosFromSupabase();
+  if (window._renderContratosAlinhamentos) window._renderContratosAlinhamentos();
+  const caAtualizado = (_contratosAlinhamentos || []).find(x => String(x.id_colaborador) === String(_caModalColabId));
+  document.getElementById('ca-contrato-exp-arquivo').value = '';
+  document.getElementById('ca-contrato-exp-link').innerHTML = (caAtualizado && caAtualizado.contrato_experiencia_url)
+    ? `<a href="${caAtualizado.contrato_experiencia_url}" target="_blank" rel="noopener" style="font-size:12px;margin-top:6px;display:inline-block">📎 Ver contrato enviado</a>`
+    : '';
+};
+
+window.mudarViewExpectativa = function(view) {
+  window._caExpectativaView = view;
+  if (view === 'registrar') _editingExpectativaId = null;
+  renderExpectativaColuna();
+};
+
+function renderExpectativaColuna() {
+  const corpo = document.getElementById('ca-expectativa-corpo');
+  if (!corpo) return;
+  const view = window._caExpectativaView || 'registrar';
+
+  document.getElementById('ca-exp-tab-registrar').className = 'btn btn-sm' + (view === 'registrar' ? ' btn-primary' : '');
+  document.getElementById('ca-exp-tab-historico').className = 'btn btn-sm' + (view === 'historico' ? ' btn-primary' : '');
+
+  if (view === 'historico') {
+    const lista = _expectativaPorColab[_caModalColabId] || [];
+    corpo.innerHTML = lista.length === 0
+      ? '<div style="padding:16px 0;color:var(--text3);font-size:13px;text-align:center">Nenhum registro ainda.</div>'
+      : lista.map(item => `
+        <div style="padding:10px 12px;border:1px solid var(--border);border-radius:4px;margin-bottom:8px;cursor:pointer" onclick="editarExpectativa(${item.id_expectativa})">
+          <div style="font-size:13px;font-weight:600">${formatarDataBR(item.data_realizacao) || '—'}</div>
+          <div style="font-size:12px;color:var(--text3)">${item.status_resultado || '—'}</div>
+        </div>`).join('');
+    return;
+  }
+
+  const item = _editingExpectativaId
+    ? (_expectativaPorColab[_caModalColabId] || []).find(x => String(x.id_expectativa) === String(_editingExpectativaId))
+    : null;
+
+  corpo.innerHTML = `
+    <div class="form-group" style="margin-bottom:8px">
+      <label class="form-label">Status resultado</label>
+      <select class="form-select" id="ca-exp-status">
+        <option value="">— Selecione —</option>
+        ${STATUS_CONTRATO_EXPECTATIVA.map(s => `<option ${item && item.status_resultado === s ? 'selected' : ''}>${s}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group" style="margin-bottom:8px">
+      <label class="form-label">Data de realização</label>
+      <input class="form-input" type="date" id="ca-exp-data" value="${(item && item.data_realizacao) || ''}">
+    </div>
+    <div class="form-group" style="margin-bottom:8px">
+      <label class="form-label">Observações</label>
+      <textarea class="form-input" id="ca-exp-obs" rows="3">${(item && item.observacoes) || ''}</textarea>
+    </div>
+    <div class="form-group" style="margin-bottom:8px">
+      <label class="form-label">Enviar contrato de expectativa</label>
+      <input class="form-input" type="file" id="ca-exp-arquivo" accept=".pdf,.jpg,.png,.jpeg">
+      ${item && item.url_arquivo ? `<a href="${item.url_arquivo}" target="_blank" rel="noopener" style="font-size:12px;margin-top:6px;display:inline-block">📎 Ver arquivo enviado</a>` : ''}
+    </div>
+    <button type="button" class="btn btn-primary" style="width:100%;margin-top:6px" onclick="salvarContratoExpectativa()">${_editingExpectativaId ? 'Salvar Alterações' : 'Registrar'}</button>
+  `;
+}
+
+window.editarExpectativa = function(id) {
+  _editingExpectativaId = id;
+  window._caExpectativaView = 'registrar';
+  renderExpectativaColuna();
+};
+
+window.salvarContratoExpectativa = async function() {
+  if (!_caModalColabId) return;
+  if (!supaClient) return showToast('Supabase não está configurado.', 'danger');
+
+  const statusResultado = document.getElementById('ca-exp-status').value;
+  const dataRealizacao = document.getElementById('ca-exp-data').value;
+  const observacoes = document.getElementById('ca-exp-obs').value.trim();
+  const arquivo = document.getElementById('ca-exp-arquivo').files[0];
+
+  if (!statusResultado || !dataRealizacao) {
+    return showToast('Preencha o status resultado e a data de realização.', 'danger');
+  }
+
+  const existente = _editingExpectativaId
+    ? (_expectativaPorColab[_caModalColabId] || []).find(x => String(x.id_expectativa) === String(_editingExpectativaId))
+    : null;
+  let urlArquivo = existente ? (existente.url_arquivo || null) : null;
+
+  if (arquivo) {
+    try {
+      const driveFolderId = await window.obterDriveFolderIdParaColaborador(_caModalColabId);
+      if (!driveFolderId) return showToast('Pasta de documentos não encontrada para este colaborador.', 'danger');
+      urlArquivo = await window.enviarArquivoParaDrive(arquivo, { cid: _caModalColabId, tipo: 'Contrato de Expectativa', driveFolderId });
+      // Também registra o arquivo na aba Documentos, para ficar no mesmo local de sempre.
+      await supaClient.from('documentos').insert([{
+        id_colaborador: _caModalColabId,
+        tipo_doc: 'Contrato de Expectativa',
+        data_envio_doc: new Date().toISOString().slice(0, 10),
+        url_arquivo: urlArquivo,
+      }]);
+    } catch (err) {
+      console.error('Erro ao enviar contrato de expectativa:', err);
+      return showToast('Falha ao enviar o arquivo do contrato de expectativa.', 'danger');
+    }
+  }
+
+  const payload = {
+    id_colaborador: _caModalColabId,
+    status_resultado: statusResultado,
+    data_realizacao: dataRealizacao,
+    observacoes: observacoes || null,
+    url_arquivo: urlArquivo,
+  };
+
+  let error;
+  if (_editingExpectativaId) {
+    ({ error } = await supaClient.from('contratos_expectativa').update(payload).eq('id_expectativa', _editingExpectativaId));
+  } else {
+    ({ error } = await supaClient.from('contratos_expectativa').insert([{ ...payload, created_at: new Date().toISOString() }]));
+  }
+
+  if (error) {
+    console.error('Erro ao salvar contrato de expectativa:', error.message);
+    return showToast('Erro ao salvar contrato de expectativa.', 'danger');
+  }
+
+  showToast('Contrato de Expectativa salvo com sucesso!');
+  await loadContratosExpectativaFromSupabase();
+  if (window._renderContratosAlinhamentos) window._renderContratosAlinhamentos();
+  _editingExpectativaId = null;
+  window._caExpectativaView = 'historico';
+  renderExpectativaColuna();
+};
+
+window.mudarViewDesempenho = function(view) {
+  window._caDesempenhoView = view;
+  if (view === 'registrar') _editingDesempenhoId = null;
+  renderDesempenhoColuna();
+};
+
+function renderDesempenhoColuna() {
+  const corpo = document.getElementById('ca-desempenho-corpo');
+  if (!corpo) return;
+  const view = window._caDesempenhoView || 'registrar';
+
+  document.getElementById('ca-des-tab-registrar').className = 'btn btn-sm' + (view === 'registrar' ? ' btn-primary' : '');
+  document.getElementById('ca-des-tab-historico').className = 'btn btn-sm' + (view === 'historico' ? ' btn-primary' : '');
+
+  if (view === 'historico') {
+    const lista = _desempenhoPorColab[_caModalColabId] || [];
+    corpo.innerHTML = lista.length === 0
+      ? '<div style="padding:16px 0;color:var(--text3);font-size:13px;text-align:center">Nenhum registro ainda.</div>'
+      : lista.map(item => `
+        <div style="padding:10px 12px;border:1px solid var(--border);border-radius:4px;margin-bottom:8px;cursor:pointer" onclick="editarDesempenho(${item.id_desempenho})">
+          <div style="font-size:13px;font-weight:600">${formatarDataBR(item.data_realizacao) || '—'}</div>
+          <div style="font-size:12px;color:var(--text3)">${item.status_resultado || '—'}</div>
+        </div>`).join('');
+    return;
+  }
+
+  const item = _editingDesempenhoId
+    ? (_desempenhoPorColab[_caModalColabId] || []).find(x => String(x.id_desempenho) === String(_editingDesempenhoId))
+    : null;
+
+  corpo.innerHTML = `
+    <div class="form-group" style="margin-bottom:8px">
+      <label class="form-label">Data de realização</label>
+      <input class="form-input" type="date" id="ca-des-data" value="${(item && item.data_realizacao) || ''}">
+    </div>
+    <div class="form-group" style="margin-bottom:8px">
+      <label class="form-label">Observações</label>
+      <textarea class="form-input" id="ca-des-obs" rows="3">${(item && item.observacoes) || ''}</textarea>
+    </div>
+    <div class="form-group" style="margin-bottom:8px">
+      <label class="form-label">Status resultado</label>
+      <select class="form-select" id="ca-des-status">
+        <option value="">— Selecione —</option>
+        ${STATUS_AVALIACAO_DESEMPENHO.map(s => `<option ${item && item.status_resultado === s ? 'selected' : ''}>${s}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group" style="margin-bottom:8px">
+      <label class="form-label">Anexar Link da Avaliação</label>
+      <input class="form-input" id="ca-des-link" placeholder="Cole o link da planilha de Avaliação" value="${((item && item.aval_link) || '').replace(/"/g,'&quot;')}">
+    </div>
+    <button type="button" class="btn btn-primary" style="width:100%;margin-top:6px" onclick="salvarAvaliacaoDesempenho()">${_editingDesempenhoId ? 'Salvar Alterações' : 'Registrar'}</button>
+  `;
+}
+
+window.editarDesempenho = function(id) {
+  _editingDesempenhoId = id;
+  window._caDesempenhoView = 'registrar';
+  renderDesempenhoColuna();
+};
+
+window.salvarAvaliacaoDesempenho = async function() {
+  if (!_caModalColabId) return;
+  if (!supaClient) return showToast('Supabase não está configurado.', 'danger');
+
+  const dataRealizacao = document.getElementById('ca-des-data').value;
+  const observacoes = document.getElementById('ca-des-obs').value.trim();
+  const statusResultado = document.getElementById('ca-des-status').value;
+  const avalLink = document.getElementById('ca-des-link').value.trim();
+
+  if (!dataRealizacao || !statusResultado) {
+    return showToast('Preencha a data de realização e o status resultado.', 'danger');
+  }
+
+  const payload = {
+    id_colaborador: _caModalColabId,
+    data_realizacao: dataRealizacao,
+    observacoes: observacoes || null,
+    status_resultado: statusResultado,
+    aval_link: avalLink || null,
+  };
+
+  let error;
+  if (_editingDesempenhoId) {
+    ({ error } = await supaClient.from('contratos_desempenho').update(payload).eq('id_desempenho', _editingDesempenhoId));
+  } else {
+    ({ error } = await supaClient.from('contratos_desempenho').insert([{ ...payload, created_at: new Date().toISOString() }]));
+  }
+
+  if (error) {
+    console.error('Erro ao salvar avaliação de desempenho:', error.message);
+    return showToast('Erro ao salvar avaliação de desempenho.', 'danger');
+  }
+
+  showToast('Avaliação de Desempenho salva com sucesso!');
+  await loadContratosDesempenhoFromSupabase();
+  if (window._renderContratosAlinhamentos) window._renderContratosAlinhamentos();
+  _editingDesempenhoId = null;
+  window._caDesempenhoView = 'historico';
+  renderDesempenhoColuna();
+};
+
 function viewStatusEmployee(colabId) {
   const colab = _colaboradoresSupabase.find(c => c.id_colaborador === colabId);
   if (!colab) {
@@ -3252,6 +3833,7 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
     'col-experiencia': pageColaboradoresExperiencia,
     'col-ocorrencias': pageOcorrencias,
     'col-historico':   pageHistoricoCol,
+    'calin-acompanhamento': pageContratosAlinhamentos,
     'col-historico-detalhe': pageHistoricoCarreiraDetalhe,
     'cont-candidatos': pageCandidatos,
     'cont-vagas':      pageVagas,
