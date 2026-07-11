@@ -2253,8 +2253,7 @@ function pageColaboradoresExperiencia() {
   Promise.all([
     loadColaboradoresFromSupabase(),
     loadContratosAlinhamentosFromSupabase(),
-    loadContratosExpectativaFromSupabase(),
-    loadContratosDesempenhoFromSupabase(),
+    loadContratosRegistrosFromSupabase(),
   ]).then(renderTabela);
 
   return `
@@ -2734,44 +2733,31 @@ async function loadContratosAlinhamentosFromSupabase() {
   }
 }
 
-async function loadContratosExpectativaFromSupabase() {
+// contratos_registros unifica o histórico de Contrato de Expectativa e de
+// Avaliação de Desempenho numa tabela só (coluna "tipo" diferencia as duas) —
+// uma consulta só, dividida em dois caches por colaborador como antes.
+async function loadContratosRegistrosFromSupabase() {
   if (!supaClient) return;
   const { data, error } = await supaClient
-    .from('contratos_expectativa')
+    .from('contratos_registros')
     .select('*')
     .order('data_realizacao', { ascending: false });
   if (error) {
-    console.error('Erro ao carregar contratos_expectativa:', error.message);
-    showToast('Erro ao carregar histórico de Contrato de Expectativa: ' + error.message, 'danger');
+    console.error('Erro ao carregar contratos_registros:', error.message);
+    showToast('Erro ao carregar histórico de Contrato de Expectativa / Avaliação de Desempenho: ' + error.message, 'danger');
     _expectativaPorColab = {};
-    return;
-  }
-  const porColab = {};
-  (data || []).forEach(row => {
-    if (!porColab[row.id_colaborador]) porColab[row.id_colaborador] = [];
-    porColab[row.id_colaborador].push(row);
-  });
-  _expectativaPorColab = porColab;
-}
-
-async function loadContratosDesempenhoFromSupabase() {
-  if (!supaClient) return;
-  const { data, error } = await supaClient
-    .from('contratos_desempenho')
-    .select('*')
-    .order('data_realizacao', { ascending: false });
-  if (error) {
-    console.error('Erro ao carregar contratos_desempenho:', error.message);
-    showToast('Erro ao carregar histórico de Avaliação de Desempenho: ' + error.message, 'danger');
     _desempenhoPorColab = {};
     return;
   }
-  const porColab = {};
+  const porColabExpectativa = {};
+  const porColabDesempenho = {};
   (data || []).forEach(row => {
-    if (!porColab[row.id_colaborador]) porColab[row.id_colaborador] = [];
-    porColab[row.id_colaborador].push(row);
+    const alvo = row.tipo === 'desempenho' ? porColabDesempenho : porColabExpectativa;
+    if (!alvo[row.id_colaborador]) alvo[row.id_colaborador] = [];
+    alvo[row.id_colaborador].push(row);
   });
-  _desempenhoPorColab = porColab;
+  _expectativaPorColab = porColabExpectativa;
+  _desempenhoPorColab = porColabDesempenho;
 }
 
 // Modal de Acompanhamento (Avaliação de Experiência, Contrato de Expectativa,
@@ -2982,8 +2968,7 @@ function pageContratosAlinhamentos() {
   Promise.resolve(!_colaboradoresSupabase || _colaboradoresSupabase.length === 0 ? loadColaboradoresFromSupabase() : null)
     .then(() => Promise.all([
       loadContratosAlinhamentosFromSupabase(),
-      loadContratosExpectativaFromSupabase(),
-      loadContratosDesempenhoFromSupabase(),
+      loadContratosRegistrosFromSupabase(),
     ]))
     .then(renderTabela);
 
@@ -3378,18 +3363,18 @@ function renderExpectativaColuna() {
     corpo.innerHTML = lista.length === 0
       ? '<div style="padding:16px 0;color:var(--text3);font-size:13px;text-align:center">Nenhum registro ainda.</div>'
       : lista.map(item => `
-        <div style="padding:10px 12px;border:1px solid var(--border);border-radius:4px;margin-bottom:8px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px" onclick="editarExpectativa(${item.id_expectativa})">
+        <div style="padding:10px 12px;border:1px solid var(--border);border-radius:4px;margin-bottom:8px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px" onclick="editarExpectativa(${item.id_registro})">
           <div>
             <div style="font-size:13px;font-weight:600">${formatarDataBR(item.data_realizacao) || '—'}</div>
             <div style="font-size:12px;color:var(--text3)">${item.status_resultado || '—'}</div>
           </div>
-          ${item.url_arquivo ? `<button type="button" class="btn btn-sm" onclick="event.stopPropagation();window.open('${item.url_arquivo}','_blank')">👁 Ver contrato</button>` : ''}
+          ${item.link ? `<button type="button" class="btn btn-sm" onclick="event.stopPropagation();window.open('${item.link}','_blank')">👁 Ver contrato</button>` : ''}
         </div>`).join('');
     return;
   }
 
   const item = _editingExpectativaId
-    ? (_expectativaPorColab[_caModalColabId] || []).find(x => String(x.id_expectativa) === String(_editingExpectativaId))
+    ? (_expectativaPorColab[_caModalColabId] || []).find(x => String(x.id_registro) === String(_editingExpectativaId))
     : null;
 
   corpo.innerHTML = `
@@ -3409,8 +3394,8 @@ function renderExpectativaColuna() {
       <textarea class="form-input" id="ca-exp-obs" rows="3">${(item && item.observacoes) || ''}</textarea>
     </div>
     <div class="form-group" style="margin-bottom:8px">
-      ${item && item.url_arquivo
-        ? `<label class="form-label">Contrato de Expectativa</label><a href="${item.url_arquivo}" target="_blank" rel="noopener" style="font-size:12px;display:inline-block">👁 Ver contrato</a>`
+      ${item && item.link
+        ? `<label class="form-label">Contrato de Expectativa</label><a href="${item.link}" target="_blank" rel="noopener" style="font-size:12px;display:inline-block">👁 Ver contrato</a>`
         : `<label class="form-label">Enviar contrato de expectativa</label><input class="form-input" type="file" id="ca-exp-arquivo" accept=".pdf,.jpg,.png,.jpeg">`}
     </div>
     <button type="button" class="btn btn-primary" style="width:100%;margin-top:6px" onclick="salvarContratoExpectativa()">${_editingExpectativaId ? 'Salvar Alterações' : 'Registrar'}</button>
@@ -3439,21 +3424,21 @@ window.salvarContratoExpectativa = async function() {
   }
 
   const existente = _editingExpectativaId
-    ? (_expectativaPorColab[_caModalColabId] || []).find(x => String(x.id_expectativa) === String(_editingExpectativaId))
+    ? (_expectativaPorColab[_caModalColabId] || []).find(x => String(x.id_registro) === String(_editingExpectativaId))
     : null;
-  let urlArquivo = existente ? (existente.url_arquivo || null) : null;
+  let link = existente ? (existente.link || null) : null;
 
   if (arquivo) {
     try {
       const driveFolderId = await window.obterDriveFolderIdParaColaborador(_caModalColabId);
       if (!driveFolderId) return showToast('Pasta de documentos não encontrada para este colaborador.', 'danger');
-      urlArquivo = await window.enviarArquivoParaDrive(arquivo, { cid: _caModalColabId, tipo: 'Contrato de Expectativa', driveFolderId });
+      link = await window.enviarArquivoParaDrive(arquivo, { cid: _caModalColabId, tipo: 'Contrato de Expectativa', driveFolderId });
       // Também registra o arquivo na aba Documentos, para ficar no mesmo local de sempre.
       await supaClient.from('documentos').insert([{
         id_colaborador: _caModalColabId,
         tipo_doc: 'Contrato de Expectativa',
         data_envio_doc: new Date().toISOString().slice(0, 10),
-        url_arquivo: urlArquivo,
+        url_arquivo: link,
       }]);
     } catch (err) {
       console.error('Erro ao enviar contrato de expectativa:', err);
@@ -3463,17 +3448,18 @@ window.salvarContratoExpectativa = async function() {
 
   const payload = {
     id_colaborador: _caModalColabId,
+    tipo: 'expectativa',
     status_resultado: statusResultado,
     data_realizacao: dataRealizacao,
     observacoes: observacoes || null,
-    url_arquivo: urlArquivo,
+    link,
   };
 
   let error;
   if (_editingExpectativaId) {
-    ({ error } = await supaClient.from('contratos_expectativa').update(payload).eq('id_expectativa', _editingExpectativaId));
+    ({ error } = await supaClient.from('contratos_registros').update(payload).eq('id_registro', _editingExpectativaId));
   } else {
-    ({ error } = await supaClient.from('contratos_expectativa').insert([{ ...payload, created_at: new Date().toISOString() }]));
+    ({ error } = await supaClient.from('contratos_registros').insert([{ ...payload, created_at: new Date().toISOString() }]));
   }
 
   if (error) {
@@ -3482,7 +3468,7 @@ window.salvarContratoExpectativa = async function() {
   }
 
   showToast('Contrato de Expectativa salvo com sucesso!');
-  await loadContratosExpectativaFromSupabase();
+  await loadContratosRegistrosFromSupabase();
   if (window._renderContratosAlinhamentos) window._renderContratosAlinhamentos();
   _editingExpectativaId = null;
   window._caExpectativaView = 'historico';
@@ -3493,14 +3479,14 @@ window.excluirContratoExpectativa = async function(id) {
   if (!confirm('Tem certeza que deseja excluir este registro? Esta ação não pode ser desfeita.')) return;
   if (!supaClient) return showToast('Supabase não está configurado.', 'danger');
 
-  const { error } = await supaClient.from('contratos_expectativa').delete().eq('id_expectativa', id);
+  const { error } = await supaClient.from('contratos_registros').delete().eq('id_registro', id);
   if (error) {
     console.error('Erro ao excluir contrato de expectativa:', error.message);
     return showToast('Erro ao excluir registro.', 'danger');
   }
 
   showToast('Registro excluído com sucesso.');
-  await loadContratosExpectativaFromSupabase();
+  await loadContratosRegistrosFromSupabase();
   if (window._renderContratosAlinhamentos) window._renderContratosAlinhamentos();
   _editingExpectativaId = null;
   window._caExpectativaView = 'historico';
@@ -3526,18 +3512,18 @@ function renderDesempenhoColuna() {
     corpo.innerHTML = lista.length === 0
       ? '<div style="padding:16px 0;color:var(--text3);font-size:13px;text-align:center">Nenhum registro ainda.</div>'
       : lista.map(item => `
-        <div style="padding:10px 12px;border:1px solid var(--border);border-radius:4px;margin-bottom:8px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px" onclick="editarDesempenho(${item.id_desempenho})">
+        <div style="padding:10px 12px;border:1px solid var(--border);border-radius:4px;margin-bottom:8px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px" onclick="editarDesempenho(${item.id_registro})">
           <div>
             <div style="font-size:13px;font-weight:600">${formatarDataBR(item.data_realizacao) || '—'}</div>
             <div style="font-size:12px;color:var(--text3)">${item.status_resultado || '—'}</div>
           </div>
-          ${item.aval_link ? `<button type="button" class="btn btn-sm" onclick="event.stopPropagation();window.open('${item.aval_link}','_blank')">👁 Ver avaliação</button>` : ''}
+          ${item.link ? `<button type="button" class="btn btn-sm" onclick="event.stopPropagation();window.open('${item.link}','_blank')">👁 Ver avaliação</button>` : ''}
         </div>`).join('');
     return;
   }
 
   const item = _editingDesempenhoId
-    ? (_desempenhoPorColab[_caModalColabId] || []).find(x => String(x.id_desempenho) === String(_editingDesempenhoId))
+    ? (_desempenhoPorColab[_caModalColabId] || []).find(x => String(x.id_registro) === String(_editingDesempenhoId))
     : null;
 
   corpo.innerHTML = `
@@ -3558,8 +3544,8 @@ function renderDesempenhoColuna() {
     </div>
     <div class="form-group" style="margin-bottom:8px">
       <label class="form-label">Anexar Link da Avaliação</label>
-      <input class="form-input" id="ca-des-link" placeholder="Cole o link da planilha de Avaliação" value="${((item && item.aval_link) || '').replace(/"/g,'&quot;')}">
-      ${renderVerLink(item && item.aval_link, 'Ver avaliação')}
+      <input class="form-input" id="ca-des-link" placeholder="Cole o link da planilha de Avaliação" value="${((item && item.link) || '').replace(/"/g,'&quot;')}">
+      ${renderVerLink(item && item.link, 'Ver avaliação')}
     </div>
     <button type="button" class="btn btn-primary" style="width:100%;margin-top:6px" onclick="salvarAvaliacaoDesempenho()">${_editingDesempenhoId ? 'Salvar Alterações' : 'Registrar'}</button>
     ${_editingDesempenhoId ? `<button type="button" class="btn btn-danger" style="width:100%;margin-top:6px" onclick="excluirAvaliacaoDesempenho(${_editingDesempenhoId})">🗑 Excluir Registro</button>` : ''}
@@ -3579,7 +3565,7 @@ window.salvarAvaliacaoDesempenho = async function() {
   const dataRealizacao = document.getElementById('ca-des-data').value;
   const observacoes = document.getElementById('ca-des-obs').value.trim();
   const statusResultado = document.getElementById('ca-des-status').value;
-  const avalLink = document.getElementById('ca-des-link').value.trim();
+  const link = document.getElementById('ca-des-link').value.trim();
 
   if (!dataRealizacao || !statusResultado) {
     return showToast('Preencha a data de realização e o status resultado.', 'danger');
@@ -3587,17 +3573,18 @@ window.salvarAvaliacaoDesempenho = async function() {
 
   const payload = {
     id_colaborador: _caModalColabId,
+    tipo: 'desempenho',
     data_realizacao: dataRealizacao,
     observacoes: observacoes || null,
     status_resultado: statusResultado,
-    aval_link: avalLink || null,
+    link: link || null,
   };
 
   let error;
   if (_editingDesempenhoId) {
-    ({ error } = await supaClient.from('contratos_desempenho').update(payload).eq('id_desempenho', _editingDesempenhoId));
+    ({ error } = await supaClient.from('contratos_registros').update(payload).eq('id_registro', _editingDesempenhoId));
   } else {
-    ({ error } = await supaClient.from('contratos_desempenho').insert([{ ...payload, created_at: new Date().toISOString() }]));
+    ({ error } = await supaClient.from('contratos_registros').insert([{ ...payload, created_at: new Date().toISOString() }]));
   }
 
   if (error) {
@@ -3606,7 +3593,7 @@ window.salvarAvaliacaoDesempenho = async function() {
   }
 
   showToast('Avaliação de Desempenho salva com sucesso!');
-  await loadContratosDesempenhoFromSupabase();
+  await loadContratosRegistrosFromSupabase();
   if (window._renderContratosAlinhamentos) window._renderContratosAlinhamentos();
   _editingDesempenhoId = null;
   window._caDesempenhoView = 'historico';
@@ -3617,14 +3604,14 @@ window.excluirAvaliacaoDesempenho = async function(id) {
   if (!confirm('Tem certeza que deseja excluir este registro? Esta ação não pode ser desfeita.')) return;
   if (!supaClient) return showToast('Supabase não está configurado.', 'danger');
 
-  const { error } = await supaClient.from('contratos_desempenho').delete().eq('id_desempenho', id);
+  const { error } = await supaClient.from('contratos_registros').delete().eq('id_registro', id);
   if (error) {
     console.error('Erro ao excluir avaliação de desempenho:', error.message);
     return showToast('Erro ao excluir registro.', 'danger');
   }
 
   showToast('Registro excluído com sucesso.');
-  await loadContratosDesempenhoFromSupabase();
+  await loadContratosRegistrosFromSupabase();
   if (window._renderContratosAlinhamentos) window._renderContratosAlinhamentos();
   _editingDesempenhoId = null;
   window._caDesempenhoView = 'historico';
