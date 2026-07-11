@@ -452,6 +452,7 @@ let _desempenhoPorColab = {};
 let _caModalColabId = null;
 let _editingExpectativaId = null;
 let _editingDesempenhoId = null;
+let _modelosRelatorios = [];
 let _cargos = []; // Para armazenar os cargos do Supabase
 let _statusEmployees = [];
   
@@ -931,6 +932,7 @@ const NAV = [
     id: 'contratos-alinhamentos', label: 'Contratos & Alinhamentos', icon: '◈',
     subs: [
       { id: 'calin-acompanhamento', label: 'Acompanhamento' },
+      { id: 'calin-modelos', label: 'Modelos' },
     ]
   },
   {
@@ -3629,6 +3631,197 @@ window.excluirAvaliacaoDesempenho = async function(id) {
   renderDesempenhoColuna();
 };
 
+// ------------------------------------------------------------
+// CONTRATOS & ALINHAMENTOS > MODELOS
+// ------------------------------------------------------------
+// id_cargo = 0 identifica as linhas "fixas" (sem cargo) de avaliação de
+// experiência/desempenho — ver comentário em sql/modelos-contratos.sql sobre
+// por que não é usado null aqui (UNIQUE trata NULL como sempre distinto).
+async function loadModelosRelatoriosFromSupabase() {
+  if (!supaClient) return;
+  const { data, error } = await supaClient.from('modelos_relatorios').select('*');
+  if (error) {
+    console.error('Erro ao carregar modelos_relatorios:', error.message);
+    showToast('Erro ao carregar modelos: ' + error.message, 'danger');
+    _modelosRelatorios = [];
+  } else {
+    _modelosRelatorios = data || [];
+  }
+}
+
+function obterModeloRelatorio(tipo, idCargo = 0) {
+  return (_modelosRelatorios || []).find(m => m.tipo === tipo && Number(m.id_cargo) === Number(idCargo));
+}
+
+async function salvarModeloRelatorio(tipo, idCargo, urlLink) {
+  if (!supaClient) { showToast('Supabase não está configurado.', 'danger'); return false; }
+  const { error } = await supaClient
+    .from('modelos_relatorios')
+    .upsert({ tipo, id_cargo: idCargo, url_link: urlLink || null, updated_at: new Date().toISOString() }, { onConflict: 'tipo,id_cargo' });
+  if (error) {
+    console.error(`Erro ao salvar modelo (${tipo}):`, error.message);
+    showToast('Erro ao salvar modelo.', 'danger');
+    return false;
+  }
+  await loadModelosRelatoriosFromSupabase();
+  return true;
+}
+
+window.salvarModeloAvaliacaoExperiencia = async function() {
+  const url = document.getElementById('mod-aval-exp-link').value.trim();
+  const ok = await salvarModeloRelatorio('avaliacao_experiencia', 0, url);
+  if (!ok) return;
+  showToast('Modelo salvo com sucesso!');
+  document.getElementById('mod-aval-exp-link-view').innerHTML = renderVerLink(url, 'Ver avaliação');
+};
+
+window.salvarModeloAvaliacaoDesempenho = async function() {
+  const url = document.getElementById('mod-aval-des-link').value.trim();
+  const ok = await salvarModeloRelatorio('avaliacao_desempenho', 0, url);
+  if (!ok) return;
+  showToast('Modelo salvo com sucesso!');
+  document.getElementById('mod-aval-des-link-view').innerHTML = renderVerLink(url, 'Ver avaliação');
+};
+
+window.salvarModeloContratoCargo = async function(idCargo) {
+  const el = document.getElementById(`mod-cargo-link-${idCargo}`);
+  if (!el) return;
+  const ok = await salvarModeloRelatorio('contrato_expectativa_cargo', idCargo, el.value.trim());
+  if (!ok) return;
+  showToast('Modelo salvo com sucesso!');
+  if (window._renderModelosCargos) window._renderModelosCargos();
+};
+
+window.filtrarModelosCargo = function(valor) {
+  window._modelosCargoFiltro = valor;
+  if (window._renderModelosCargos) window._renderModelosCargos();
+};
+
+window.ordenarModelosCargo = function(valor) {
+  window._modelosCargoOrdem = valor;
+  if (window._renderModelosCargos) window._renderModelosCargos();
+};
+
+function pageModelosContratos() {
+  document.getElementById('topbar-actions').innerHTML = '';
+
+  if (!window._modelosCargoFiltro) window._modelosCargoFiltro = '';
+  if (!window._modelosCargoOrdem) window._modelosCargoOrdem = 'nome';
+
+  const renderCargos = () => {
+    const tbody = document.getElementById('mod-cargos-tbody');
+    if (!tbody) return;
+
+    let lista = [...(window._cargos || [])];
+    const q = (window._modelosCargoFiltro || '').toLowerCase();
+    if (q) lista = lista.filter(c => (c[window._cargoNameField] || '').toLowerCase().includes(q));
+
+    lista.sort((a, b) => {
+      const nomeA = a[window._cargoNameField] || '';
+      const nomeB = b[window._cargoNameField] || '';
+      if (window._modelosCargoOrdem === 'com-link' || window._modelosCargoOrdem === 'sem-link') {
+        const temLinkA = !!(obterModeloRelatorio('contrato_expectativa_cargo', a[window._cargoIdField]) || {}).url_link;
+        const temLinkB = !!(obterModeloRelatorio('contrato_expectativa_cargo', b[window._cargoIdField]) || {}).url_link;
+        if (temLinkA !== temLinkB) {
+          const aPrimeiro = window._modelosCargoOrdem === 'com-link' ? temLinkA : !temLinkA;
+          return aPrimeiro ? -1 : 1;
+        }
+      }
+      return nomeA.localeCompare(nomeB);
+    });
+
+    tbody.innerHTML = lista.length === 0
+      ? '<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text3)">Nenhum cargo encontrado.</td></tr>'
+      : lista.map(c => {
+          const idCargo = c[window._cargoIdField];
+          const nome = c[window._cargoNameField] || '—';
+          const modelo = obterModeloRelatorio('contrato_expectativa_cargo', idCargo);
+          const url = (modelo && modelo.url_link) || '';
+          return `
+          <tr>
+            <td style="padding:8px 0">${nome}</td>
+            <td style="padding:8px 8px 8px 0">
+              <input class="form-input" id="mod-cargo-link-${idCargo}" value="${url.replace(/"/g, '&quot;')}" placeholder="Cole o link da planilha de Contrato de Expectativa" style="font-size:12px;padding:6px 8px;width:100%">
+            </td>
+            <td style="padding:8px 0;white-space:nowrap">
+              <button type="button" class="btn btn-sm" onclick="salvarModeloContratoCargo(${idCargo})">💾</button>
+              ${url ? `<button type="button" class="btn btn-sm" onclick="window.open('${url}','_blank')">👁 Ver</button>` : ''}
+            </td>
+          </tr>`;
+        }).join('');
+  };
+
+  window._renderModelosCargos = renderCargos;
+
+  Promise.all([
+    (!window._cargos || window._cargos.length === 0) ? loadCargosForApp() : Promise.resolve(),
+    loadModelosRelatoriosFromSupabase(),
+  ]).then(() => {
+    renderCargos();
+    const expModelo = obterModeloRelatorio('avaliacao_experiencia');
+    const desModelo = obterModeloRelatorio('avaliacao_desempenho');
+    document.getElementById('mod-aval-exp-link').value = (expModelo && expModelo.url_link) || '';
+    document.getElementById('mod-aval-exp-link-view').innerHTML = renderVerLink(expModelo && expModelo.url_link, 'Ver avaliação');
+    document.getElementById('mod-aval-des-link').value = (desModelo && desModelo.url_link) || '';
+    document.getElementById('mod-aval-des-link-view').innerHTML = renderVerLink(desModelo && desModelo.url_link, 'Ver avaliação');
+  });
+
+  return `
+  <div style="font-size:13px;color:var(--text3);margin-bottom:16px">Modelos de planilhas usados em Contratos & Alinhamentos: avaliação de experiência, avaliação de desempenho e contrato de expectativa por cargo.</div>
+  <div style="display:grid;grid-template-columns:repeat(3,minmax(260px,1fr));gap:20px;align-items:start">
+
+    <!-- Coluna 1: Modelo Avaliação Experiência -->
+    <div class="table-card" style="padding:16px">
+      <div style="font-size:13px;font-weight:700;text-transform:uppercase;margin-bottom:14px;color:var(--text2)">Modelo Avaliação Experiência</div>
+      <div class="form-group" style="margin-bottom:10px">
+        <label class="form-label">Anexar Link da Avaliação</label>
+        <input class="form-input" id="mod-aval-exp-link" placeholder="Cole o link da planilha de Avaliação">
+        <div id="mod-aval-exp-link-view"></div>
+      </div>
+      <button type="button" class="btn btn-primary" style="width:100%" onclick="salvarModeloAvaliacaoExperiencia()">Salvar</button>
+    </div>
+
+    <!-- Coluna 2: Modelo Avaliação de Desempenho -->
+    <div class="table-card" style="padding:16px">
+      <div style="font-size:13px;font-weight:700;text-transform:uppercase;margin-bottom:14px;color:var(--text2)">Modelo Avaliação de Desempenho</div>
+      <div class="form-group" style="margin-bottom:10px">
+        <label class="form-label">Anexar Link da Avaliação</label>
+        <input class="form-input" id="mod-aval-des-link" placeholder="Cole o link da planilha de Avaliação">
+        <div id="mod-aval-des-link-view"></div>
+      </div>
+      <button type="button" class="btn btn-primary" style="width:100%" onclick="salvarModeloAvaliacaoDesempenho()">Salvar</button>
+    </div>
+
+    <!-- Coluna 3: Modelo Contrato de Expectativa por Cargo -->
+    <div class="table-card" style="padding:16px">
+      <div style="font-size:13px;font-weight:700;text-transform:uppercase;margin-bottom:14px;color:var(--text2)">Modelo Contrato de Expectativa por Cargo</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+        <input class="search-input" placeholder="Buscar cargo..." style="flex:1;min-width:140px" oninput="filtrarModelosCargo(this.value)">
+        <select class="form-select" style="width:auto" onchange="ordenarModelosCargo(this.value)">
+          <option value="nome" ${window._modelosCargoOrdem === 'nome' ? 'selected' : ''}>Cargo (A-Z)</option>
+          <option value="com-link" ${window._modelosCargoOrdem === 'com-link' ? 'selected' : ''}>Com link primeiro</option>
+          <option value="sem-link" ${window._modelosCargoOrdem === 'sem-link' ? 'selected' : ''}>Sem link primeiro</option>
+        </select>
+      </div>
+      <div style="overflow-y:auto;max-height:480px">
+      <table style="width:100%">
+        <thead>
+          <tr>
+            <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Cargo</th>
+            <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Link</th>
+            <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="mod-cargos-tbody">
+          <tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text3)">Carregando...</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+
+  </div>`;
+}
+
 function viewStatusEmployee(colabId) {
   const colab = _colaboradoresSupabase.find(c => c.id_colaborador === colabId);
   if (!colab) {
@@ -4198,6 +4391,7 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
     'col-ocorrencias': pageOcorrencias,
     'col-historico':   pageHistoricoCol,
     'calin-acompanhamento': pageContratosAlinhamentos,
+    'calin-modelos': pageModelosContratos,
     'col-historico-detalhe': pageHistoricoCarreiraDetalhe,
     'cont-candidatos': pageCandidatos,
     'cont-vagas':      pageVagas,
