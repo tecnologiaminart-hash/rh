@@ -4906,7 +4906,7 @@ function pagePerfilDiscInterno() {
     if (!tbody) return;
     const lista = (window._testesAvaliacoes || []).filter(t => t.id_colaborador);
     tbody.innerHTML = lista.length === 0
-      ? '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum teste Disk disparado ainda.</td></tr>'
+      ? '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Nenhum teste Disk disparado ainda.</td></tr>'
       : lista.map(t => {
           const link = `${location.origin}${location.pathname}?avaliacao=${t.token}`;
           const concluido = t.status_realizacao === 'concluido';
@@ -4926,7 +4926,8 @@ function pagePerfilDiscInterno() {
             </td>
             <td>${concluido ? '<span class="badge badge-active">Concluído</span>' : '<span class="badge badge-pending">Pendente</span>'}</td>
             <td style="color:var(--text3);font-size:12px">${t.respondido_em ? new Date(t.respondido_em).toLocaleString('pt-BR') : '—'}</td>
-            <td>${t.resultado_perfil_disk || '—'}</td>
+            <td>${t.resultado_perfil_disc_1 || '—'}</td>
+            <td>${t.resultado_perfil_disc_2 || '—'}</td>
           </tr>`;
         }).join('');
   };
@@ -4950,11 +4951,12 @@ function pagePerfilDiscInterno() {
           <th>Link</th>
           <th>Status</th>
           <th>Respondido em</th>
-          <th>Perfil DISC</th>
+          <th>Perfil DISC (1º)</th>
+          <th>Perfil DISC (2º)</th>
         </tr>
       </thead>
       <tbody id="disc-interno-tbody">
-        <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
+        <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
       </tbody>
     </table>
   </div>`;
@@ -5704,7 +5706,8 @@ function theadCandidatosAprovadosHtml() {
       <th>Envio</th>
       <th>Avaliação</th>
       <th>Respondido em</th>
-      <th>Perfil DISC</th>
+      <th>Perfil DISC (1º)</th>
+      <th>Perfil DISC (2º)</th>
       <th>Entrevista Presencial</th>
       <th>Observações</th>
       <th>Ações</th>
@@ -5738,7 +5741,8 @@ function corpoTabelaCandidatosAprovados(cands, vaga) {
             : `<span class="badge badge-pending">Pendente</span>`}
       </td>
       <td style="color:var(--text3);font-size:12px">${teste && teste.respondido_em ? new Date(teste.respondido_em).toLocaleString('pt-BR') : '—'}</td>
-      <td>${(teste && teste.resultado_perfil_disk) || '—'}</td>
+      <td>${(teste && teste.resultado_perfil_disc_1) || '—'}</td>
+      <td>${(teste && teste.resultado_perfil_disc_2) || '—'}</td>
       <td style="white-space:normal;min-width:170px">
         <div style="margin-bottom:6px">
           ${statusEntrevista === 'Aprovado' ? '<span class="badge badge-active">Aprovado</span>'
@@ -9078,6 +9082,9 @@ async function checkAvaliacaoLink() {
   window._pubAval = {
     token: teste.token,
     idCargo: teste.id_cargo,
+    // Presente só quando o teste é de Perfil DISC — Colaborador Interno (em vez
+    // de candidato); usado para replicar o resultado em mapeamento_perfil.
+    idColaborador: teste.id_colaborador || null,
     cargoNome: (cargo && cargo.nome_cargo) || '—',
     // Nome vem direto de testes_avaliacoes (gravado no momento da aprovação) em vez
     // de consultar candidaturas, porque o anon normalmente só tem permissão de
@@ -9192,7 +9199,7 @@ window.voltarAvaliacaoDisc = function() {
   if (pa.discTeste.tela > 0) { pa.discTeste.tela--; renderAvaliacaoDiscQuiz(); }
 };
 
-// Calcula o perfil, salva o resultado em testes_avaliacoes.resultado_perfil_disk
+// Calcula o perfil, salva o resultado em testes_avaliacoes.resultado_perfil_disc_1/2
 // (sem nunca exibir o resultado na tela) e já marca a avaliação como concluída —
 // o processo de aprovação usa somente o Perfil DISC, sem Competências/Entrevista.
 window.finalizarAvaliacaoDisc = async function() {
@@ -9203,14 +9210,14 @@ window.finalizarAvaliacaoDisc = async function() {
   const somas = [0, 0, 0, 0];
   pa.discTeste.respostas.forEach(respostasTela => { respostasTela.forEach((nota, i) => { somas[i] += (nota || 0); }); });
   const ranking = rotulos.map((rotulo, i) => ({ rotulo, soma: somas[i] })).sort((a, b) => b.soma - a.soma);
-  const perfil = `${ranking[0].rotulo} + ${ranking[1].rotulo}`;
 
   const container = document.getElementById('aval-disc-quiz');
   if (container) container.innerHTML = `<div class="form-card" style="text-align:center;padding:48px 24px"><div style="font-size:40px;margin-bottom:16px">⏳</div><div style="font-size:15px;color:var(--text3)">Salvando sua avaliação...</div></div>`;
 
   try {
     const { error } = await supaClient.from('testes_avaliacoes').update({
-      resultado_perfil_disk: perfil,
+      resultado_perfil_disc_1: ranking[0].rotulo,
+      resultado_perfil_disc_2: ranking[1].rotulo,
       status_realizacao: 'concluido',
       respondido_em: new Date().toISOString()
     }).eq('token', pa.token);
@@ -9219,6 +9226,30 @@ window.finalizarAvaliacaoDisc = async function() {
     console.error('Erro ao salvar resultado do Perfil DISC:', e);
     if (container) container.innerHTML = `<div class="form-card" style="text-align:center;padding:48px 24px"><div style="color:var(--danger);font-weight:600">Erro ao salvar sua avaliação. Tente novamente.</div></div>`;
     return;
+  }
+
+  // Teste de Perfil DISC — Colaborador Interno (tem id_colaborador, diferente do
+  // fluxo de candidato): replica o resultado em mapeamento_perfil.perfil_disc_1/2,
+  // para não ficar dessincronizado com o que aparece em Ficha e EPIs > Mapeamento
+  // de Perfil. Roda depois do update acima já ter sido confirmado, e uma falha
+  // aqui não deve impedir a tela de conclusão (o resultado principal já foi salvo).
+  if (pa.idColaborador) {
+    try {
+      const { data: registroExistente, error: buscaError } = await supaClient
+        .from('mapeamento_perfil')
+        .select('id')
+        .eq('id_colaborador', pa.idColaborador)
+        .maybeSingle();
+      if (buscaError) throw buscaError;
+
+      const discPayload = { perfil_disc_1: ranking[0].rotulo, perfil_disc_2: ranking[1].rotulo };
+      const { error: gravaError } = registroExistente
+        ? await supaClient.from('mapeamento_perfil').update(discPayload).eq('id', registroExistente.id)
+        : await supaClient.from('mapeamento_perfil').insert([{ id_colaborador: pa.idColaborador, ...discPayload }]);
+      if (gravaError) throw gravaError;
+    } catch (e) {
+      console.warn('Não foi possível replicar o Perfil DISC em mapeamento_perfil:', e);
+    }
   }
 
   renderAvaliacaoConcluida();
