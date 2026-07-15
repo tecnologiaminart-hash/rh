@@ -4025,16 +4025,32 @@ window.verificarDocumentoExisteNoDrive = async function(fileId) {
   }
 };
 
+// Abre o documento (currículo/doc) numa aba do Google Drive já com a
+// ferramenta de impressão nativa do Drive disponível na barra superior.
+window.imprimirDocumento = function(url) {
+  if (!url) return;
+  const id = extrairDriveFileId(url);
+  const printUrl = id ? `https://drive.google.com/file/d/${id}/view` : url;
+  const win = window.open(printUrl, '_blank');
+  if (!win) {
+    showToast('Permita pop-ups no navegador para imprimir o documento.');
+  }
+};
+
 // Mostra o documento em um iframe dentro do próprio site, sem precisar abrir a URL do Drive.
 window.visualizarDocumento = function(url) {
   const id = extrairDriveFileId(url);
   const previewUrl = id ? `https://drive.google.com/file/d/${id}/preview` : url;
+  window._docPreviewUrl = url;
   if (!document.getElementById('doc-preview-modal')) {
     const modal = document.createElement('div'); modal.id='doc-preview-modal'; modal.style.cssText='display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1100;align-items:center;justify-content:center;';
     modal.innerHTML = `<div style="background:#fff;border-radius:6px;width:90vw;max-width:900px;height:85vh;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,.3)">
       <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
         <div style="font-size:14px;font-weight:700">Visualizar Documento</div>
-        <button class="btn btn-sm" onclick="document.getElementById('doc-preview-frame').src='about:blank';document.getElementById('doc-preview-modal').style.display='none'">✕ Fechar</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-sm" onclick="imprimirDocumento(window._docPreviewUrl)">🖨 Imprimir</button>
+          <button class="btn btn-sm" onclick="document.getElementById('doc-preview-frame').src='about:blank';document.getElementById('doc-preview-modal').style.display='none'">✕ Fechar</button>
+        </div>
       </div>
       <iframe id="doc-preview-frame" style="flex:1;border:none;width:100%"></iframe>
     </div>`;
@@ -5562,7 +5578,8 @@ window.verCandidato = function(idCandidatura) {
       <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Currículo</span><div style="margin-top:4px">
         ${cand.url_curriculo
           ? `<button class="action-btn" title="Visualizar" onclick="visualizarDocumento('${cand.url_curriculo}')">👁 Visualizar</button>
-             <a class="action-btn" title="Baixar" href="${driveDownloadUrl(cand.url_curriculo)}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">⬇ Baixar</a>`
+             <a class="action-btn" title="Baixar" href="${driveDownloadUrl(cand.url_curriculo)}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">⬇ Baixar</a>
+             <button class="action-btn" title="Imprimir" onclick="imprimirDocumento('${cand.url_curriculo}')">🖨 Imprimir</button>`
           : '<span class="badge badge-gray">Não enviado</span>'}
       </div></div>
     </div>`;
