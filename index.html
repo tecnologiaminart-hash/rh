@@ -1910,8 +1910,6 @@ function pageStatus() {
           <select class="form-select" id="sm-status">
             <option value="Ativo">Ativo</option>
             <option value="Inativo">Inativo</option>
-            <option value="Férias">Férias</option>
-            <option value="Afastado">Afastado</option>
             <option value="Pendente Documentação">Pendente Documentação</option>
           </select>
         </div>
@@ -1944,8 +1942,6 @@ function pageStatus() {
         <option value="" ${window._statusFiltros.status === '' ? 'selected' : ''}>Todos os status</option>
         <option value="Ativo" ${window._statusFiltros.status === 'Ativo' ? 'selected' : ''}>Ativo</option>
         <option value="Inativo" ${window._statusFiltros.status === 'Inativo' ? 'selected' : ''}>Inativo</option>
-        <option value="Férias" ${window._statusFiltros.status === 'Férias' ? 'selected' : ''}>Férias</option>
-        <option value="Afastado" ${window._statusFiltros.status === 'Afastado' ? 'selected' : ''}>Afastado</option>
         <option value="Pendente Documentação" ${window._statusFiltros.status === 'Pendente Documentação' ? 'selected' : ''}>Pendente Documentação</option>
       </select>
       <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-left:12px">Ordenar:</span>
@@ -7996,6 +7992,13 @@ function pageRelatorioColaborador() {
           <option value="">— Selecione um colaborador —</option>
         </select>
       </div>
+      <div style="min-width:240px">
+        <label class="form-label">Status a Imprimir (Todos os Colaboradores)</label>
+        <select class="form-select" id="rel-status-todos">
+          <option value="ativos_pendentes" selected>Ativos e Pendente Documentação</option>
+          <option value="todos">Todos (incluir Inativos)</option>
+        </select>
+      </div>
       <button class="btn" onclick="gerarRelatorioTodos()">👥 Gerar Relatório de Todos os Colaboradores</button>
     </div>
   </div>
@@ -8255,9 +8258,15 @@ window.gerarRelatorioTodos = function() {
   if (!view) return;
 
   const secoes = secoesRelatorioSelecionadas();
-  const lista = [...(_colaboradoresSupabase || [])].sort((a, b) => (a.nome_colaborador || '').localeCompare(b.nome_colaborador || ''));
+  const statusSel = document.getElementById('rel-status-todos');
+  const modoStatus = statusSel ? statusSel.value : 'ativos_pendentes';
+  let lista = [...(_colaboradoresSupabase || [])];
+  if (modoStatus === 'ativos_pendentes') {
+    lista = lista.filter(c => c.status_colaborador === 'Ativo' || c.status_colaborador === 'Pendente Documentação');
+  }
+  lista.sort((a, b) => (a.nome_colaborador || '').localeCompare(b.nome_colaborador || ''));
   if (lista.length === 0) {
-    view.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-title">Nenhum colaborador cadastrado</div></div>`;
+    view.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-title">Nenhum colaborador encontrado para o status selecionado</div></div>`;
     return;
   }
 
