@@ -96,4 +96,7 @@ grant execute on function public.enviar_candidatura(text, text, text, date, text
 -- através das funções acima. Usuários logados (authenticated/admin) não são
 -- afetados — o revoke é só do papel anon.
 revoke select, insert, update, delete on public.vagas from anon;
-revoke select, insert, update, delete on public.candidaturas from anon;
+-- Em candidaturas, mantém o INSERT direto (não mexe nesse grant) e revoga só
+-- select, update e delete — que são as operações que vazavam PII de todos os
+-- candidatos e permitiam alterar/apagar candidaturas de qualquer um.
+revoke select, update, delete on public.candidaturas from anon;

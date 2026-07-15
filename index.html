@@ -5355,7 +5355,7 @@ function pageCandidatos() {
                          <a class="action-btn" title="Baixar" href="${driveDownloadUrl(c.url_curriculo)}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">⬇</a>`
                       : `<span class="badge badge-gray">Não enviado</span>`}
                   </td>
-                  <td style="color:var(--text3);font-size:12px">${c.data_envio_candidatura ? new Date(c.data_envio_candidatura).toLocaleDateString('pt-BR') : '—'}</td>
+                  <td style="color:var(--text3);font-size:12px">${formatarDataBR(c.data_envio_candidatura) || '—'}</td>
                   <td>${statusAntecedenteCellHtml(c)}</td>
                   <td style="white-space:nowrap">
                     <button class="action-btn" onclick="verCandidato(${c.id_candidaturas})" title="Ver dados completos">👁</button>
@@ -5500,7 +5500,7 @@ window.selecionarCandidatoAntecedente = async function(idCandidatura) {
   const dados = document.getElementById('emitir-antecedente-dados');
   document.getElementById('emitir-ant-nome').textContent = cand.nome_candidato || '—';
   document.getElementById('emitir-ant-cpf').textContent = cand.cpf || '—';
-  document.getElementById('emitir-ant-nascimento').textContent = cand.data_nascimento ? new Date(cand.data_nascimento).toLocaleDateString('pt-BR') : '—';
+  document.getElementById('emitir-ant-nascimento').textContent = formatarDataBR(cand.data_nascimento) || '—';
   document.getElementById('emitir-ant-mae').textContent = cand.nome_da_mae || '—';
   if (dados) dados.style.display = 'flex';
 
@@ -5551,12 +5551,12 @@ window.verCandidato = function(idCandidatura) {
     <div style="display:flex;flex-direction:column;gap:12px;font-size:13px">
       <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Nome</span><div style="margin-top:4px">${cand.nome_candidato || '—'}</div></div>
       <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">CPF</span><div style="margin-top:4px">${cand.cpf || '—'}</div></div>
-      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Data de Nascimento</span><div style="margin-top:4px">${cand.data_nascimento ? new Date(cand.data_nascimento).toLocaleDateString('pt-BR') : '—'}</div></div>
+      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Data de Nascimento</span><div style="margin-top:4px">${formatarDataBR(cand.data_nascimento) || '—'}</div></div>
       <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Nome da Mãe</span><div style="margin-top:4px">${cand.nome_da_mae || '—'}</div></div>
       <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Número</span><div style="margin-top:4px">${cand.numero || '—'}</div></div>
       <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Instagram</span><div style="margin-top:4px">${cand.instagram || '—'}</div></div>
       <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Vaga</span><div style="margin-top:4px">${vaga ? nomeCargoPorId(vaga.id_cargos) : '—'}</div></div>
-      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Data de Envio</span><div style="margin-top:4px">${cand.data_envio_candidatura ? new Date(cand.data_envio_candidatura).toLocaleDateString('pt-BR') : '—'}</div></div>
+      <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Data de Envio</span><div style="margin-top:4px">${formatarDataBR(cand.data_envio_candidatura) || '—'}</div></div>
       <div><span style="font-weight:600;color:var(--text3);text-transform:uppercase;font-size:11px">Currículo</span><div style="margin-top:4px">
         ${cand.url_curriculo
           ? `<button class="action-btn" title="Visualizar" onclick="visualizarDocumento('${cand.url_curriculo}')">👁 Visualizar</button>
@@ -5733,7 +5733,7 @@ function corpoTabelaCandidatosAprovados(cands, vaga) {
              <a class="action-btn" title="Baixar" href="${driveDownloadUrl(c.url_curriculo)}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">⬇</a>`
           : `<span class="badge badge-gray">Não enviado</span>`}
       </td>
-      <td style="color:var(--text3);font-size:12px">${c.data_envio_candidatura ? new Date(c.data_envio_candidatura).toLocaleDateString('pt-BR') : '—'}</td>
+      <td style="color:var(--text3);font-size:12px">${formatarDataBR(c.data_envio_candidatura) || '—'}</td>
       <td>
         ${!teste
           ? `<span class="badge badge-gray">—</span>`
