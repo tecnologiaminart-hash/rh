@@ -5612,8 +5612,9 @@ window.aprovarCandidatoAvaliacao = async function(idCandidatura) {
 // (identificado por id_candidato, que já existe desde a aprovação para avaliação).
 async function atualizarStatusEntrevista(idCandidatura, status) {
   try {
-    const { error } = await supaClient.from('testes_avaliacoes').update({ status_entrevista: status }).eq('id_candidato', idCandidatura);
+    const { data, error } = await supaClient.from('testes_avaliacoes').update({ status_entrevista: status }).eq('id_candidato', idCandidatura).select();
     if (error) throw error;
+    if (!data || data.length === 0) throw new Error('Nenhuma linha foi atualizada (verifique a policy de UPDATE da tabela testes_avaliacoes no Supabase).');
     await loadTestesAvaliacoesForApp();
     if (window._renderCandidatosAprovados) window._renderCandidatosAprovados();
     if (window._renderCandidatosEntrevista) window._renderCandidatosEntrevista();
