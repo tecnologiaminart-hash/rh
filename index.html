@@ -8640,20 +8640,26 @@ function largurasAutoAjustadas(linhas) {
 // Monta a planilha a partir do aoa e, para toda linha de título de seção
 // (linha com uma única célula, seguida de uma linha de cabeçalho com mais de
 // uma coluna), mescla essa célula até a largura da tabela correspondente e
-// centraliza o texto. Também aplica o auto-ajuste de largura das colunas.
-function construirPlanilhaComTitulos(linhas) {
+// centraliza o texto. Aplica também bordas em volta de todo o conteúdo e,
+// opcionalmente (autoWidth, default true), o auto-ajuste de largura das colunas.
+function construirPlanilhaComTitulos(linhas, opts) {
+  const autoWidth = !opts || opts.autoWidth !== false;
   const ws = XLSX.utils.aoa_to_sheet(linhas);
   const merges = [];
+  const bordaFina = { style: 'thin', color: { rgb: '000000' } };
   linhas.forEach((row, r) => {
     const proxima = linhas[r + 1];
-    if (row.length === 1 && row[0] && proxima && proxima.length > 1) {
-      merges.push({ s: { r, c: 0 }, e: { r, c: proxima.length - 1 } });
-      const endereco = XLSX.utils.encode_cell({ r, c: 0 });
-      if (ws[endereco]) ws[endereco].s = { alignment: { horizontal: 'center', vertical: 'center' }, font: { bold: true } };
-    }
+    const ehTitulo = row.length === 1 && row[0] && proxima && proxima.length > 1;
+    if (ehTitulo) merges.push({ s: { r, c: 0 }, e: { r, c: proxima.length - 1 } });
+    row.forEach((_, c) => {
+      const endereco = XLSX.utils.encode_cell({ r, c });
+      if (!ws[endereco]) return;
+      const estiloTitulo = ehTitulo && c === 0 ? { alignment: { horizontal: 'center', vertical: 'center' }, font: { bold: true } } : {};
+      ws[endereco].s = { ...estiloTitulo, border: { top: bordaFina, bottom: bordaFina, left: bordaFina, right: bordaFina } };
+    });
   });
   if (merges.length) ws['!merges'] = merges;
-  ws['!cols'] = largurasAutoAjustadas(linhas);
+  if (autoWidth) ws['!cols'] = largurasAutoAjustadas(linhas);
   return ws;
 }
 
@@ -8673,7 +8679,7 @@ window.baixarRelatorioXlsx = function() {
 
   if (tipo === 'todos') {
     // Guia consolidada primeiro, seguida de uma guia por seção (como já era).
-    XLSX.utils.book_append_sheet(wb, construirPlanilhaComTitulos(montarLinhasConsolidadas(secoes, blocos)), 'Todos - Completo');
+    XLSX.utils.book_append_sheet(wb, construirPlanilhaComTitulos(montarLinhasConsolidadas(secoes, blocos), { autoWidth: false }), 'Todos - Completo');
     secoes.forEach(chave => {
       const bloco = blocos[chave];
       if (bloco) XLSX.utils.book_append_sheet(wb, construirPlanilhaComTitulos(bloco.linhas), NOME_ABA_SECAO_RELATORIO[chave] || chave);
