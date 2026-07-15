@@ -9082,9 +9082,6 @@ async function checkAvaliacaoLink() {
   window._pubAval = {
     token: teste.token,
     idCargo: teste.id_cargo,
-    // Presente só quando o teste é de Perfil DISC — Colaborador Interno (em vez
-    // de candidato); usado para replicar o resultado em mapeamento_perfil.
-    idColaborador: teste.id_colaborador || null,
     cargoNome: (cargo && cargo.nome_cargo) || '—',
     // Nome vem direto de testes_avaliacoes (gravado no momento da aprovação) em vez
     // de consultar candidaturas, porque o anon normalmente só tem permissão de
@@ -9199,9 +9196,10 @@ window.voltarAvaliacaoDisc = function() {
   if (pa.discTeste.tela > 0) { pa.discTeste.tela--; renderAvaliacaoDiscQuiz(); }
 };
 
-// Calcula o perfil, salva o resultado em testes_avaliacoes.resultado_perfil_disc_1/2
-// (sem nunca exibir o resultado na tela) e já marca a avaliação como concluída —
-// o processo de aprovação usa somente o Perfil DISC, sem Competências/Entrevista.
+// Calcula o perfil e chama a RPC finalizar_avaliacao_disc (sem nunca exibir o
+// resultado na tela), que grava em testes_avaliacoes.resultado_perfil_disc_1/2
+// e marca a avaliação como concluída — o processo de aprovação usa somente o
+// Perfil DISC, sem Competências/Entrevista.
 window.finalizarAvaliacaoDisc = async function() {
   if (!validarTelaAvaliacaoDiscAtual()) return;
   const pa = window._pubAval;
@@ -9214,42 +9212,23 @@ window.finalizarAvaliacaoDisc = async function() {
   const container = document.getElementById('aval-disc-quiz');
   if (container) container.innerHTML = `<div class="form-card" style="text-align:center;padding:48px 24px"><div style="font-size:40px;margin-bottom:16px">⏳</div><div style="font-size:15px;color:var(--text3)">Salvando sua avaliação...</div></div>`;
 
+  // Chama a função no Postgres (RPC) em vez de dar update/insert direto nas
+  // tabelas: só quem tem o token consegue fechar ESSA avaliação específica,
+  // mesmo que alguém tente usar a chave anon direto na API (ver
+  // sql/rpc-finalizar-avaliacao-disc.sql). A função já cuida de gravar o
+  // resultado em testes_avaliacoes e, se for colaborador interno, replicar
+  // em mapeamento_perfil.perfil_disc_1/2.
   try {
-    const { error } = await supaClient.from('testes_avaliacoes').update({
-      resultado_perfil_disc_1: ranking[0].rotulo,
-      resultado_perfil_disc_2: ranking[1].rotulo,
-      status_realizacao: 'concluido',
-      respondido_em: new Date().toISOString()
-    }).eq('token', pa.token);
+    const { error } = await supaClient.rpc('finalizar_avaliacao_disc', {
+      p_token: pa.token,
+      p_perfil_1: ranking[0].rotulo,
+      p_perfil_2: ranking[1].rotulo,
+    });
     if (error) throw error;
   } catch (e) {
     console.error('Erro ao salvar resultado do Perfil DISC:', e);
     if (container) container.innerHTML = `<div class="form-card" style="text-align:center;padding:48px 24px"><div style="color:var(--danger);font-weight:600">Erro ao salvar sua avaliação. Tente novamente.</div></div>`;
     return;
-  }
-
-  // Teste de Perfil DISC — Colaborador Interno (tem id_colaborador, diferente do
-  // fluxo de candidato): replica o resultado em mapeamento_perfil.perfil_disc_1/2,
-  // para não ficar dessincronizado com o que aparece em Ficha e EPIs > Mapeamento
-  // de Perfil. Roda depois do update acima já ter sido confirmado, e uma falha
-  // aqui não deve impedir a tela de conclusão (o resultado principal já foi salvo).
-  if (pa.idColaborador) {
-    try {
-      const { data: registroExistente, error: buscaError } = await supaClient
-        .from('mapeamento_perfil')
-        .select('id')
-        .eq('id_colaborador', pa.idColaborador)
-        .maybeSingle();
-      if (buscaError) throw buscaError;
-
-      const discPayload = { perfil_disc_1: ranking[0].rotulo, perfil_disc_2: ranking[1].rotulo };
-      const { error: gravaError } = registroExistente
-        ? await supaClient.from('mapeamento_perfil').update(discPayload).eq('id', registroExistente.id)
-        : await supaClient.from('mapeamento_perfil').insert([{ id_colaborador: pa.idColaborador, ...discPayload }]);
-      if (gravaError) throw gravaError;
-    } catch (e) {
-      console.warn('Não foi possível replicar o Perfil DISC em mapeamento_perfil:', e);
-    }
   }
 
   renderAvaliacaoConcluida();
