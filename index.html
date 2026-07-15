@@ -971,7 +971,7 @@ const NAV = [
   {
     id: 'treinamentos', label: 'Treinamentos', icon: '◆',
     subs: [
-      { id: 'trein-cadastro-usuario', label: 'Cadastro de Usuário' },
+      { id: 'trein-cadastro-usuario', label: 'Cadastro de Usuário e Liberação' },
     ]
   },
   {
@@ -7149,13 +7149,29 @@ function pageDadosPessoais() {
 
   document.getElementById('topbar-actions').innerHTML = '';
 
+  if (!window._dpFiltros) window._dpFiltros = { status: 'ativos_pendentes' };
+  if (!window._dpOrdem) window._dpOrdem = 'nome';
+
   const renderTabela = () => {
     const tbody = document.getElementById('dados-pessoais-tbody');
     if (!tbody) return;
     // Nome do colaborador não é mais gravado em dados_pessoais_epi (coluna removida,
     // era redundante com id_colaborador); resolvemos sempre via colaboradores, fonte única de verdade.
-    const lista = [...(window._dadosPessoaisEpi || [])].sort((a, b) =>
-      nomeColaboradorPorId(a.id_colaborador).localeCompare(nomeColaboradorPorId(b.id_colaborador)));
+    let lista = [...(window._dadosPessoaisEpi || [])].filter(d => {
+      const colab = (_colaboradoresSupabase || []).find(c => String(c.id_colaborador) === String(d.id_colaborador));
+      const statusColab = colab ? colab.status_colaborador : null;
+      if (window._dpFiltros.status === 'ativos_pendentes') return statusColab === 'Ativo' || statusColab === 'Pendente Documentação';
+      if (window._dpFiltros.status) return statusColab === window._dpFiltros.status;
+      return true;
+    });
+    lista.sort((a, b) => {
+      if (window._dpOrdem === 'cargo') {
+        const colabA = (_colaboradoresSupabase || []).find(c => String(c.id_colaborador) === String(a.id_colaborador));
+        const colabB = (_colaboradoresSupabase || []).find(c => String(c.id_colaborador) === String(b.id_colaborador));
+        return (colabA && colabA.cargos ? colabA.cargos.nome_cargo : '').localeCompare(colabB && colabB.cargos ? colabB.cargos.nome_cargo : '');
+      }
+      return nomeColaboradorPorId(a.id_colaborador).localeCompare(nomeColaboradorPorId(b.id_colaborador));
+    });
     tbody.innerHTML = lista.length === 0
       ? '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro cadastrado.</td></tr>'
       : lista.map(d => {
@@ -7204,6 +7220,21 @@ function pageDadosPessoais() {
       <span class="table-title">Dados Pessoais e EPIs</span>
       <input class="search-input" placeholder="Buscar colaborador..." oninput="filtrarDadosPessoaisEpi(this.value)" style="margin-left:12px">
     </div>
+    <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:var(--bg2)">
+      <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase">Status do Colaborador:</span>
+      <select class="form-select" style="width:auto" onchange="filtrarStatusColabDadosPessoais(this.value)">
+        <option value="ativos_pendentes" ${window._dpFiltros.status === 'ativos_pendentes' ? 'selected' : ''}>Ativos e Pendente Documentação</option>
+        <option value="" ${window._dpFiltros.status === '' ? 'selected' : ''}>Todos os status</option>
+        <option value="Ativo" ${window._dpFiltros.status === 'Ativo' ? 'selected' : ''}>Ativo</option>
+        <option value="Inativo" ${window._dpFiltros.status === 'Inativo' ? 'selected' : ''}>Inativo</option>
+        <option value="Pendente Documentação" ${window._dpFiltros.status === 'Pendente Documentação' ? 'selected' : ''}>Pendente Documentação</option>
+      </select>
+      <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-left:12px">Ordenar:</span>
+      <select class="form-select" style="width:auto" onchange="ordenarDadosPessoaisEpi(this.value)">
+        <option value="nome" ${window._dpOrdem === 'nome' ? 'selected' : ''}>Nome (A-Z)</option>
+        <option value="cargo" ${window._dpOrdem === 'cargo' ? 'selected' : ''}>Cargo (A-Z)</option>
+      </select>
+    </div>
     <table>
       <thead>
         <tr>
@@ -7228,6 +7259,17 @@ window.filtrarDadosPessoaisEpi = function(query) {
   document.querySelectorAll('#dados-pessoais-tbody tr').forEach(row => {
     row.style.display = !q || row.textContent.toLowerCase().includes(q) ? '' : 'none';
   });
+};
+
+window.filtrarStatusColabDadosPessoais = function(valor) {
+  if (!window._dpFiltros) window._dpFiltros = { status: 'ativos_pendentes' };
+  window._dpFiltros.status = valor;
+  if (window._renderDadosPessoaisEpi) window._renderDadosPessoaisEpi();
+};
+
+window.ordenarDadosPessoaisEpi = function(valor) {
+  window._dpOrdem = valor;
+  if (window._renderDadosPessoaisEpi) window._renderDadosPessoaisEpi();
 };
 
 window.openDadosPessoaisModal = async function(id = null) {
@@ -7445,13 +7487,29 @@ function pageMapeamentoPerfil() {
 
   document.getElementById('topbar-actions').innerHTML = '';
 
+  if (!window._mpFiltros) window._mpFiltros = { status: 'ativos_pendentes' };
+  if (!window._mpOrdem) window._mpOrdem = 'nome';
+
   const renderTabela = () => {
     const tbody = document.getElementById('mapeamento-perfil-tbody');
     if (!tbody) return;
     // Nome do colaborador não é mais gravado em mapeamento_perfil (coluna removida,
     // era redundante com id_colaborador); resolvemos sempre via colaboradores, fonte única de verdade.
-    const lista = [...(window._mapeamentoPerfil || [])].sort((a, b) =>
-      nomeColaboradorPorId(a.id_colaborador).localeCompare(nomeColaboradorPorId(b.id_colaborador)));
+    let lista = [...(window._mapeamentoPerfil || [])].filter(m => {
+      const colab = (_colaboradoresSupabase || []).find(c => String(c.id_colaborador) === String(m.id_colaborador));
+      const statusColab = colab ? colab.status_colaborador : null;
+      if (window._mpFiltros.status === 'ativos_pendentes') return statusColab === 'Ativo' || statusColab === 'Pendente Documentação';
+      if (window._mpFiltros.status) return statusColab === window._mpFiltros.status;
+      return true;
+    });
+    lista.sort((a, b) => {
+      if (window._mpOrdem === 'cargo') {
+        const colabA = (_colaboradoresSupabase || []).find(c => String(c.id_colaborador) === String(a.id_colaborador));
+        const colabB = (_colaboradoresSupabase || []).find(c => String(c.id_colaborador) === String(b.id_colaborador));
+        return (colabA && colabA.cargos ? colabA.cargos.nome_cargo : '').localeCompare(colabB && colabB.cargos ? colabB.cargos.nome_cargo : '');
+      }
+      return nomeColaboradorPorId(a.id_colaborador).localeCompare(nomeColaboradorPorId(b.id_colaborador));
+    });
     tbody.innerHTML = lista.length === 0
       ? '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro cadastrado.</td></tr>'
       : lista.map(m => {
@@ -7476,13 +7534,31 @@ function pageMapeamentoPerfil() {
   };
 
   window._renderMapeamentoPerfil = renderTabela;
-  loadMapeamentoPerfilForApp().then(renderTabela);
+  Promise.all([
+    loadMapeamentoPerfilForApp(),
+    (!_colaboradoresSupabase || _colaboradoresSupabase.length === 0) ? loadColaboradoresFromSupabase() : Promise.resolve(),
+  ]).then(renderTabela);
 
   return `
   <div class="table-card">
     <div class="table-header">
       <span class="table-title">Mapeamento de Perfil</span>
       <input class="search-input" placeholder="Buscar colaborador..." oninput="filtrarTabelaGenerica('mapeamento-perfil-tbody', this.value)" style="margin-left:12px">
+    </div>
+    <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:var(--bg2)">
+      <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase">Status do Colaborador:</span>
+      <select class="form-select" style="width:auto" onchange="filtrarStatusColabMapeamentoPerfil(this.value)">
+        <option value="ativos_pendentes" ${window._mpFiltros.status === 'ativos_pendentes' ? 'selected' : ''}>Ativos e Pendente Documentação</option>
+        <option value="" ${window._mpFiltros.status === '' ? 'selected' : ''}>Todos os status</option>
+        <option value="Ativo" ${window._mpFiltros.status === 'Ativo' ? 'selected' : ''}>Ativo</option>
+        <option value="Inativo" ${window._mpFiltros.status === 'Inativo' ? 'selected' : ''}>Inativo</option>
+        <option value="Pendente Documentação" ${window._mpFiltros.status === 'Pendente Documentação' ? 'selected' : ''}>Pendente Documentação</option>
+      </select>
+      <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-left:12px">Ordenar:</span>
+      <select class="form-select" style="width:auto" onchange="ordenarMapeamentoPerfil(this.value)">
+        <option value="nome" ${window._mpOrdem === 'nome' ? 'selected' : ''}>Nome (A-Z)</option>
+        <option value="cargo" ${window._mpOrdem === 'cargo' ? 'selected' : ''}>Cargo (A-Z)</option>
+      </select>
     </div>
     <table>
       <thead>
@@ -7669,6 +7745,17 @@ window.alterarStatusMapeamentoPerfil = async function(id, novoStatus) {
   }
 };
 
+window.filtrarStatusColabMapeamentoPerfil = function(valor) {
+  if (!window._mpFiltros) window._mpFiltros = { status: 'ativos_pendentes' };
+  window._mpFiltros.status = valor;
+  if (window._renderMapeamentoPerfil) window._renderMapeamentoPerfil();
+};
+
+window.ordenarMapeamentoPerfil = function(valor) {
+  window._mpOrdem = valor;
+  if (window._renderMapeamentoPerfil) window._renderMapeamentoPerfil();
+};
+
 // ------------------------------------------------------------
 // TREINAMENTOS > CADASTRO DE USUÁRIO — cria o login (Supabase Auth) de um
 // colaborador com perfil Treinamento (perfil_id fixo = 3) e grava a linha
@@ -7739,7 +7826,7 @@ function pageCadastroUsuarioTreinamento() {
   return `
   <div class="table-card">
     <div class="table-header">
-      <span class="table-title">Cadastro de Usuário</span>
+      <span class="table-title">Cadastro de Usuário e Liberação</span>
     </div>
     <table>
       <thead>
@@ -7777,6 +7864,9 @@ window.abrirCadastroUsuarioModal = async function() {
   if (!window._usuariosCadastrados) {
     await loadUsuariosCadastrados();
   }
+  if (!window._dadosPessoaisEpi || window._dadosPessoaisEpi.length === 0) {
+    await loadDadosPessoaisEpiForApp();
+  }
 
   if (!document.getElementById('cadastro-usuario-modal')) {
     const modal = document.createElement('div');
@@ -7791,10 +7881,10 @@ window.abrirCadastroUsuarioModal = async function() {
         <div style="padding:24px">
           <div class="form-group" style="margin-bottom:16px">
             <label class="form-label">Colaborador</label>
-            <select class="form-select" id="cu-colaborador"><option value="">— Selecione —</option></select>
+            <select class="form-select" id="cu-colaborador" onchange="preencherEmailCadastroUsuario(this.value)"><option value="">— Selecione —</option></select>
           </div>
           <div class="form-group" style="margin-bottom:16px">
-            <label class="form-label">E-mail</label>
+            <label class="form-label">E-mail <span style="font-weight:400;text-transform:none;color:var(--text3)">(puxado de Dados Pessoais, pode editar)</span></label>
             <input class="form-input" id="cu-email" type="email" placeholder="colaborador@email.com">
           </div>
           <div class="form-group" style="margin-bottom:16px">
@@ -7824,6 +7914,16 @@ window.abrirCadastroUsuarioModal = async function() {
   document.getElementById('cu-email').value = '';
   document.getElementById('cu-senha').value = '12345678';
   document.getElementById('cadastro-usuario-modal').style.display = 'flex';
+};
+
+// Ao selecionar o colaborador, puxa o e-mail já cadastrado em Dados Pessoais
+// (continua editável depois de preenchido, caso precise usar outro e-mail).
+window.preencherEmailCadastroUsuario = function(idColaborador) {
+  const el = document.getElementById('cu-email');
+  if (!el) return;
+  if (!idColaborador) { el.value = ''; return; }
+  const dados = (window._dadosPessoaisEpi || []).find(d => String(d.id_colaborador) === String(idColaborador));
+  el.value = (dados && dados.email) || '';
 };
 
 window.salvarCadastroUsuario = async function() {
