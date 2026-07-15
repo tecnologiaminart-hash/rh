@@ -430,9 +430,11 @@ const N8N_CURRICULO_WEBHOOK_URL = 'https://automatiza.minart.com.br/webhook/uplo
 // n8n/upload-documento-avaliacao-drive.workflow.json, preencher o folderId do Drive e a
 // credencial do Google Drive, ativar o workflow e colar a "Production URL" abaixo.
 const N8N_AVALIACAO_DOC_WEBHOOK_URL = 'https://automatiza.minart.com.br/webhook/upload-documento-avaliacao-drive';
-// Webhook do n8n que cria o login (Supabase Auth) e a linha em `usuarios` de um
-// colaborador — precisa da service_role key do Supabase, que NUNCA pode ir para
-// o código do site, só fica guardada dentro do n8n. Após importar
+// Webhook do n8n que cria o login (Supabase Auth) + linha em `usuarios` de um
+// colaborador E também edita o e-mail de um usuário já cadastrado (campo
+// "acao": "criar" ou "editar_email" no corpo da requisição) — precisa da
+// service_role key do Supabase, que NUNCA pode ir para o código do site, só
+// fica guardada dentro do n8n. Após importar
 // n8n/criar-usuario-treinamento.workflow.json, preencher a service_role key nos
 // nodes HTTP Request, ativar o workflow e colar a "Production URL" abaixo.
 const N8N_CRIAR_USUARIO_WEBHOOK_URL = 'https://automatiza.minart.com.br/webhook/criar-usuario-treinamento';
@@ -7771,7 +7773,7 @@ async function loadUsuariosCadastrados() {
   }
   const { data, error } = await supaClient
     .from('usuarios')
-    .select('id, colaborador_id, email, ativo, created_at, perfil_id, perfis(nome)')
+    .select('id, auth_user_id, colaborador_id, email, ativo, created_at, perfil_id, perfis(nome)')
     .order('created_at', { ascending: false });
   if (error) {
     console.error('Erro ao carregar usuários cadastrados:', error.message);
@@ -7803,7 +7805,12 @@ function pageCadastroUsuarioTreinamento() {
           return `
           <tr>
             <td><strong>${nomeColaborador}</strong></td>
-            <td>${u.email || '—'}</td>
+            <td>
+              <div style="display:flex;align-items:center;gap:6px">
+                <span>${u.email || '—'}</span>
+                <button class="action-btn" title="Editar e-mail" onclick="abrirEditarEmailUsuarioModal(${u.id}, '${u.auth_user_id}', '${(u.email || '').replace(/'/g, "\\'")}')">✎</button>
+              </div>
+            </td>
             <td>${u.perfis ? u.perfis.nome : '—'}</td>
             <td><span class="badge ${u.ativo ? 'badge-active' : 'badge-gray'}">${u.ativo ? 'Ativo' : 'Inativo'}</span></td>
             <td style="color:var(--text3);font-size:12px">${criado}</td>
@@ -7856,6 +7863,77 @@ function linkWhatsappAcessoTreinamento(numero, nomeColaborador, email) {
   const mensagem = `Olá, ${nomeColaborador || ''}! Seu acesso ao Treinamento da Minart Móveis foi criado.\n\nAcesse: ${link}\nE-mail: ${email || ''}\nSenha inicial: 12345678\n\nNo primeiro acesso, o sistema vai pedir para você trocar essa senha.`;
   return `https://wa.me/${digits}?text=${encodeURIComponent(mensagem)}`;
 }
+
+window.abrirEditarEmailUsuarioModal = function(usuarioId, authUserId, emailAtual) {
+  if (!document.getElementById('editar-email-usuario-modal')) {
+    const modal = document.createElement('div');
+    modal.id = 'editar-email-usuario-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:6px;width:400px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:15px;font-weight:700">Editar E-mail</div>
+          <button type="button" class="btn btn-sm" onclick="document.getElementById('editar-email-usuario-modal').style.display='none'">✕</button>
+        </div>
+        <div style="padding:24px">
+          <div class="form-group">
+            <label class="form-label">Novo E-mail</label>
+            <input class="form-input" id="eeu-email" type="email" placeholder="colaborador@email.com">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn" onclick="document.getElementById('editar-email-usuario-modal').style.display='none'">Cancelar</button>
+          <button type="button" class="btn btn-primary" id="eeu-btn-salvar" onclick="salvarEdicaoEmailUsuario()">Salvar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  window._eeuUsuarioId = usuarioId;
+  window._eeuAuthUserId = authUserId;
+  document.getElementById('eeu-email').value = emailAtual || '';
+  document.getElementById('editar-email-usuario-modal').style.display = 'flex';
+};
+
+window.salvarEdicaoEmailUsuario = async function() {
+  const novoEmail = document.getElementById('eeu-email').value.trim();
+  if (!novoEmail) return showToast('Informe o novo e-mail.');
+  if (!N8N_CRIAR_USUARIO_WEBHOOK_URL || N8N_CRIAR_USUARIO_WEBHOOK_URL.startsWith('COLE_AQUI')) {
+    return showToast('Webhook de usuários não configurado.', 'danger');
+  }
+
+  const btn = document.getElementById('eeu-btn-salvar');
+  if (btn) { btn.disabled = true; btn.textContent = 'Salvando...'; }
+
+  try {
+    const res = await fetch(N8N_CRIAR_USUARIO_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token: N8N_WEBHOOK_TOKEN,
+        acao: 'editar_email',
+        usuario_id: window._eeuUsuarioId,
+        auth_user_id: window._eeuAuthUserId,
+        novo_email: novoEmail,
+      }),
+    });
+    let result = {};
+    try { result = await res.json(); } catch (e) { /* resposta sem corpo JSON */ }
+    if (!res.ok || result.success === false) {
+      throw new Error(result.error || `Falha ao editar e-mail (status ${res.status}).`);
+    }
+
+    document.getElementById('editar-email-usuario-modal').style.display = 'none';
+    await loadUsuariosCadastrados();
+    if (window._renderCadastroUsuario) window._renderCadastroUsuario();
+    showToast('E-mail atualizado!');
+  } catch (e) {
+    console.error('Erro ao editar e-mail do usuário:', e);
+    showToast('Erro ao editar e-mail: ' + (e.message || e), 'danger');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Salvar'; }
+  }
+};
 
 window.abrirCadastroUsuarioModal = async function() {
   if (!_colaboradoresSupabase || _colaboradoresSupabase.length === 0) {
@@ -7946,6 +8024,7 @@ window.salvarCadastroUsuario = async function() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         token: N8N_WEBHOOK_TOKEN,
+        acao: 'criar',
         email,
         senha,
         colaborador_id: colaboradorId,
