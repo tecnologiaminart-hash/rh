@@ -8111,7 +8111,8 @@ function construirHtmlSecoesColaborador(dadosColab, secoes) {
       ${colab.tipo_de_contrato === 'Temporária' ? linha('Período do Contrato', colab.periodo_contrato) : ''}
       ${colab.tipo_de_contrato === 'Temporária' ? linha('Prorrogação', colab.prorrogacao_contrato) : ''}
       ${linha('Salário Base', salarioFmt)}
-      ${linha('Data de Admissão', formatarDataBR(colab.desde))}`;
+      ${linha('Data de Admissão', formatarDataBR(colab.desde))}
+      ${linha('Data de Efetivação', formatarDataBR(colab.desde_efetivo))}`;
   }
 
   if (secoes.includes('historico')) {
@@ -8338,6 +8339,7 @@ function escreverColaboradorNoPdf(doc, state, dadosColab, secoes, margemEsq) {
     }
     campo('Salário Base', salarioNum !== null ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(salarioNum) : '—');
     campo('Data de Admissão', formatarDataBR(colab.desde));
+    campo('Data de Efetivação', formatarDataBR(colab.desde_efetivo));
   }
 
   if (secoes.includes('historico')) {
@@ -8501,7 +8503,7 @@ function construirBlocosSecoesRelatorio(colaboradores) {
 
   blocos.contratuais = {
     titulo: 'Dados Contratuais',
-    linhas: [['Nome', 'Cargo', 'Status', 'Tipo de Contrato', 'Salário Base', 'Data de Admissão']],
+    linhas: [['Nome', 'Cargo', 'Status', 'Tipo de Contrato', 'Salário Base', 'Data de Admissão', 'Data de Efetivação']],
   };
   colaboradores.forEach(({ colab }) => {
     const salarioNum = salarioBaseDoColaborador(colab);
@@ -8512,6 +8514,7 @@ function construirBlocosSecoesRelatorio(colaboradores) {
       colab.tipo_de_contrato || '',
       salarioNum !== null ? salarioNum : '',
       formatarDataBR(colab.desde) || '',
+      formatarDataBR(colab.desde_efetivo) || '',
     ]);
   });
 
@@ -8529,20 +8532,16 @@ function construirBlocosSecoesRelatorio(colaboradores) {
     ]);
   });
 
-  // Nas demais tabelas (uma linha por registro, não por colaborador), célula
-  // sem valor vira o texto "Vazio" em vez de ficar em branco.
-  const vazio = (val) => (val === null || val === undefined || val === '') ? 'Vazio' : val;
-
   blocos.historico = { titulo: 'Histórico de Carreira', linhas: [['Nome', 'Período Início', 'Período Fim', 'Cargo', 'Salário', 'Motivo']] };
   colaboradores.forEach(({ colab, historico }) => {
     (historico || []).forEach(h => {
       blocos.historico.linhas.push([
-        vazio(colab.nome_colaborador),
-        vazio(formatarDataBR(h.periodo_inicio)),
+        colab.nome_colaborador || '',
+        formatarDataBR(h.periodo_inicio) || '',
         formatarDataBR(h.periodo_fim) || 'Atual',
-        vazio(nomeCargoPorId(h.id_cargos)),
-        h.salario_hist !== null && h.salario_hist !== undefined ? h.salario_hist : 'Vazio',
-        vazio(h.motivo),
+        nomeCargoPorId(h.id_cargos) || '',
+        h.salario_hist !== null && h.salario_hist !== undefined ? h.salario_hist : '',
+        h.motivo || '',
       ]);
     });
   });
@@ -8550,31 +8549,31 @@ function construirBlocosSecoesRelatorio(colaboradores) {
   blocos.pessoais = { titulo: 'Dados Pessoais', linhas: [['Nome', 'CPF', 'RG', 'Data de Nascimento', 'Telefone', 'E-mail', 'Endereço', 'Telefone Emergência', 'Estado Civil', 'Escolaridade', 'PIX', 'Vale-Transporte']] };
   colaboradores.forEach(({ colab, dadosPessoais: d }) => {
     blocos.pessoais.linhas.push([
-      vazio(colab.nome_colaborador),
-      vazio(d?.cpf), vazio(d?.rg), vazio(formatarDataBR(d?.data_nascimento)),
-      vazio(d?.telefone), vazio(d?.email), vazio(d?.endereco), vazio(d?.telefone_emergencia),
-      vazio(d?.estado_civil), vazio(d?.escolaridade), vazio(d?.pix), vazio(d?.['vale-transporte']),
+      colab.nome_colaborador || '',
+      d?.cpf || '', d?.rg || '', formatarDataBR(d?.data_nascimento) || '',
+      d?.telefone || '', d?.email || '', d?.endereco || '', d?.telefone_emergencia || '',
+      d?.estado_civil || '', d?.escolaridade || '', d?.pix || '', d?.['vale-transporte'] || '',
     ]);
   });
 
   blocos.epis = { titulo: 'EPIs / Tamanhos', linhas: [['Nome', 'Camisa', 'Calça', 'Botina', 'Jaleco', 'Luva Raspa', 'Luva Lavagem']] };
   colaboradores.forEach(({ colab, dadosPessoais: d }) => {
     blocos.epis.linhas.push([
-      vazio(colab.nome_colaborador),
-      vazio(d?.epi_camisa), vazio(d?.epi_calca), vazio(d?.epi_botina),
-      vazio(d?.epi_jaleco), vazio(d?.epi_luva_raspa), vazio(d?.epi_luva_lavagem),
+      colab.nome_colaborador || '',
+      d?.epi_camisa || '', d?.epi_calca || '', d?.epi_botina || '',
+      d?.epi_jaleco || '', d?.epi_luva_raspa || '', d?.epi_luva_lavagem || '',
     ]);
   });
 
   blocos.perfil = { titulo: 'Mapeamento de Perfil', linhas: [['Nome', 'Como gosta de ser chamado(a)', 'Hobbies', 'Prato/Doce preferido', 'Pretende ter filhos?', 'Grande sonho pessoal', 'Metas do ano vigente', 'Talentos e dons', 'Desafios pessoais', 'Expectativa na empresa', 'Pontos fortes', 'A desenvolver', 'Habilidades profissionais', 'Perfil DISC (1ª)', 'Perfil DISC (2ª)', 'Comunicação ideal', '3 principais valores']] };
   colaboradores.forEach(({ colab, perfil: p }) => {
     blocos.perfil.linhas.push([
-      vazio(colab.nome_colaborador),
-      vazio(p?.como_gosta_ser_chamado), vazio(p?.hobbies), vazio(p?.prato_doce_preferido),
-      vazio(p?.pretende_ter_filhos), vazio(p?.grande_sonho_pessoal), vazio(p?.metas_ano_vigente),
-      vazio(p?.talentos_dons), vazio(p?.desafios_pessoais), vazio(p?.expectativa_empresa),
-      vazio(p?.pontos_fortes), vazio(p?.a_desenvolver), vazio(p?.habilidades_profissionais),
-      vazio(p?.perfil_disc_1), vazio(p?.perfil_disc_2), vazio(p?.comunicacao_ideal), vazio(p?.valores_principais),
+      colab.nome_colaborador || '',
+      p?.como_gosta_ser_chamado || '', p?.hobbies || '', p?.prato_doce_preferido || '',
+      p?.pretende_ter_filhos || '', p?.grande_sonho_pessoal || '', p?.metas_ano_vigente || '',
+      p?.talentos_dons || '', p?.desafios_pessoais || '', p?.expectativa_empresa || '',
+      p?.pontos_fortes || '', p?.a_desenvolver || '', p?.habilidades_profissionais || '',
+      p?.perfil_disc_1 || '', p?.perfil_disc_2 || '', p?.comunicacao_ideal || '', p?.valores_principais || '',
     ]);
   });
 
@@ -8582,11 +8581,11 @@ function construirBlocosSecoesRelatorio(colaboradores) {
   colaboradores.forEach(({ colab, ocorrencias }) => {
     (ocorrencias || []).forEach(o => {
       blocos.ocorrencias.linhas.push([
-        vazio(colab.nome_colaborador),
-        vazio(o.tipo_ocorrencia),
-        vazio(formatarDataBR(o.data_ocorrencia)),
-        vazio(o.descricao),
-        vazio(o.registrado_por),
+        colab.nome_colaborador || '',
+        o.tipo_ocorrencia || '',
+        formatarDataBR(o.data_ocorrencia) || '',
+        o.descricao || '',
+        o.registrado_por || '',
       ]);
     });
   });
@@ -8624,6 +8623,40 @@ function montarLinhasConsolidadas(secoes, blocos) {
   return linhas;
 }
 
+// Calcula, para cada coluna, a largura (em caracteres) do maior conteúdo entre
+// todas as linhas, para a planilha se auto-ajustar em vez de ficar com colunas
+// de largura fixa/padrão.
+function largurasAutoAjustadas(linhas) {
+  const larguras = [];
+  linhas.forEach(row => {
+    row.forEach((cel, idx) => {
+      const texto = (cel === null || cel === undefined) ? '' : String(cel);
+      if (texto.length > (larguras[idx] || 0)) larguras[idx] = texto.length;
+    });
+  });
+  return larguras.map(l => ({ wch: Math.min(Math.max(l + 2, 8), 60) }));
+}
+
+// Monta a planilha a partir do aoa e, para toda linha de título de seção
+// (linha com uma única célula, seguida de uma linha de cabeçalho com mais de
+// uma coluna), mescla essa célula até a largura da tabela correspondente e
+// centraliza o texto. Também aplica o auto-ajuste de largura das colunas.
+function construirPlanilhaComTitulos(linhas) {
+  const ws = XLSX.utils.aoa_to_sheet(linhas);
+  const merges = [];
+  linhas.forEach((row, r) => {
+    const proxima = linhas[r + 1];
+    if (row.length === 1 && row[0] && proxima && proxima.length > 1) {
+      merges.push({ s: { r, c: 0 }, e: { r, c: proxima.length - 1 } });
+      const endereco = XLSX.utils.encode_cell({ r, c: 0 });
+      if (ws[endereco]) ws[endereco].s = { alignment: { horizontal: 'center', vertical: 'center' }, font: { bold: true } };
+    }
+  });
+  if (merges.length) ws['!merges'] = merges;
+  ws['!cols'] = largurasAutoAjustadas(linhas);
+  return ws;
+}
+
 window.baixarRelatorioXlsx = function() {
   if (!window.XLSX || !window._relatorioAtual || !window._relatorioAtual.colaboradores || window._relatorioAtual.colaboradores.length === 0) {
     showToast('Gere o relatório antes de baixar o XLSX.');
@@ -8640,17 +8673,17 @@ window.baixarRelatorioXlsx = function() {
 
   if (tipo === 'todos') {
     // Guia consolidada primeiro, seguida de uma guia por seção (como já era).
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(montarLinhasConsolidadas(secoes, blocos)), 'Todos - Completo');
+    XLSX.utils.book_append_sheet(wb, construirPlanilhaComTitulos(montarLinhasConsolidadas(secoes, blocos)), 'Todos - Completo');
     secoes.forEach(chave => {
       const bloco = blocos[chave];
-      if (bloco) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(bloco.linhas), NOME_ABA_SECAO_RELATORIO[chave] || chave);
+      if (bloco) XLSX.utils.book_append_sheet(wb, construirPlanilhaComTitulos(bloco.linhas), NOME_ABA_SECAO_RELATORIO[chave] || chave);
       if (chave === 'contratuais' && blocos.temporarios && blocos.temporarios.linhas.length > 1) {
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(blocos.temporarios.linhas), 'Temporários');
+        XLSX.utils.book_append_sheet(wb, construirPlanilhaComTitulos(blocos.temporarios.linhas), 'Temporários');
       }
     });
   } else {
     // Um único colaborador: tudo numa guia só.
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(montarLinhasConsolidadas(secoes, blocos)), 'Relatório Completo');
+    XLSX.utils.book_append_sheet(wb, construirPlanilhaComTitulos(montarLinhasConsolidadas(secoes, blocos)), 'Relatório Completo');
   }
 
   const nomeArquivo = `${nomeBaseArquivoRelatorio(tipo, colaboradores)}.xlsx`;
