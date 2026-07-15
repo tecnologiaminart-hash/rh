@@ -8447,6 +8447,16 @@ function obterLogoBase64() {
   });
 }
 
+// Nome padrão dos arquivos exportados (PDF/XLSX): data-relatório-<colaborador ou todos>-minart.
+function nomeBaseArquivoRelatorio(tipo, colaboradores) {
+  const hoje = new Date();
+  const dataStr = `${String(hoje.getDate()).padStart(2, '0')}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${hoje.getFullYear()}`;
+  const alvo = tipo === 'todos'
+    ? 'todos'
+    : (colaboradores[0].colab.nome_colaborador || 'colaborador').trim().replace(/\s+/g, '-').toLowerCase();
+  return `${dataStr}-relatorio-${alvo}-minart`;
+}
+
 window.baixarRelatorioPdf = async function() {
   if (!window.jspdf || !window._relatorioAtual || !window._relatorioAtual.colaboradores || window._relatorioAtual.colaboradores.length === 0) {
     showToast('Gere o relatório antes de baixar o PDF.');
@@ -8478,9 +8488,7 @@ window.baixarRelatorioPdf = async function() {
     escreverColaboradorNoPdf(doc, state, dadosColab, secoes, margemEsq);
   });
 
-  const nomeArquivo = tipo === 'todos'
-    ? 'relatorio-todos-colaboradores.pdf'
-    : `relatorio-${(colaboradores[0].colab.nome_colaborador || 'colaborador').trim().replace(/\s+/g, '-').toLowerCase()}.pdf`;
+  const nomeArquivo = `${nomeBaseArquivoRelatorio(tipo, colaboradores)}.pdf`;
   doc.save(nomeArquivo);
 };
 
@@ -8645,9 +8653,7 @@ window.baixarRelatorioXlsx = function() {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(montarLinhasConsolidadas(secoes, blocos)), 'Relatório Completo');
   }
 
-  const nomeArquivo = tipo === 'todos'
-    ? 'relatorio-todos-colaboradores.xlsx'
-    : `relatorio-${(colaboradores[0].colab.nome_colaborador || 'colaborador').trim().replace(/\s+/g, '-').toLowerCase()}.xlsx`;
+  const nomeArquivo = `${nomeBaseArquivoRelatorio(tipo, colaboradores)}.xlsx`;
   XLSX.writeFile(wb, nomeArquivo);
 };
 
