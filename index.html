@@ -430,6 +430,19 @@ const N8N_CURRICULO_WEBHOOK_URL = 'https://automatiza.minart.com.br/webhook/uplo
 // n8n/upload-documento-avaliacao-drive.workflow.json, preencher o folderId do Drive e a
 // credencial do Google Drive, ativar o workflow e colar a "Production URL" abaixo.
 const N8N_AVALIACAO_DOC_WEBHOOK_URL = 'https://automatiza.minart.com.br/webhook/upload-documento-avaliacao-drive';
+// Webhook do n8n com 2 ações (campo "acao" no corpo da requisição), usado
+// pelos cursos Internos:
+// - "criar_pasta_curso": cria, dentro de uma pasta-mãe fixa "Cursos" no
+//   Drive, uma subpasta com o nome do curso (na primeira vez que uma aula
+//   recebe upload) — devolve { folder_id }, que fica salvo em
+//   cursos.drive_folder_id pra não precisar criar de novo.
+// - "upload_arquivo" (padrão): sobe o vídeo (quando a aula usa upload em vez
+//   de link externo) ou o material em PDF direto na pasta do curso já
+//   mapeada (drive_folder_id) — devolve { url }.
+// Após importar n8n/upload-aula-drive.workflow.json, preencher o folderId da
+// pasta-mãe "Cursos" e a credencial do Google Drive, ativar o workflow e
+// colar a "Production URL" abaixo.
+const N8N_AULA_WEBHOOK_URL = 'https://automatiza.minart.com.br/webhook/upload-aula-drive';
 // Webhook do n8n que cria o login (Supabase Auth) + linha em `usuarios` de um
 // colaborador E também edita o e-mail de um usuário já cadastrado (campo
 // "acao": "criar" ou "editar_email" no corpo da requisição) — precisa da
@@ -973,6 +986,7 @@ const NAV = [
   {
     id: 'treinamentos', label: 'Treinamentos', icon: '◆',
     subs: [
+      { id: 'trein-cursos', label: 'Cursos' },
       { id: 'trein-cadastro-usuario', label: 'Cadastro de Usuário e Liberação' },
     ]
   },
@@ -4234,6 +4248,77 @@ window.enviarCurriculoParaDrive = async function(file, { nomeCandidato, vagaCarg
   return result.url || result.webViewLink || result.link || null;
 };
 
+// Cria (uma única vez por curso) a subpasta do curso dentro da pasta-mãe
+// "Cursos" no Drive, e devolve o folder_id — quem chama é responsável por
+// salvar esse id em cursos.drive_folder_id pra não criar de novo depois.
+window.criarPastaCursoNoDrive = async function(nomeCurso) {
+  if (!N8N_AULA_WEBHOOK_URL || N8N_AULA_WEBHOOK_URL.startsWith('COLE_AQUI')) {
+    throw new Error('Webhook de aulas não configurado: defina N8N_AULA_WEBHOOK_URL no index.html.');
+  }
+
+  const res = await fetch(N8N_AULA_WEBHOOK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      token: N8N_WEBHOOK_TOKEN,
+      acao: 'criar_pasta_curso',
+      nome_curso: nomeCurso,
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Webhook respondeu com status ${res.status}`);
+  }
+
+  let result = {};
+  try { result = await res.json(); } catch (e) { /* resposta sem corpo JSON */ }
+
+  if (result.success === false) {
+    throw new Error(result.error || 'Falha reportada pelo webhook do n8n.');
+  }
+
+  if (!result.folder_id) {
+    throw new Error('O Drive não retornou o ID da pasta criada. Verifique o workflow do n8n.');
+  }
+
+  return result.folder_id;
+};
+
+// Envia o vídeo (quando a aula usa upload) ou o material em PDF de uma aula de
+// curso Interno direto para a pasta do curso já mapeada no Drive.
+window.enviarArquivoAulaParaDrive = async function(file, { driveFolderId }) {
+  if (!N8N_AULA_WEBHOOK_URL || N8N_AULA_WEBHOOK_URL.startsWith('COLE_AQUI')) {
+    throw new Error('Webhook de upload de aula não configurado: defina N8N_AULA_WEBHOOK_URL no index.html.');
+  }
+  if (!driveFolderId) {
+    throw new Error('Pasta do curso no Drive ainda não foi criada.');
+  }
+
+  const formData = new FormData();
+  formData.append('file', file, file.name);
+  formData.append('nome_arquivo', file.name);
+  formData.append('drive_folder_id', driveFolderId);
+  formData.append('token', N8N_WEBHOOK_TOKEN);
+
+  const res = await fetch(N8N_AULA_WEBHOOK_URL, {
+    method: 'POST',
+    body: formData
+  });
+
+  if (!res.ok) {
+    throw new Error(`Webhook respondeu com status ${res.status}`);
+  }
+
+  let result = {};
+  try { result = await res.json(); } catch (e) { /* resposta sem corpo JSON */ }
+
+  if (result.success === false) {
+    throw new Error(result.error || 'Falha reportada pelo webhook do n8n.');
+  }
+
+  return result.url || result.webViewLink || result.link || null;
+};
+
 // Gera um arquivo .docx (Word) a partir de uma lista de perguntas e respostas,
 // usado pela avaliação pública (Competências e Entrevista). Retorna um Blob.
 window.gerarDocxPerguntasRespostas = async function(titulo, perguntasRespostas) {
@@ -4395,6 +4480,7 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
     'aval-perguntas-competencias': pagePerguntasCompetencias,
     'ficha-dados':     pageDadosPessoais,
     'ficha-mapeamento': pageMapeamentoPerfil,
+    'trein-cursos':    pageCursos,
     'trein-cadastro-usuario': pageCadastroUsuarioTreinamento,
     'permissoes-acesso': pagePermissoesAcesso,
     'relatorios-impressao': pageRelatorioColaborador,
@@ -7756,6 +7842,425 @@ window.filtrarStatusColabMapeamentoPerfil = function(valor) {
 window.ordenarMapeamentoPerfil = function(valor) {
   window._mpOrdem = valor;
   if (window._renderMapeamentoPerfil) window._renderMapeamentoPerfil();
+};
+
+// ------------------------------------------------------------
+// TREINAMENTOS > CURSOS — cadastro de cursos (Interno/Externo) e, para os
+// Internos, a lista de aulas de cada curso (ver sql/criar-cursos-treinamento.sql).
+// Avaliação Final e Dashboard do curso ainda são apenas placeholders (Interno).
+// ------------------------------------------------------------
+async function loadCursosForApp() {
+  if (!supaClient) {
+    console.error('Supabase client não inicializado para cursos.');
+    window._cursos = [];
+    return;
+  }
+  const { data, error } = await supaClient.from('cursos').select('*').order('nome', { ascending: true });
+  if (error) {
+    console.error('Erro ao carregar cursos:', error.message);
+    window._cursos = [];
+  } else {
+    window._cursos = data;
+  }
+}
+
+async function loadCursoAulasForApp() {
+  if (!supaClient) {
+    console.error('Supabase client não inicializado para curso_aulas.');
+    window._cursoAulas = [];
+    return;
+  }
+  const { data, error } = await supaClient.from('curso_aulas').select('*').order('ordem', { ascending: true });
+  if (error) {
+    console.error('Erro ao carregar aulas dos cursos:', error.message);
+    window._cursoAulas = [];
+  } else {
+    window._cursoAulas = data;
+  }
+}
+
+// Formata segundos em "m:ss" (ou "h:mm:ss" acima de 1 hora) pra exibição na lista de aulas.
+function formatarDuracaoSegundos(seg) {
+  const n = parseInt(seg, 10);
+  if (!n || n <= 0) return '—';
+  const h = Math.floor(n / 3600);
+  const m = Math.floor((n % 3600) / 60);
+  const s = n % 60;
+  const mm = String(m).padStart(2, '0');
+  const ss = String(s).padStart(2, '0');
+  return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
+}
+
+function pageCursos() {
+  document.getElementById('topbar-actions').innerHTML =
+    `<button class="btn btn-primary" onclick="abrirCursoModal()">+ Novo Curso</button>`;
+
+  const renderTabela = () => {
+    const tbody = document.getElementById('cursos-tbody');
+    if (!tbody) return;
+    const lista = [...(window._cursos || [])].sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+    tbody.innerHTML = lista.length === 0
+      ? '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum curso cadastrado ainda.</td></tr>'
+      : lista.map(c => `
+        <tr>
+          <td><strong style="cursor:pointer;text-decoration:underline" onclick="abrirCursoModal(${c.id})">${c.nome}</strong></td>
+          <td><span class="badge ${c.tipo === 'Interno' ? 'badge-info' : 'badge-gray'}">${c.tipo}</span></td>
+          <td>${c.carga_horaria !== null && c.carga_horaria !== undefined && c.carga_horaria !== '' ? `${c.carga_horaria}h` : '—'}</td>
+          <td style="white-space:normal;max-width:320px">${c.descricao || '—'}</td>
+          <td style="white-space:nowrap">
+            ${c.tipo === 'Interno' ? `
+              <button class="action-btn" title="Aulas" onclick="abrirAulasCursoModal(${c.id})">📚</button>
+              <button class="action-btn" title="Avaliação Final (em breve)" onclick="showToast('Avaliação Final do curso: em breve.')">📝</button>
+              <button class="action-btn" title="Dashboard (em breve)" onclick="showToast('Dashboard do curso: em breve.')">📊</button>
+            ` : ''}
+            <button class="action-btn" title="Editar" onclick="abrirCursoModal(${c.id})">✎</button>
+            <button class="action-btn" title="Excluir" onclick="excluirCurso(${c.id})" style="color:var(--danger)">✕</button>
+          </td>
+        </tr>`).join('');
+  };
+
+  window._renderCursos = renderTabela;
+  loadCursosForApp().then(renderTabela);
+
+  return `
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">Cursos</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Tipo</th>
+          <th>Carga Horária</th>
+          <th>Descrição</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="cursos-tbody">
+        <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>`;
+}
+
+window.abrirCursoModal = function(id = null) {
+  window._editingCursoId = id;
+
+  if (!document.getElementById('curso-modal')) {
+    const modal = document.createElement('div');
+    modal.id = 'curso-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:6px;width:560px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:15px;font-weight:700" id="curso-modal-title">Novo Curso</div>
+          <button type="button" class="btn btn-sm" onclick="document.getElementById('curso-modal').style.display='none'">✕</button>
+        </div>
+        <div style="padding:24px">
+          <div class="form-grid">
+            <div class="form-group form-full"><label class="form-label">Nome</label><input class="form-input" id="cur-nome" placeholder="Nome do curso"></div>
+            <div class="form-group"><label class="form-label">Tipo</label>
+              <select class="form-select" id="cur-tipo">
+                <option value="Interno">Interno</option>
+                <option value="Externo">Externo</option>
+              </select>
+            </div>
+            <div class="form-group"><label class="form-label">Carga Horária (horas)</label><input class="form-input" type="number" min="0" id="cur-carga-horaria" placeholder="Ex: 8"></div>
+            <div class="form-group form-full"><label class="form-label">Descrição</label><textarea class="form-input" id="cur-descricao" rows="4" placeholder="Descrição do curso"></textarea></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn" onclick="document.getElementById('curso-modal').style.display='none'">Cancelar</button>
+          <button type="button" class="btn btn-primary" onclick="salvarCurso()">Salvar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  if (id) {
+    const curso = (window._cursos || []).find(c => c.id === id);
+    document.getElementById('curso-modal-title').textContent = `Editar Curso — ${curso ? curso.nome : ''}`;
+    document.getElementById('cur-nome').value = curso?.nome || '';
+    document.getElementById('cur-tipo').value = curso?.tipo || 'Interno';
+    document.getElementById('cur-carga-horaria').value = (curso && curso.carga_horaria !== null && curso.carga_horaria !== undefined) ? curso.carga_horaria : '';
+    document.getElementById('cur-descricao').value = curso?.descricao || '';
+  } else {
+    document.getElementById('curso-modal-title').textContent = 'Novo Curso';
+    document.getElementById('cur-nome').value = '';
+    document.getElementById('cur-tipo').value = 'Interno';
+    document.getElementById('cur-carga-horaria').value = '';
+    document.getElementById('cur-descricao').value = '';
+  }
+
+  document.getElementById('curso-modal').style.display = 'flex';
+};
+
+window.salvarCurso = async function() {
+  const nome = document.getElementById('cur-nome').value.trim();
+  const tipo = document.getElementById('cur-tipo').value;
+  const cargaRaw = document.getElementById('cur-carga-horaria').value;
+  const descricao = document.getElementById('cur-descricao').value.trim();
+  if (!nome) return showToast('Informe o nome do curso.');
+
+  const payload = {
+    nome,
+    tipo,
+    carga_horaria: cargaRaw !== '' ? parseFloat(cargaRaw) : null,
+    descricao: descricao || null,
+  };
+
+  try {
+    const id = window._editingCursoId;
+    const { data, error } = id
+      ? await supaClient.from('cursos').update(payload).eq('id', id).select()
+      : await supaClient.from('cursos').insert([payload]).select();
+    if (error) throw error;
+    if (!data || data.length === 0) throw new Error('Nenhuma linha foi salva (verifique a policy da tabela cursos no Supabase).');
+    await loadCursosForApp();
+    if (window._renderCursos) window._renderCursos();
+    document.getElementById('curso-modal').style.display = 'none';
+    showToast(id ? 'Curso atualizado!' : 'Curso criado!');
+  } catch (e) {
+    console.error('Erro ao salvar curso:', e);
+    showToast('Erro ao salvar curso: ' + (e.message || e), 'danger');
+  }
+};
+
+window.excluirCurso = async function(id) {
+  if (!confirm('Excluir este curso? Todas as aulas cadastradas nele também serão excluídas.')) return;
+  try {
+    const { error } = await supaClient.from('cursos').delete().eq('id', id);
+    if (error) throw error;
+    await loadCursosForApp();
+    await loadCursoAulasForApp();
+    if (window._renderCursos) window._renderCursos();
+    showToast('Curso excluído!');
+  } catch (e) {
+    console.error('Erro ao excluir curso:', e);
+    showToast('Erro ao excluir curso: ' + (e.message || e), 'danger');
+  }
+};
+
+// --- Aulas do curso (só Interno) ---
+
+window.abrirAulasCursoModal = async function(idCurso) {
+  window._aulasCursoAtualId = idCurso;
+  if (!window._cursoAulas) await loadCursoAulasForApp();
+
+  if (!document.getElementById('aulas-curso-modal')) {
+    const modal = document.createElement('div');
+    modal.id = 'aulas-curso-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:6px;width:720px;max-width:95vw;max-height:85vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:15px;font-weight:700" id="aulas-curso-modal-title">Aulas</div>
+          <div style="display:flex;gap:8px">
+            <button type="button" class="btn btn-sm btn-primary" onclick="abrirAulaModal(window._aulasCursoAtualId)">+ Nova Aula</button>
+            <button type="button" class="btn btn-sm" onclick="document.getElementById('aulas-curso-modal').style.display='none'">✕ Fechar</button>
+          </div>
+        </div>
+        <div style="padding:24px" id="aulas-curso-body"></div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  window._renderAulasCurso = renderAulasCursoModal;
+  renderAulasCursoModal();
+  document.getElementById('aulas-curso-modal').style.display = 'flex';
+};
+
+function renderAulasCursoModal() {
+  const idCurso = window._aulasCursoAtualId;
+  const curso = (window._cursos || []).find(c => c.id === idCurso);
+  const body = document.getElementById('aulas-curso-body');
+  const titleEl = document.getElementById('aulas-curso-modal-title');
+  if (titleEl) titleEl.textContent = `Aulas — ${curso ? curso.nome : ''}`;
+  if (!body) return;
+
+  const aulas = (window._cursoAulas || []).filter(a => a.id_curso === idCurso).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+  body.innerHTML = aulas.length === 0
+    ? '<div style="text-align:center;padding:24px;color:var(--text3)">Nenhuma aula cadastrada ainda.</div>'
+    : aulas.map(a => `
+      <div class="table-card" style="display:flex;align-items:center;gap:12px;padding:12px 16px;margin-bottom:8px">
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:13px">${a.titulo}</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px">
+            ${a.tipo_video === 'upload' ? '📤 Upload' : '🔗 Link'} · ${formatarDuracaoSegundos(a.duracao_segundos)}
+            ${a.url_material_pdf ? ' · 📎 Material anexado' : ''}
+          </div>
+        </div>
+        ${a.url_video ? `<a class="action-btn" title="Abrir vídeo" href="${a.url_video}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">▶</a>` : ''}
+        ${a.url_material_pdf ? `<button class="action-btn" title="Ver material" onclick="visualizarDocumento('${a.url_material_pdf}')">📎</button>` : ''}
+        <button class="action-btn" title="Editar" onclick="abrirAulaModal(${idCurso}, ${a.id})">✎</button>
+        <button class="action-btn" title="Excluir" onclick="excluirAula(${a.id})" style="color:var(--danger)">✕</button>
+      </div>`).join('');
+}
+
+window.abrirAulaModal = function(idCurso, idAula = null) {
+  window._editingAulaId = idAula;
+  window._editingAulaCursoId = idCurso;
+
+  if (!document.getElementById('aula-modal')) {
+    const modal = document.createElement('div');
+    modal.id = 'aula-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1100;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:6px;width:560px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:15px;font-weight:700" id="aula-modal-title">Nova Aula</div>
+          <button type="button" class="btn btn-sm" onclick="document.getElementById('aula-modal').style.display='none'">✕</button>
+        </div>
+        <div style="padding:24px">
+          <div class="form-grid">
+            <div class="form-group form-full"><label class="form-label">Título</label><input class="form-input" id="aul-titulo" placeholder="Título da aula"></div>
+            <div class="form-group form-full">
+              <label class="form-label">Vídeo</label>
+              <div style="display:flex;gap:16px;margin:6px 0 10px;font-size:13px;font-weight:400;text-transform:none">
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="aul-tipo-video" value="link" onchange="toggleTipoVideoAula('link')"> Link (YouTube, etc.)</label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="aul-tipo-video" value="upload" onchange="toggleTipoVideoAula('upload')"> Upload para o Drive</label>
+              </div>
+              <input class="form-input" id="aul-video-link" placeholder="https://...">
+              <input class="form-input" id="aul-video-upload" type="file" accept="video/*" style="display:none">
+              <div id="aul-video-atual" style="font-size:12px;color:var(--text3);margin-top:6px"></div>
+            </div>
+            <div class="form-group"><label class="form-label">Duração (segundos)</label><input class="form-input" type="number" min="0" id="aul-duracao"></div>
+            <div class="form-group form-full"><label class="form-label">Descrição</label><textarea class="form-input" id="aul-descricao" rows="3"></textarea></div>
+            <div class="form-group form-full">
+              <label class="form-label">Material em PDF (opcional)</label>
+              <input class="form-input" id="aul-material" type="file" accept="application/pdf">
+              <div id="aul-material-atual" style="font-size:12px;color:var(--text3);margin-top:6px"></div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn" onclick="document.getElementById('aula-modal').style.display='none'">Cancelar</button>
+          <button type="button" class="btn btn-primary" id="aul-btn-salvar" onclick="salvarAula()">Salvar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  const aula = idAula ? (window._cursoAulas || []).find(a => a.id === idAula) : null;
+  document.getElementById('aula-modal-title').textContent = idAula ? `Editar Aula — ${aula ? aula.titulo : ''}` : 'Nova Aula';
+  document.getElementById('aul-titulo').value = aula?.titulo || '';
+  document.getElementById('aul-duracao').value = (aula && aula.duracao_segundos !== null && aula.duracao_segundos !== undefined) ? aula.duracao_segundos : '';
+  document.getElementById('aul-descricao').value = aula?.descricao || '';
+  document.getElementById('aul-video-link').value = (aula && aula.tipo_video === 'link') ? (aula.url_video || '') : '';
+  document.getElementById('aul-video-upload').value = '';
+  document.getElementById('aul-material').value = '';
+
+  const tipoAtual = aula?.tipo_video || 'link';
+  document.querySelectorAll('input[name="aul-tipo-video"]').forEach(r => { r.checked = r.value === tipoAtual; });
+  toggleTipoVideoAula(tipoAtual);
+
+  document.getElementById('aul-video-atual').textContent = (aula && aula.tipo_video === 'upload' && aula.url_video) ? `Vídeo atual: ${aula.url_video}` : '';
+  document.getElementById('aul-material-atual').textContent = (aula && aula.url_material_pdf) ? `Material atual: ${aula.url_material_pdf}` : '';
+
+  document.getElementById('aula-modal').style.display = 'flex';
+};
+
+window.toggleTipoVideoAula = function(tipo) {
+  const linkEl = document.getElementById('aul-video-link');
+  const uploadEl = document.getElementById('aul-video-upload');
+  if (!linkEl || !uploadEl) return;
+  linkEl.style.display = tipo === 'link' ? '' : 'none';
+  uploadEl.style.display = tipo === 'upload' ? '' : 'none';
+};
+
+window.salvarAula = async function() {
+  const titulo = document.getElementById('aul-titulo').value.trim();
+  const tipoVideo = document.querySelector('input[name="aul-tipo-video"]:checked')?.value || 'link';
+  const linkVideo = document.getElementById('aul-video-link').value.trim();
+  const arquivoVideo = document.getElementById('aul-video-upload').files[0];
+  const duracaoRaw = document.getElementById('aul-duracao').value;
+  const descricao = document.getElementById('aul-descricao').value.trim();
+  const arquivoMaterial = document.getElementById('aul-material').files[0];
+
+  if (!titulo) return showToast('Informe o título da aula.');
+  if (tipoVideo === 'link' && !linkVideo) return showToast('Informe o link do vídeo.');
+
+  const idAula = window._editingAulaId;
+  const aulaExistente = idAula ? (window._cursoAulas || []).find(a => a.id === idAula) : null;
+
+  if (tipoVideo === 'upload' && !arquivoVideo && !(aulaExistente && aulaExistente.tipo_video === 'upload' && aulaExistente.url_video)) {
+    return showToast('Selecione o arquivo de vídeo para upload.');
+  }
+
+  const btn = document.getElementById('aul-btn-salvar');
+  if (btn) { btn.disabled = true; btn.textContent = 'Salvando...'; }
+
+  try {
+    // Resolve a pasta do curso no Drive só se algum arquivo for realmente
+    // subir agora — cria na primeira vez (e salva em cursos.drive_folder_id)
+    // e reaproveita nas próximas aulas do mesmo curso.
+    let driveFolderId = null;
+    if ((tipoVideo === 'upload' && arquivoVideo) || arquivoMaterial) {
+      const curso = (window._cursos || []).find(c => c.id === window._editingAulaCursoId);
+      driveFolderId = curso?.drive_folder_id || null;
+      if (!driveFolderId) {
+        driveFolderId = await window.criarPastaCursoNoDrive(curso?.nome || 'Curso');
+        const { error: errorPasta } = await supaClient.from('cursos').update({ drive_folder_id: driveFolderId }).eq('id', window._editingAulaCursoId);
+        if (errorPasta) throw errorPasta;
+        if (curso) curso.drive_folder_id = driveFolderId;
+      }
+    }
+
+    let urlVideo = tipoVideo === 'link' ? linkVideo : (aulaExistente?.url_video || null);
+    if (tipoVideo === 'upload' && arquivoVideo) {
+      urlVideo = await window.enviarArquivoAulaParaDrive(arquivoVideo, { driveFolderId });
+    }
+
+    let urlMaterial = aulaExistente?.url_material_pdf || null;
+    if (arquivoMaterial) {
+      urlMaterial = await window.enviarArquivoAulaParaDrive(arquivoMaterial, { driveFolderId });
+    }
+
+    const payload = {
+      id_curso: window._editingAulaCursoId,
+      titulo,
+      tipo_video: tipoVideo,
+      url_video: urlVideo,
+      descricao: descricao || null,
+      duracao_segundos: duracaoRaw !== '' ? parseInt(duracaoRaw, 10) : null,
+      url_material_pdf: urlMaterial,
+    };
+    if (!idAula) {
+      const maiorOrdem = Math.max(0, ...(window._cursoAulas || []).filter(a => a.id_curso === window._editingAulaCursoId).map(a => a.ordem || 0));
+      payload.ordem = maiorOrdem + 1;
+    }
+
+    const { data, error } = idAula
+      ? await supaClient.from('curso_aulas').update(payload).eq('id', idAula).select()
+      : await supaClient.from('curso_aulas').insert([payload]).select();
+    if (error) throw error;
+    if (!data || data.length === 0) throw new Error('Nenhuma linha foi salva (verifique a policy da tabela curso_aulas no Supabase).');
+
+    await loadCursoAulasForApp();
+    if (window._renderAulasCurso) window._renderAulasCurso();
+    document.getElementById('aula-modal').style.display = 'none';
+    showToast(idAula ? 'Aula atualizada!' : 'Aula criada!');
+  } catch (e) {
+    console.error('Erro ao salvar aula:', e);
+    showToast('Erro ao salvar aula: ' + (e.message || e), 'danger');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Salvar'; }
+  }
+};
+
+window.excluirAula = async function(id) {
+  if (!confirm('Excluir esta aula?')) return;
+  try {
+    const { error } = await supaClient.from('curso_aulas').delete().eq('id', id);
+    if (error) throw error;
+    await loadCursoAulasForApp();
+    if (window._renderAulasCurso) window._renderAulasCurso();
+    showToast('Aula excluída!');
+  } catch (e) {
+    console.error('Erro ao excluir aula:', e);
+    showToast('Erro ao excluir aula: ' + (e.message || e), 'danger');
+  }
 };
 
 // ------------------------------------------------------------
