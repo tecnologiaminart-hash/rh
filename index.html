@@ -5706,8 +5706,8 @@ function theadCandidatosAprovadosHtml() {
       <th>Envio</th>
       <th>Avaliação</th>
       <th>Respondido em</th>
-      <th>Perfil DISC (1º)</th>
-      <th>Perfil DISC (2º)</th>
+      <th>Perfil DISC 1</th>
+      <th>Perfil DISC 2</th>
       <th>Entrevista Presencial</th>
       <th>Observações</th>
       <th>Ações</th>
@@ -6135,6 +6135,7 @@ window.ativarColaboradorAdmissao = async function(idColaborador) {
 // ------------------------------------------------------------
 function pageCriarAdmissao() {
   document.getElementById('topbar-actions').innerHTML = '';
+  window._admTesteSelecionado = null;
 
   (async () => {
     await Promise.all([
@@ -6268,6 +6269,7 @@ window.toggleOrigemAdmissao = function(value) {
     sel.style.display = 'none';
     sel.value = '';
     nomeEl.value = '';
+    window._admTesteSelecionado = null;
   }
 };
 
@@ -6295,9 +6297,10 @@ window.toggleTipoContratoAdmissao = function(value) {
 };
 
 window.preencherAdmissaoDoCandidato = function(idTeste) {
-  if (!idTeste) return;
+  if (!idTeste) { window._admTesteSelecionado = null; return; }
   const teste = (window._testesAvaliacoes || []).find(t => String(t.id) === String(idTeste));
-  if (!teste) return;
+  if (!teste) { window._admTesteSelecionado = null; return; }
+  window._admTesteSelecionado = teste;
   const cand = (window._candidaturas || []).find(c => c.id_candidaturas === teste.id_candidato);
 
   document.getElementById('adm-nome').value = teste.nome_candidato || (cand ? cand.nome_candidato : '') || '';
@@ -6386,6 +6389,27 @@ window.salvarCriarAdmissao = async function() {
     if (btn) { btn.disabled = false; btn.textContent = 'Salvar Admissão'; }
     return;
   }
+
+  // Quando a admissão veio de "Selecionar Candidato da Avaliação", replica o
+  // resultado do Perfil DISC (testes_avaliacoes.resultado_perfil_disc_1/2)
+  // para mapeamento_perfil — o colaborador acabou de ser criado, então não
+  // existe registro prévio: é sempre um insert. Falha aqui não desfaz a
+  // admissão, que já foi criada com sucesso.
+  const testeSelecionado = window._admTesteSelecionado;
+  if (testeSelecionado && (testeSelecionado.resultado_perfil_disc_1 || testeSelecionado.resultado_perfil_disc_2)) {
+    try {
+      const { error: errorPerfil } = await supaClient.from('mapeamento_perfil').insert([{
+        id_colaborador: novoId,
+        perfil_disc_1: testeSelecionado.resultado_perfil_disc_1 || null,
+        perfil_disc_2: testeSelecionado.resultado_perfil_disc_2 || null,
+      }]);
+      if (errorPerfil) throw errorPerfil;
+    } catch (e) {
+      console.error('Erro ao replicar Perfil DISC em mapeamento_perfil:', e);
+      showToast('Admissão criada, mas falhou ao registrar o Perfil DISC em Mapeamento de Perfil: ' + (e.message || e));
+    }
+  }
+  window._admTesteSelecionado = null;
 
   await loadColaboradoresFromSupabase();
   await loadDadosPessoaisEpiForApp();
@@ -9226,7 +9250,7 @@ window.finalizarAvaliacaoDisc = async function() {
     });
     if (error) throw error;
   } catch (e) {
-    console.error('Erro ao salvar resultado do Perfil DISC:', e);
+    console.error('Erro ao salvar resultado do Perfil DISC:', e?.message || e, e?.details || '', e?.hint || '');
     if (container) container.innerHTML = `<div class="form-card" style="text-align:center;padding:48px 24px"><div style="color:var(--danger);font-weight:600">Erro ao salvar sua avaliação. Tente novamente.</div></div>`;
     return;
   }
