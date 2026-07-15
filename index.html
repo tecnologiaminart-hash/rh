@@ -7707,16 +7707,24 @@ function pageCadastroUsuarioTreinamento() {
     // dois logins, independente do perfil.
     const lista = (window._usuariosCadastrados || []).filter(u => u.perfil_id === 3);
     tbody.innerHTML = lista.length === 0
-      ? '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum usuário cadastrado ainda.</td></tr>'
+      ? '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Nenhum usuário cadastrado ainda.</td></tr>'
       : lista.map(u => {
           const criado = u.created_at ? new Date(u.created_at).toLocaleDateString('pt-BR') : '—';
+          const nomeColaborador = nomeColaboradorPorId(u.colaborador_id);
+          const dados = (window._dadosPessoaisEpi || []).find(d => String(d.id_colaborador) === String(u.colaborador_id));
+          const linkWhats = dados ? linkWhatsappAcessoTreinamento(dados.telefone, nomeColaborador, u.email) : null;
           return `
           <tr>
-            <td><strong>${nomeColaboradorPorId(u.colaborador_id)}</strong></td>
+            <td><strong>${nomeColaborador}</strong></td>
             <td>${u.email || '—'}</td>
             <td>${u.perfis ? u.perfis.nome : '—'}</td>
             <td><span class="badge ${u.ativo ? 'badge-active' : 'badge-gray'}">${u.ativo ? 'Ativo' : 'Inativo'}</span></td>
             <td style="color:var(--text3);font-size:12px">${criado}</td>
+            <td>
+              ${linkWhats
+                ? `<a class="action-btn" title="Enviar acesso por WhatsApp" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block" href="${linkWhats}"><i class="fa-brands fa-whatsapp" style="color:#25D366;font-size:16px"></i></a>`
+                : `<span class="action-btn" style="opacity:.4;cursor:default" title="Cadastre o telefone em Dados Pessoais para liberar o envio"><i class="fa-brands fa-whatsapp" style="font-size:16px"></i></span>`}
+            </td>
           </tr>`;
         }).join('');
   };
@@ -7725,6 +7733,7 @@ function pageCadastroUsuarioTreinamento() {
   Promise.all([
     loadUsuariosCadastrados(),
     (!_colaboradoresSupabase || _colaboradoresSupabase.length === 0) ? loadColaboradoresFromSupabase() : Promise.resolve(),
+    loadDadosPessoaisEpiForApp(),
   ]).then(renderTabela);
 
   return `
@@ -7740,13 +7749,25 @@ function pageCadastroUsuarioTreinamento() {
           <th>Perfil</th>
           <th>Status</th>
           <th>Criado em</th>
+          <th>WhatsApp</th>
         </tr>
       </thead>
       <tbody id="cadastro-usuario-tbody">
-        <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
+        <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
       </tbody>
     </table>
   </div>`;
+}
+
+// Monta o link de WhatsApp avisando o colaborador que o acesso ao Treinamento
+// foi criado, já com e-mail, senha inicial e o aviso de troca no 1º acesso.
+function linkWhatsappAcessoTreinamento(numero, nomeColaborador, email) {
+  let digits = String(numero || '').replace(/\D/g, '');
+  if (!digits) return null;
+  if (!digits.startsWith('55')) digits = '55' + digits;
+  const link = `${location.origin}${location.pathname}`;
+  const mensagem = `Olá, ${nomeColaborador || ''}! Seu acesso ao Treinamento da Minart Móveis foi criado.\n\nAcesse: ${link}\nE-mail: ${email || ''}\nSenha inicial: 12345678\n\nNo primeiro acesso, o sistema vai pedir para você trocar essa senha.`;
+  return `https://wa.me/${digits}?text=${encodeURIComponent(mensagem)}`;
 }
 
 window.abrirCadastroUsuarioModal = async function() {
