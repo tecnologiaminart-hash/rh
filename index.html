@@ -8888,10 +8888,16 @@ async function checkCandidaturaLink() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'none';
 
-  if (!window._vagas) window._vagas = [];
-
-  // Renderiza o formulário público no body
-  const vaga = window._vagas.find(v => v['link-token'] === token);
+  // Busca a vaga só pelo token via RPC (vagas fica fechada para anon — ver
+  // sql/rpc-candidatura-publica.sql), em vez de depender de window._vagas
+  // (que é um select('*') sem filtro, sem sentido pra um visitante anônimo).
+  let vaga = null;
+  if (supaClient) {
+    const { data, error } = await supaClient.rpc('obter_vaga_por_token', { p_token: token }).maybeSingle();
+    if (error) console.error('Erro ao carregar vaga da candidatura:', error.message);
+    vaga = data || null;
+  }
+  window._pubVagaAtual = vaga;
 
   // Busca só as colunas públicas do cargo (sem salario_base) — visitantes anônimos
   // só têm GRANT de SELECT nessas colunas, então não dá pra reaproveitar window._cargos aqui.
@@ -8983,8 +8989,7 @@ window.enviarCandidatura = async function(token) {
   if (!nomeMae)        { msgEl.textContent = 'Informe o nome da sua mãe.'; msgEl.className = 'pub-msg pub-error'; return; }
   if (!currFile)       { msgEl.textContent = 'Anexe seu currículo.'; msgEl.className = 'pub-msg pub-error'; return; }
 
-  if (!window._vagas) window._vagas = [];
-  const vaga = window._vagas.find(v => v['link-token'] === token);
+  const vaga = window._pubVagaAtual;
   if (!vaga) { msgEl.textContent = 'Vaga não encontrada.'; msgEl.className = 'pub-msg pub-error'; return; }
 
   btnEl.disabled = true;
@@ -9004,18 +9009,20 @@ window.enviarCandidatura = async function(token) {
     }
   }
 
-  const { error } = await supaClient.from('candidaturas').insert([{
-    id_vagas: vaga.id_vagas,
-    id_cargos: vaga.id_cargos,
-    nome_candidato: nome,
-    cpf: cpf,
-    data_nascimento: dataNascimento,
-    nome_da_mae: nomeMae,
-    numero: numero || null,
-    instagram: instagram || null,
-    url_curriculo: urlCurriculo,
-    data_envio_candidatura: new Date().toISOString().slice(0, 10)
-  }]);
+  // Grava a candidatura via RPC (vaga resolvida e validada server-side pelo
+  // token — o cliente não escolhe id_vagas/id_cargos diretamente), que já
+  // incrementa o contador da vaga na mesma transação. Ver
+  // sql/rpc-candidatura-publica.sql.
+  const { error } = await supaClient.rpc('enviar_candidatura', {
+    p_token: token,
+    p_nome: nome,
+    p_cpf: cpf,
+    p_data_nascimento: dataNascimento,
+    p_nome_mae: nomeMae,
+    p_numero: numero || null,
+    p_instagram: instagram || null,
+    p_url_curriculo: urlCurriculo,
+  });
 
   if (error) {
     console.error('Erro ao salvar candidatura:', error.message);
@@ -9024,10 +9031,6 @@ window.enviarCandidatura = async function(token) {
     btnEl.disabled = false;
     return;
   }
-
-  // Incrementa contador da vaga (melhor esforço)
-  supaClient.from('vagas').update({ candidatos_count: (vaga.candidatos_count || 0) + 1 }).eq('id_vagas', vaga.id_vagas)
-    .then(({ error }) => { if (error) console.error('Erro ao atualizar contador de candidatos:', error.message); });
 
   // Feedback visual
   document.getElementById('pub-box').innerHTML = `
