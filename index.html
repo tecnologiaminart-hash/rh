@@ -7891,6 +7891,28 @@ function formatarDuracaoSegundos(seg) {
   return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
 }
 
+// Formata segundos em "Xh Ymin" — usado na Carga Horária calculada do curso Interno.
+function formatarHorasMinutos(segundosTotais) {
+  const total = Math.max(0, parseInt(segundosTotais, 10) || 0);
+  const h = Math.floor(total / 3600);
+  const m = Math.round((total % 3600) / 60);
+  return `${h}h ${m}min`;
+}
+
+// Soma a duração (segundos) de todas as aulas de um curso e salva o resultado
+// (em horas) em cursos.carga_horaria — chamado sempre que uma aula é
+// criada/editada/excluída, pra essa coluna não ficar desatualizada.
+async function recalcularCargaHorariaCurso(idCurso) {
+  const totalSegundos = (window._cursoAulas || [])
+    .filter(a => a.id_curso === idCurso)
+    .reduce((acc, a) => acc + (parseInt(a.duracao_segundos, 10) || 0), 0);
+  const cargaHoraria = +(totalSegundos / 3600).toFixed(2);
+  const { error } = await supaClient.from('cursos').update({ carga_horaria: cargaHoraria }).eq('id', idCurso);
+  if (error) { console.error('Erro ao atualizar carga horária do curso:', error.message); return; }
+  const curso = (window._cursos || []).find(c => c.id === idCurso);
+  if (curso) curso.carga_horaria = cargaHoraria;
+}
+
 function pageCursos() {
   document.getElementById('topbar-actions').innerHTML =
     `<button class="btn btn-primary" onclick="abrirCursoModal()">+ Novo Curso</button>`;
@@ -7905,7 +7927,7 @@ function pageCursos() {
         <tr>
           <td><strong style="cursor:pointer;text-decoration:underline" onclick="abrirCursoModal(${c.id})">${c.nome}</strong></td>
           <td><span class="badge ${c.tipo === 'Interno' ? 'badge-info' : 'badge-gray'}">${c.tipo}</span></td>
-          <td>${c.carga_horaria !== null && c.carga_horaria !== undefined && c.carga_horaria !== '' ? `${c.carga_horaria}h` : '—'}</td>
+          <td>${c.carga_horaria !== null && c.carga_horaria !== undefined && c.carga_horaria !== '' ? (c.tipo === 'Interno' ? formatarHorasMinutos(Math.round(c.carga_horaria * 3600)) : `${c.carga_horaria}h`) : '—'}</td>
           <td style="white-space:normal;max-width:320px">${c.descricao || '—'}</td>
           <td style="white-space:nowrap">
             ${c.tipo === 'Interno' ? `
@@ -7920,7 +7942,7 @@ function pageCursos() {
   };
 
   window._renderCursos = renderTabela;
-  loadCursosForApp().then(renderTabela);
+  Promise.all([loadCursosForApp(), loadCursoAulasForApp()]).then(renderTabela);
 
   return `
   <div class="table-card">
@@ -7961,12 +7983,16 @@ window.abrirCursoModal = function(id = null) {
           <div class="form-grid">
             <div class="form-group form-full"><label class="form-label">Nome</label><input class="form-input" id="cur-nome" placeholder="Nome do curso"></div>
             <div class="form-group"><label class="form-label">Tipo</label>
-              <select class="form-select" id="cur-tipo">
+              <select class="form-select" id="cur-tipo" onchange="toggleTipoCursoModal(this.value)">
                 <option value="Interno">Interno</option>
                 <option value="Externo">Externo</option>
               </select>
             </div>
-            <div class="form-group"><label class="form-label">Carga Horária (horas)</label><input class="form-input" type="number" min="0" id="cur-carga-horaria" placeholder="Ex: 8"></div>
+            <div class="form-group">
+              <label class="form-label">Carga Horária</label>
+              <input class="form-input" type="number" min="0" id="cur-carga-horaria" placeholder="Ex: 8 (horas)">
+              <div id="cur-carga-horaria-computada" style="display:none;padding:9px 12px;background:var(--bg2);border-radius:4px;font-size:13px;color:var(--text2)"></div>
+            </div>
             <div class="form-group form-full"><label class="form-label">Descrição</label><textarea class="form-input" id="cur-descricao" rows="4" placeholder="Descrição do curso"></textarea></div>
           </div>
         </div>
@@ -7992,23 +8018,48 @@ window.abrirCursoModal = function(id = null) {
     document.getElementById('cur-carga-horaria').value = '';
     document.getElementById('cur-descricao').value = '';
   }
+  toggleTipoCursoModal(document.getElementById('cur-tipo').value);
 
   document.getElementById('curso-modal').style.display = 'flex';
+};
+
+// Curso Interno: Carga Horária vira somente exibição (soma das durações das
+// aulas, convertida de segundos para horas/minutos aqui no HTML) — Externo
+// continua com o campo numérico livre, já que não tem aulas cadastradas.
+window.toggleTipoCursoModal = function(tipo) {
+  const inputEl = document.getElementById('cur-carga-horaria');
+  const computadaEl = document.getElementById('cur-carga-horaria-computada');
+  if (!inputEl || !computadaEl) return;
+  if (tipo === 'Interno') {
+    inputEl.style.display = 'none';
+    computadaEl.style.display = '';
+    const idCurso = window._editingCursoId;
+    const totalSegundos = (window._cursoAulas || [])
+      .filter(a => a.id_curso === idCurso)
+      .reduce((acc, a) => acc + (parseInt(a.duracao_segundos, 10) || 0), 0);
+    computadaEl.textContent = `Calculada a partir das aulas: ${formatarHorasMinutos(totalSegundos)}`;
+  } else {
+    inputEl.style.display = '';
+    computadaEl.style.display = 'none';
+  }
 };
 
 window.salvarCurso = async function() {
   const nome = document.getElementById('cur-nome').value.trim();
   const tipo = document.getElementById('cur-tipo').value;
-  const cargaRaw = document.getElementById('cur-carga-horaria').value;
   const descricao = document.getElementById('cur-descricao').value.trim();
   if (!nome) return showToast('Informe o nome do curso.');
 
-  const payload = {
-    nome,
-    tipo,
-    carga_horaria: cargaRaw !== '' ? parseFloat(cargaRaw) : null,
-    descricao: descricao || null,
-  };
+  const payload = { nome, tipo, descricao: descricao || null };
+  if (tipo === 'Externo') {
+    // Externo não tem aulas: carga horária continua um número digitado à mão.
+    const cargaRaw = document.getElementById('cur-carga-horaria').value;
+    payload.carga_horaria = cargaRaw !== '' ? parseFloat(cargaRaw) : null;
+  } else if (!window._editingCursoId) {
+    // Interno recém-criado ainda não tem aulas cadastradas — recalcularCargaHorariaCurso()
+    // atualiza esse valor sozinho conforme as aulas forem sendo salvas/excluídas.
+    payload.carga_horaria = 0;
+  }
 
   try {
     const id = window._editingCursoId;
@@ -8122,10 +8173,19 @@ window.abrirAulaModal = function(idCurso, idAula = null) {
                 <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="aul-tipo-video" value="upload" onchange="toggleTipoVideoAula('upload')"> Upload para o Drive</label>
               </div>
               <input class="form-input" id="aul-video-link" placeholder="https://...">
-              <input class="form-input" id="aul-video-upload" type="file" accept="video/*" style="display:none">
+              <input class="form-input" id="aul-video-upload" type="file" accept="video/*" style="display:none" onchange="preencherDuracaoAulaDoArquivo(this.files[0])">
               <div id="aul-video-atual" style="font-size:12px;color:var(--text3);margin-top:6px"></div>
+              <div id="aul-duracao-detectada" style="font-size:12px;color:var(--text3);margin-top:6px"></div>
             </div>
-            <div class="form-group"><label class="form-label">Duração (segundos)</label><input class="form-input" type="number" min="0" id="aul-duracao"></div>
+            <div class="form-group form-full" id="aul-duracao-link-wrap">
+              <label class="form-label">Duração</label>
+              <div style="display:flex;gap:8px;align-items:center">
+                <input class="form-input" type="number" min="0" id="aul-duracao-horas" placeholder="Horas" style="width:110px">
+                <span style="font-size:13px;color:var(--text3)">h</span>
+                <input class="form-input" type="number" min="0" max="59" id="aul-duracao-minutos" placeholder="Minutos" style="width:110px">
+                <span style="font-size:13px;color:var(--text3)">min</span>
+              </div>
+            </div>
             <div class="form-group form-full"><label class="form-label">Descrição</label><textarea class="form-input" id="aul-descricao" rows="3"></textarea></div>
             <div class="form-group form-full">
               <label class="form-label">Material em PDF (opcional)</label>
@@ -8145,11 +8205,20 @@ window.abrirAulaModal = function(idCurso, idAula = null) {
   const aula = idAula ? (window._cursoAulas || []).find(a => a.id === idAula) : null;
   document.getElementById('aula-modal-title').textContent = idAula ? `Editar Aula — ${aula ? aula.titulo : ''}` : 'Nova Aula';
   document.getElementById('aul-titulo').value = aula?.titulo || '';
-  document.getElementById('aul-duracao').value = (aula && aula.duracao_segundos !== null && aula.duracao_segundos !== undefined) ? aula.duracao_segundos : '';
   document.getElementById('aul-descricao').value = aula?.descricao || '';
   document.getElementById('aul-video-link').value = (aula && aula.tipo_video === 'link') ? (aula.url_video || '') : '';
   document.getElementById('aul-video-upload').value = '';
   document.getElementById('aul-material').value = '';
+
+  // Duração: em segundos igual antes, só muda a forma de preencher — Link
+  // usa os campos Horas/Minutos abaixo; Upload captura sozinho do arquivo
+  // (guardado aqui, sem campo visível) e mantém o valor já salvo até que um
+  // novo arquivo seja escolhido.
+  const duracaoLinkAtual = (aula && aula.tipo_video === 'link') ? (aula.duracao_segundos || 0) : 0;
+  document.getElementById('aul-duracao-horas').value = duracaoLinkAtual > 0 ? Math.floor(duracaoLinkAtual / 3600) : '';
+  document.getElementById('aul-duracao-minutos').value = duracaoLinkAtual > 0 ? Math.round((duracaoLinkAtual % 3600) / 60) : '';
+  window._aulaDuracaoSegundosUpload = (aula && aula.tipo_video === 'upload') ? (aula.duracao_segundos || null) : null;
+  document.getElementById('aul-duracao-detectada').textContent = window._aulaDuracaoSegundosUpload ? `Duração atual: ${formatarHorasMinutos(window._aulaDuracaoSegundosUpload)}` : '';
 
   const tipoAtual = aula?.tipo_video || 'link';
   document.querySelectorAll('input[name="aul-tipo-video"]').forEach(r => { r.checked = r.value === tipoAtual; });
@@ -8164,9 +8233,36 @@ window.abrirAulaModal = function(idCurso, idAula = null) {
 window.toggleTipoVideoAula = function(tipo) {
   const linkEl = document.getElementById('aul-video-link');
   const uploadEl = document.getElementById('aul-video-upload');
-  if (!linkEl || !uploadEl) return;
+  const duracaoLinkWrap = document.getElementById('aul-duracao-link-wrap');
+  if (!linkEl || !uploadEl || !duracaoLinkWrap) return;
   linkEl.style.display = tipo === 'link' ? '' : 'none';
   uploadEl.style.display = tipo === 'upload' ? '' : 'none';
+  // Duração só é preenchida à mão pra Link — no Upload ela é capturada
+  // sozinha do arquivo (sem campo visível, só o texto de confirmação abaixo).
+  duracaoLinkWrap.style.display = tipo === 'link' ? '' : 'none';
+};
+
+// Lê a duração do vídeo selecionado (metadata local, sem precisar subir o
+// arquivo) e guarda em window._aulaDuracaoSegundosUpload, mostrando só um
+// texto de confirmação — não existe mais campo de duração editável no Upload.
+window.preencherDuracaoAulaDoArquivo = function(file) {
+  const detectadaEl = document.getElementById('aul-duracao-detectada');
+  if (!file) return;
+  const video = document.createElement('video');
+  video.preload = 'metadata';
+  video.onloadedmetadata = () => {
+    window.URL.revokeObjectURL(video.src);
+    const segundos = Math.round(video.duration);
+    if (isFinite(segundos) && segundos > 0) {
+      window._aulaDuracaoSegundosUpload = segundos;
+      if (detectadaEl) detectadaEl.textContent = `Duração detectada: ${formatarHorasMinutos(segundos)}`;
+    }
+  };
+  video.onerror = () => {
+    console.warn('Não foi possível ler a duração do vídeo selecionado.');
+    if (detectadaEl) detectadaEl.textContent = 'Não foi possível detectar a duração deste arquivo.';
+  };
+  video.src = URL.createObjectURL(file);
 };
 
 window.salvarAula = async function() {
@@ -8174,7 +8270,6 @@ window.salvarAula = async function() {
   const tipoVideo = document.querySelector('input[name="aul-tipo-video"]:checked')?.value || 'link';
   const linkVideo = document.getElementById('aul-video-link').value.trim();
   const arquivoVideo = document.getElementById('aul-video-upload').files[0];
-  const duracaoRaw = document.getElementById('aul-duracao').value;
   const descricao = document.getElementById('aul-descricao').value.trim();
   const arquivoMaterial = document.getElementById('aul-material').files[0];
 
@@ -8217,13 +8312,25 @@ window.salvarAula = async function() {
       urlMaterial = await window.enviarArquivoAulaParaDrive(arquivoMaterial, { driveFolderId });
     }
 
+    // Duração: Link vem dos campos Horas/Minutos; Upload vem do que foi
+    // detectado automaticamente do arquivo (ou do valor já salvo, se nenhum
+    // arquivo novo foi escolhido nesta edição).
+    let duracaoSegundos = null;
+    if (tipoVideo === 'link') {
+      const horas = parseInt(document.getElementById('aul-duracao-horas').value, 10) || 0;
+      const minutos = parseInt(document.getElementById('aul-duracao-minutos').value, 10) || 0;
+      duracaoSegundos = (horas * 3600 + minutos * 60) || null;
+    } else {
+      duracaoSegundos = window._aulaDuracaoSegundosUpload || null;
+    }
+
     const payload = {
       id_curso: window._editingAulaCursoId,
       titulo,
       tipo_video: tipoVideo,
       url_video: urlVideo,
       descricao: descricao || null,
-      duracao_segundos: duracaoRaw !== '' ? parseInt(duracaoRaw, 10) : null,
+      duracao_segundos: duracaoSegundos,
       url_material_pdf: urlMaterial,
     };
     if (!idAula) {
@@ -8238,6 +8345,7 @@ window.salvarAula = async function() {
     if (!data || data.length === 0) throw new Error('Nenhuma linha foi salva (verifique a policy da tabela curso_aulas no Supabase).');
 
     await loadCursoAulasForApp();
+    await recalcularCargaHorariaCurso(window._editingAulaCursoId);
     if (window._renderAulasCurso) window._renderAulasCurso();
     document.getElementById('aula-modal').style.display = 'none';
     showToast(idAula ? 'Aula atualizada!' : 'Aula criada!');
@@ -8255,6 +8363,7 @@ window.excluirAula = async function(id) {
     const { error } = await supaClient.from('curso_aulas').delete().eq('id', id);
     if (error) throw error;
     await loadCursoAulasForApp();
+    await recalcularCargaHorariaCurso(window._aulasCursoAtualId);
     if (window._renderAulasCurso) window._renderAulasCurso();
     showToast('Aula excluída!');
   } catch (e) {
