@@ -8110,7 +8110,7 @@ window.abrirDashboardCursoModal = async function(idCurso) {
         </div>
         <div style="padding:24px">
           <div style="display:flex;gap:8px;margin-bottom:20px">
-            <button type="button" class="btn" onclick="abrirAulasCursoModal(window._dashboardCursoAtualId)">📚 Aulas</button>
+            <button type="button" class="btn" onclick="abrirAulasCursoModal(window._dashboardCursoAtualId)">Adicionar Aulas</button>
             <button type="button" class="btn" onclick="abrirAvaliacaoFinalModal(window._dashboardCursoAtualId)">📝 Avaliação Final</button>
           </div>
           <div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-bottom:8px">Ordem das Aulas</div>
@@ -8143,17 +8143,15 @@ function renderDashboardAulasLista() {
   container.innerHTML = aulas.length === 0
     ? '<div style="text-align:center;padding:16px;color:var(--text3);font-size:13px">Nenhuma aula cadastrada ainda.</div>'
     : aulas.map((a, i) => `
-      <div class="table-card" style="display:flex;align-items:center;gap:12px;padding:12px 16px;margin-bottom:8px">
+      <div class="table-card" draggable="true" ondragstart="dragAulaStart(event, ${a.id})" ondragover="dragAulaOver(event)" ondrop="dragAulaDrop(event, ${a.id})" onclick="abrirPreviewAulaAdmin(${a.id})" style="display:flex;align-items:center;gap:12px;padding:12px 16px;margin-bottom:8px;cursor:pointer">
         <div style="flex:1">
           <div style="font-weight:700;font-size:13px">${i + 1}. ${a.titulo}</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:2px">
-            ${a.tipo_video === 'upload' ? '📤 Upload' : '🔗 Link'} · ${formatarDuracaoSegundos(a.duracao_segundos)}
-            ${a.url_material_pdf ? ' · 📎 Material anexado' : ''}
-          </div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px">${formatarDuracaoSegundos(a.duracao_segundos)}</div>
         </div>
-        <div style="display:flex;gap:4px">
+        <div style="display:flex;gap:4px" onclick="event.stopPropagation()">
           <button class="action-btn" title="Mover para cima" ${i === 0 ? 'disabled style="opacity:.4;cursor:not-allowed"' : ''} onclick="moverAulaOrdem(${a.id}, -1)">▲</button>
           <button class="action-btn" title="Mover para baixo" ${i === aulas.length - 1 ? 'disabled style="opacity:.4;cursor:not-allowed"' : ''} onclick="moverAulaOrdem(${a.id}, 1)">▼</button>
+          <button class="action-btn" title="Excluir" style="color:var(--danger)" onclick="excluirAula(${a.id})">✕</button>
         </div>
       </div>`).join('');
 }
@@ -8183,6 +8181,84 @@ window.moverAulaOrdem = async function(idAula, direcao) {
     console.error('Erro ao reordenar aula:', e);
     showToast('Erro ao reordenar aula: ' + (e.message || e), 'danger');
   }
+};
+
+// Arrastar e soltar como alternativa às setas: solta a aula arrastada bem
+// onde estava a aula-alvo, empurrando as demais — persiste a ordem de todas
+// de uma vez (diferente das setas, que só trocam duas).
+window.dragAulaStart = function(event, idAula) {
+  window._dragAulaId = idAula;
+  event.dataTransfer.effectAllowed = 'move';
+};
+
+window.dragAulaOver = function(event) {
+  event.preventDefault();
+};
+
+window.dragAulaDrop = function(event, idAulaAlvo) {
+  event.preventDefault();
+  const idCurso = window._dashboardCursoAtualId;
+  const idOrigem = window._dragAulaId;
+  window._dragAulaId = null;
+  if (!idOrigem || idOrigem === idAulaAlvo) return;
+
+  const aulas = (window._cursoAulas || []).filter(a => a.id_curso === idCurso).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+  const aulaOrigem = aulas.find(a => a.id === idOrigem);
+  const semOrigem = aulas.filter(a => a.id !== idOrigem);
+  const indiceAlvo = semOrigem.findIndex(a => a.id === idAulaAlvo);
+  if (!aulaOrigem || indiceAlvo === -1) return;
+
+  semOrigem.splice(indiceAlvo, 0, aulaOrigem);
+  persistirNovaOrdemAulas(semOrigem);
+};
+
+async function persistirNovaOrdemAulas(aulasNaNovaOrdem) {
+  try {
+    const resultados = await Promise.all(
+      aulasNaNovaOrdem.map((a, idx) => supaClient.from('curso_aulas').update({ ordem: idx + 1 }).eq('id', a.id))
+    );
+    const comErro = resultados.find(r => r.error);
+    if (comErro) throw comErro.error;
+
+    aulasNaNovaOrdem.forEach((a, idx) => { a.ordem = idx + 1; });
+    if (window._renderDashboardAulas) window._renderDashboardAulas();
+  } catch (e) {
+    console.error('Erro ao reordenar aulas:', e);
+    showToast('Erro ao reordenar aulas: ' + (e.message || e), 'danger');
+  }
+}
+
+// Preview da aula pro admin (mesmo player usado no perfil Treinamento, sem os
+// controles de progresso — aqui é só pra conferir o conteúdo).
+window.abrirPreviewAulaAdmin = function(idAula) {
+  const aula = (window._cursoAulas || []).find(a => a.id === idAula);
+  if (!aula) return;
+
+  if (!document.getElementById('preview-aula-modal')) {
+    const modal = document.createElement('div');
+    modal.id = 'preview-aula-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1200;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:6px;width:640px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.25)">
+        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:15px;font-weight:700" id="preview-aula-modal-title">Aula</div>
+          <button type="button" class="btn btn-sm" onclick="document.getElementById('preview-aula-modal').style.display='none'">✕ Fechar</button>
+        </div>
+        <div style="padding:24px" id="preview-aula-modal-body"></div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  document.getElementById('preview-aula-modal-title').textContent = aula.titulo;
+  document.getElementById('preview-aula-modal-body').innerHTML = `
+    <div style="position:relative;padding-top:56.25%;background:#000;border-radius:6px;overflow:hidden;margin-bottom:16px">
+      <div style="position:absolute;inset:0">${embedVideoAulaHtml(aula)}</div>
+    </div>
+    ${aula.descricao ? `<div style="font-size:13px;color:var(--text2);margin-bottom:12px;white-space:pre-wrap">${aula.descricao}</div>` : '<div style="font-size:13px;color:var(--text3);margin-bottom:12px">Sem descrição.</div>'}
+    ${aula.url_material_pdf ? `<button class="btn btn-sm" onclick="visualizarDocumento('${aula.url_material_pdf}')">📎 Material da aula</button>` : ''}
+  `;
+
+  document.getElementById('preview-aula-modal').style.display = 'flex';
 };
 
 // --- Aulas do curso (só Interno) ---
@@ -8559,11 +8635,17 @@ window.salvarAula = async function() {
 window.excluirAula = async function(id) {
   if (!confirm('Excluir esta aula?')) return;
   try {
+    // id_curso vem da própria aula (fonte confiável) — este botão agora
+    // aparece tanto no modal de Aulas quanto na lista do Dashboard.
+    const aula = (window._cursoAulas || []).find(a => a.id === id);
+    const idCurso = aula ? aula.id_curso : (window._aulasCursoAtualId || window._dashboardCursoAtualId);
+
     const { error } = await supaClient.from('curso_aulas').delete().eq('id', id);
     if (error) throw error;
     await loadCursoAulasForApp();
-    await recalcularCargaHorariaCurso(window._aulasCursoAtualId);
+    await recalcularCargaHorariaCurso(idCurso);
     if (window._renderAulasCurso) window._renderAulasCurso();
+    if (window._renderDashboardAulas) window._renderDashboardAulas();
     showToast('Aula excluída!');
   } catch (e) {
     console.error('Erro ao excluir aula:', e);
@@ -8893,27 +8975,35 @@ window.abrirPlayerCurso = async function(idCurso) {
   const aulas = (window._cursoAulas || []).filter(a => a.id_curso === idCurso).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
   window._playerCursoId = idCurso;
 
-  // Curso já concluído (aprovado, ou sem avaliação cadastrada): abre em modo
-  // revisão, só pra rever as aulas — sem avaliação de novo (ver
-  // enviarAvaliacaoAluno, que também bloqueia reenvio se já aprovado).
-  if (progresso.status === 'concluido') {
+  const concluidas = progresso.aulas_concluidas || [];
+  const indicePrimeiraPendente = aulas.findIndex(a => !concluidas.includes(a.id));
+  const todasAulasConcluidas = aulas.length === 0 || indicePrimeiraPendente === -1;
+  const perguntas = (window._cursoAvaliacaoPerguntas || []).filter(p => p.id_curso === idCurso);
+  const podeFazerOuRefazerAvaliacao = progresso.resultado_avaliacao !== 'Aprovado' && perguntas.length > 0;
+
+  // Todas as aulas já concluídas (aprovado, reprovado ou ainda sem avaliação
+  // feita): abre em modo revisão, navegando livremente entre as aulas — sem
+  // precisar "marcar concluído" de novo. Reprovado (ou nunca avaliado) ainda
+  // ganha um botão pra ir/voltar pra avaliação; aprovado, não (ver
+  // enviarAvaliacaoAluno, que também bloqueia reenvio nesse caso).
+  if (todasAulasConcluidas) {
     window._playerReview = true;
     window._playerAulaIndex = 0;
-    // Sem aulas cadastradas não tem o que revisar nem avaliação pra refazer
-    // (curso concluído automaticamente por não ter nada a avaliar) — mostra
-    // só uma tela de "concluído", em vez de reabrir a avaliação.
-    window._playerModo = aulas.length > 0 ? 'aula' : 'concluido-sem-conteudo';
+    if (aulas.length > 0) {
+      window._playerModo = 'aula';
+    } else if (podeFazerOuRefazerAvaliacao) {
+      window._playerModo = 'avaliacao';
+      window._respostasAvaliacaoAluno = {};
+    } else {
+      window._playerModo = 'concluido-sem-conteudo';
+    }
     navigate('meus-cursos', 'Cursos');
     return;
   }
 
   window._playerReview = false;
-  const concluidas = progresso.aulas_concluidas || [];
-  const indicePrimeiraPendente = aulas.findIndex(a => !concluidas.includes(a.id));
-  window._playerAulaIndex = indicePrimeiraPendente === -1 ? Math.max(0, aulas.length - 1) : indicePrimeiraPendente;
-  // Sem aulas cadastradas, ou todas já concluídas: vai direto pra avaliação
-  // (para tentar de novo, já que só chega aqui quando ainda está em andamento).
-  window._playerModo = (aulas.length > 0 && indicePrimeiraPendente !== -1) ? 'aula' : 'avaliacao';
+  window._playerAulaIndex = indicePrimeiraPendente;
+  window._playerModo = 'aula';
   window._respostasAvaliacaoAluno = {};
 
   navigate('meus-cursos', 'Cursos');
@@ -8953,6 +9043,14 @@ function renderPlayerCursoHtml() {
   const aulaConcluida = concluidas.includes(aula.id);
   const ultimaAula = window._playerAulaIndex === aulas.length - 1;
 
+  // Em revisão, "concluído" só é verdade de fato se o status já virou
+  // "concluido" (aprovado, ou sem avaliação). Reprovado/nunca avaliado ainda
+  // está "em_andamento" — mostra um aviso diferente e libera o botão de
+  // (re)fazer a avaliação.
+  const emRevisaoConcluidoDeVerdade = window._playerReview && progresso && progresso.status === 'concluido';
+  const perguntas = (window._cursoAvaliacaoPerguntas || []).filter(p => p.id_curso === idCurso);
+  const podeFazerOuRefazerAvaliacao = window._playerReview && progresso && progresso.resultado_avaliacao !== 'Aprovado' && perguntas.length > 0;
+
   return cabecalho + `
     <div class="table-card" style="padding:20px">
       <div style="font-size:13px;color:var(--text3);margin-bottom:6px">Aula ${window._playerAulaIndex + 1} de ${aulas.length}</div>
@@ -8964,10 +9062,11 @@ function renderPlayerCursoHtml() {
       ${aula.url_material_pdf ? `<button class="btn btn-sm" style="margin-bottom:16px" onclick="visualizarDocumento('${aula.url_material_pdf}')">📎 Material da aula</button>` : ''}
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
         ${window._playerReview ? `
-        <div><span class="badge badge-active">✓ Curso concluído</span></div>
+        <div>${emRevisaoConcluidoDeVerdade ? '<span class="badge badge-active">✓ Curso concluído</span>' : '<span class="badge badge-pending">Aulas concluídas — avaliação pendente</span>'}</div>
         <div style="display:flex;gap:8px">
           <button class="btn" ${window._playerAulaIndex === 0 ? 'disabled style="opacity:.4;cursor:not-allowed"' : ''} onclick="voltarAulaRevisao()">← Aula Anterior</button>
           <button class="btn" ${ultimaAula ? 'disabled style="opacity:.4;cursor:not-allowed"' : ''} onclick="avancarAulaRevisao()">Próxima Aula →</button>
+          ${podeFazerOuRefazerAvaliacao ? `<button class="btn btn-primary" onclick="irParaAvaliacaoRevisao()">Fazer Avaliação</button>` : ''}
         </div>` : `
         <div>${aulaConcluida ? '<span class="badge badge-active">✓ Aula concluída</span>' : '<span class="badge badge-gray">Não concluída</span>'}</div>
         <div style="display:flex;gap:8px">
@@ -8977,6 +9076,12 @@ function renderPlayerCursoHtml() {
       </div>
     </div>`;
 }
+
+window.irParaAvaliacaoRevisao = function() {
+  window._playerModo = 'avaliacao';
+  window._respostasAvaliacaoAluno = {};
+  navigate('meus-cursos', 'Cursos');
+};
 
 window.avancarAulaRevisao = function() {
   const idCurso = window._playerCursoId;
