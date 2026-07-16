@@ -7931,9 +7931,7 @@ function pageCursos() {
           <td style="white-space:normal;max-width:320px">${c.descricao || '—'}</td>
           <td style="white-space:nowrap">
             ${c.tipo === 'Interno' ? `
-              <button class="action-btn" title="Aulas" onclick="abrirAulasCursoModal(${c.id})">📚</button>
-              <button class="action-btn" title="Avaliação Final (em breve)" onclick="showToast('Avaliação Final do curso: em breve.')">📝</button>
-              <button class="action-btn" title="Dashboard (em breve)" onclick="showToast('Dashboard do curso: em breve.')">📊</button>
+              <button class="action-btn" title="Dashboard" onclick="abrirDashboardCursoModal(${c.id})">📊</button>
             ` : ''}
             <button class="action-btn" title="Editar" onclick="abrirCursoModal(${c.id})">✎</button>
             <button class="action-btn" title="Excluir" onclick="excluirCurso(${c.id})" style="color:var(--danger)">✕</button>
@@ -8093,6 +8091,42 @@ window.excluirCurso = async function(id) {
   }
 };
 
+// --- Dashboard do curso (só Interno) — ponto de entrada único pra Aulas e
+// Avaliação Final, que saíram da listagem principal de Cursos. Métricas de
+// verdade (progresso dos colaboradores etc.) ainda são um placeholder.
+window.abrirDashboardCursoModal = function(idCurso) {
+  window._dashboardCursoAtualId = idCurso;
+  const curso = (window._cursos || []).find(c => c.id === idCurso);
+
+  if (!document.getElementById('dashboard-curso-modal')) {
+    const modal = document.createElement('div');
+    modal.id = 'dashboard-curso-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:6px;width:560px;max-width:95vw;max-height:85vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:15px;font-weight:700" id="dashboard-curso-modal-title">Dashboard</div>
+          <button type="button" class="btn btn-sm" onclick="document.getElementById('dashboard-curso-modal').style.display='none'">✕ Fechar</button>
+        </div>
+        <div style="padding:24px">
+          <div style="display:flex;gap:8px;margin-bottom:20px">
+            <button type="button" class="btn" onclick="abrirAulasCursoModal(window._dashboardCursoAtualId)">📚 Aulas</button>
+            <button type="button" class="btn" onclick="abrirAvaliacaoFinalModal(window._dashboardCursoAtualId)">📝 Avaliação Final</button>
+          </div>
+          <div class="empty-state">
+            <div class="empty-state-icon">📊</div>
+            <div class="empty-state-title">Métricas do curso: em breve</div>
+            <div class="empty-state-desc">Progresso dos colaboradores e outros indicadores vão aparecer aqui.</div>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  document.getElementById('dashboard-curso-modal-title').textContent = `Dashboard — ${curso ? curso.nome : ''}`;
+  document.getElementById('dashboard-curso-modal').style.display = 'flex';
+};
+
 // --- Aulas do curso (só Interno) ---
 
 window.abrirAulasCursoModal = async function(idCurso) {
@@ -8122,6 +8156,9 @@ window.abrirAulasCursoModal = async function(idCurso) {
   document.getElementById('aulas-curso-modal').style.display = 'flex';
 };
 
+// A listagem das aulas já cadastradas foi removida a pedido — o modal fica
+// só com o "+ Nova Aula" no cabeçalho. As funções de editar/excluir aula
+// continuam existindo, só não têm mais uma lista aqui pra acioná-las.
 function renderAulasCursoModal() {
   const idCurso = window._aulasCursoAtualId;
   const curso = (window._cursos || []).find(c => c.id === idCurso);
@@ -8129,24 +8166,7 @@ function renderAulasCursoModal() {
   const titleEl = document.getElementById('aulas-curso-modal-title');
   if (titleEl) titleEl.textContent = `Aulas — ${curso ? curso.nome : ''}`;
   if (!body) return;
-
-  const aulas = (window._cursoAulas || []).filter(a => a.id_curso === idCurso).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
-  body.innerHTML = aulas.length === 0
-    ? '<div style="text-align:center;padding:24px;color:var(--text3)">Nenhuma aula cadastrada ainda.</div>'
-    : aulas.map(a => `
-      <div class="table-card" style="display:flex;align-items:center;gap:12px;padding:12px 16px;margin-bottom:8px">
-        <div style="flex:1">
-          <div style="font-weight:700;font-size:13px">${a.titulo}</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:2px">
-            ${a.tipo_video === 'upload' ? '📤 Upload' : '🔗 Link'} · ${formatarDuracaoSegundos(a.duracao_segundos)}
-            ${a.url_material_pdf ? ' · 📎 Material anexado' : ''}
-          </div>
-        </div>
-        ${a.url_video ? `<a class="action-btn" title="Abrir vídeo" href="${a.url_video}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">▶</a>` : ''}
-        ${a.url_material_pdf ? `<button class="action-btn" title="Ver material" onclick="visualizarDocumento('${a.url_material_pdf}')">📎</button>` : ''}
-        <button class="action-btn" title="Editar" onclick="abrirAulaModal(${idCurso}, ${a.id})">✎</button>
-        <button class="action-btn" title="Excluir" onclick="excluirAula(${a.id})" style="color:var(--danger)">✕</button>
-      </div>`).join('');
+  body.innerHTML = '';
 }
 
 window.abrirAulaModal = function(idCurso, idAula = null) {
@@ -8490,6 +8510,195 @@ window.excluirAula = async function(id) {
   } catch (e) {
     console.error('Erro ao excluir aula:', e);
     showToast('Erro ao excluir aula: ' + (e.message || e), 'danger');
+  }
+};
+
+// --- Avaliação Final do curso (só Interno) — perguntas objetivas com
+// alternativas em JSON (ver sql/criar-avaliacao-final-curso.sql). ---
+
+async function loadCursoAvaliacaoPerguntasForApp() {
+  if (!supaClient) {
+    console.error('Supabase client não inicializado para curso_avaliacao_perguntas.');
+    window._cursoAvaliacaoPerguntas = [];
+    return;
+  }
+  const { data, error } = await supaClient.from('curso_avaliacao_perguntas').select('*').order('ordem', { ascending: true });
+  if (error) {
+    console.error('Erro ao carregar perguntas da avaliação final:', error.message);
+    window._cursoAvaliacaoPerguntas = [];
+  } else {
+    window._cursoAvaliacaoPerguntas = data;
+  }
+}
+
+window.abrirAvaliacaoFinalModal = async function(idCurso) {
+  window._avaliacaoFinalCursoAtualId = idCurso;
+  if (!window._cursoAvaliacaoPerguntas) await loadCursoAvaliacaoPerguntasForApp();
+
+  if (!document.getElementById('avaliacao-final-modal')) {
+    const modal = document.createElement('div');
+    modal.id = 'avaliacao-final-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:6px;width:720px;max-width:95vw;max-height:85vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:15px;font-weight:700" id="avaliacao-final-modal-title">Avaliação Final</div>
+          <div style="display:flex;gap:8px">
+            <button type="button" class="btn btn-sm btn-primary" onclick="abrirPerguntaAvaliacaoModal(window._avaliacaoFinalCursoAtualId)">+ Nova Pergunta</button>
+            <button type="button" class="btn btn-sm" onclick="document.getElementById('avaliacao-final-modal').style.display='none'">✕ Fechar</button>
+          </div>
+        </div>
+        <div style="padding:24px" id="avaliacao-final-body"></div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  window._renderAvaliacaoFinal = renderAvaliacaoFinalModal;
+  renderAvaliacaoFinalModal();
+  document.getElementById('avaliacao-final-modal').style.display = 'flex';
+};
+
+function renderAvaliacaoFinalModal() {
+  const idCurso = window._avaliacaoFinalCursoAtualId;
+  const curso = (window._cursos || []).find(c => c.id === idCurso);
+  const titleEl = document.getElementById('avaliacao-final-modal-title');
+  if (titleEl) titleEl.textContent = `Avaliação Final — ${curso ? curso.nome : ''}`;
+  const body = document.getElementById('avaliacao-final-body');
+  if (!body) return;
+
+  const perguntas = (window._cursoAvaliacaoPerguntas || []).filter(p => p.id_curso === idCurso).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+  body.innerHTML = perguntas.length === 0
+    ? '<div style="text-align:center;padding:24px;color:var(--text3)">Nenhuma pergunta cadastrada ainda.</div>'
+    : perguntas.map((p, i) => `
+      <div class="table-card" style="padding:14px 18px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+          <div style="font-weight:700;font-size:13px;flex:1">${i + 1}. ${p.enunciado}</div>
+          <div style="white-space:nowrap">
+            <button class="action-btn" title="Editar" onclick="abrirPerguntaAvaliacaoModal(${idCurso}, ${p.id})">✎</button>
+            <button class="action-btn" title="Excluir" onclick="excluirPerguntaAvaliacao(${p.id})" style="color:var(--danger)">✕</button>
+          </div>
+        </div>
+        <ul style="margin:8px 0 0 20px;padding:0;font-size:13px">
+          ${(p.alternativas || []).map(a => `<li style="${a.correta ? 'font-weight:700;color:var(--success)' : ''}">${a.texto}${a.correta ? ' ✓' : ''}</li>`).join('')}
+        </ul>
+      </div>`).join('');
+}
+
+window.abrirPerguntaAvaliacaoModal = function(idCurso, idPergunta = null) {
+  window._editingPerguntaId = idPergunta;
+  window._editingPerguntaCursoId = idCurso;
+
+  if (!document.getElementById('pergunta-avaliacao-modal')) {
+    const modal = document.createElement('div');
+    modal.id = 'pergunta-avaliacao-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1100;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:6px;width:560px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:15px;font-weight:700" id="pergunta-avaliacao-modal-title">Nova Pergunta</div>
+          <button type="button" class="btn btn-sm" onclick="document.getElementById('pergunta-avaliacao-modal').style.display='none'">✕</button>
+        </div>
+        <div style="padding:24px">
+          <div class="form-group form-full" style="margin-bottom:16px">
+            <label class="form-label">Pergunta</label>
+            <textarea class="form-input" id="pav-enunciado" rows="3"></textarea>
+          </div>
+          <div class="form-group form-full">
+            <label class="form-label">Alternativas <span style="font-weight:400;text-transform:none;color:var(--text3)">(marque a correta)</span></label>
+            <div id="pav-alternativas-lista" style="margin-top:6px"></div>
+            <button type="button" class="btn btn-sm" style="margin-top:8px" onclick="adicionarAlternativaPergunta()">+ Adicionar alternativa</button>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn" onclick="document.getElementById('pergunta-avaliacao-modal').style.display='none'">Cancelar</button>
+          <button type="button" class="btn btn-primary" onclick="salvarPerguntaAvaliacao()">Salvar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  const pergunta = idPergunta ? (window._cursoAvaliacaoPerguntas || []).find(p => p.id === idPergunta) : null;
+  document.getElementById('pergunta-avaliacao-modal-title').textContent = idPergunta ? 'Editar Pergunta' : 'Nova Pergunta';
+  document.getElementById('pav-enunciado').value = pergunta?.enunciado || '';
+
+  // Constrói as linhas de alternativa direto no DOM (sem re-render a cada
+  // tecla digitada) — evita o cursor "pular" pro fim do campo a cada input.
+  window._pavProximoIdx = 0;
+  document.getElementById('pav-alternativas-lista').innerHTML = '';
+  const alternativasIniciais = (pergunta && pergunta.alternativas && pergunta.alternativas.length > 0)
+    ? pergunta.alternativas
+    : [{ texto: '', correta: true }, { texto: '', correta: false }];
+  alternativasIniciais.forEach(alt => window.adicionarAlternativaPergunta(alt.texto, alt.correta));
+
+  document.getElementById('pergunta-avaliacao-modal').style.display = 'flex';
+};
+
+window.adicionarAlternativaPergunta = function(texto = '', correta = false) {
+  const idx = window._pavProximoIdx++;
+  const listaEl = document.getElementById('pav-alternativas-lista');
+  const row = document.createElement('div');
+  row.className = 'pav-alt-row';
+  row.id = `pav-alt-row-${idx}`;
+  row.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:8px';
+  row.innerHTML = `
+    <input type="radio" name="pav-correta" value="${idx}" ${correta ? 'checked' : ''} title="Marcar como correta">
+    <input class="form-input" style="flex:1" id="pav-alt-texto-${idx}" value="${String(texto || '').replace(/"/g, '&quot;')}" placeholder="Texto da alternativa">
+    <button type="button" class="action-btn" onclick="document.getElementById('pav-alt-row-${idx}').remove()" style="color:var(--danger)">✕</button>
+  `;
+  listaEl.appendChild(row);
+};
+
+window.salvarPerguntaAvaliacao = async function() {
+  const enunciado = document.getElementById('pav-enunciado').value.trim();
+  if (!enunciado) return showToast('Informe o enunciado da pergunta.');
+
+  const linhas = Array.from(document.querySelectorAll('#pav-alternativas-lista .pav-alt-row'));
+  const alternativas = linhas.map(row => {
+    const idx = row.id.replace('pav-alt-row-', '');
+    const texto = document.getElementById(`pav-alt-texto-${idx}`)?.value.trim() || '';
+    const radio = row.querySelector('input[type="radio"]');
+    return { texto, correta: !!(radio && radio.checked) };
+  }).filter(a => a.texto);
+
+  if (alternativas.length < 2) return showToast('Cadastre pelo menos 2 alternativas com texto.');
+  if (!alternativas.some(a => a.correta)) return showToast('Marque qual alternativa é a correta.');
+
+  const idCurso = window._editingPerguntaCursoId;
+  const idPergunta = window._editingPerguntaId;
+  const payload = { id_curso: idCurso, enunciado, alternativas };
+  if (!idPergunta) {
+    const maiorOrdem = Math.max(0, ...(window._cursoAvaliacaoPerguntas || []).filter(p => p.id_curso === idCurso).map(p => p.ordem || 0));
+    payload.ordem = maiorOrdem + 1;
+  }
+
+  try {
+    const { data, error } = idPergunta
+      ? await supaClient.from('curso_avaliacao_perguntas').update(payload).eq('id', idPergunta).select()
+      : await supaClient.from('curso_avaliacao_perguntas').insert([payload]).select();
+    if (error) throw error;
+    if (!data || data.length === 0) throw new Error('Nenhuma linha foi salva (verifique a policy da tabela curso_avaliacao_perguntas no Supabase).');
+
+    await loadCursoAvaliacaoPerguntasForApp();
+    if (window._renderAvaliacaoFinal) window._renderAvaliacaoFinal();
+    document.getElementById('pergunta-avaliacao-modal').style.display = 'none';
+    showToast(idPergunta ? 'Pergunta atualizada!' : 'Pergunta criada!');
+  } catch (e) {
+    console.error('Erro ao salvar pergunta:', e);
+    showToast('Erro ao salvar pergunta: ' + (e.message || e), 'danger');
+  }
+};
+
+window.excluirPerguntaAvaliacao = async function(id) {
+  if (!confirm('Excluir esta pergunta?')) return;
+  try {
+    const { error } = await supaClient.from('curso_avaliacao_perguntas').delete().eq('id', id);
+    if (error) throw error;
+    await loadCursoAvaliacaoPerguntasForApp();
+    if (window._renderAvaliacaoFinal) window._renderAvaliacaoFinal();
+    showToast('Pergunta excluída!');
+  } catch (e) {
+    console.error('Erro ao excluir pergunta:', e);
+    showToast('Erro ao excluir pergunta: ' + (e.message || e), 'danger');
   }
 };
 
