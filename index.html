@@ -7924,7 +7924,7 @@ function pageCursos() {
       ? '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum curso cadastrado ainda.</td></tr>'
       : lista.map(c => `
         <tr>
-          <td><strong style="cursor:pointer;text-decoration:underline" onclick="abrirCursoModal(${c.id})">${c.nome}</strong></td>
+          <td><strong style="cursor:pointer" onclick="abrirCursoModal(${c.id})">${c.nome}</strong></td>
           <td><span class="badge ${c.tipo === 'Interno' ? 'badge-info' : 'badge-gray'}">${c.tipo}</span></td>
           <td>${c.carga_horaria !== null && c.carga_horaria !== undefined && c.carga_horaria !== '' ? (c.tipo === 'Interno' ? formatarHorasMinutos(Math.round(c.carga_horaria * 3600)) : `${c.carga_horaria}h`) : '—'}</td>
           <td style="white-space:normal;max-width:320px">${c.descricao || '—'}</td>
@@ -7933,7 +7933,6 @@ function pageCursos() {
               <button class="action-btn" title="Dashboard" onclick="abrirDashboardCursoModal(${c.id})">📊</button>
             ` : ''}
             <button class="action-btn" title="Editar" onclick="abrirCursoModal(${c.id})">✎</button>
-            <button class="action-btn" title="Excluir" onclick="excluirCurso(${c.id})" style="color:var(--danger)">✕</button>
           </td>
         </tr>`).join('');
   };
@@ -8075,21 +8074,6 @@ window.salvarCurso = async function() {
   }
 };
 
-window.excluirCurso = async function(id) {
-  if (!confirm('Excluir este curso? Todas as aulas cadastradas nele também serão excluídas.')) return;
-  try {
-    const { error } = await supaClient.from('cursos').delete().eq('id', id);
-    if (error) throw error;
-    await loadCursosForApp();
-    await loadCursoAulasForApp();
-    if (window._renderCursos) window._renderCursos();
-    showToast('Curso excluído!');
-  } catch (e) {
-    console.error('Erro ao excluir curso:', e);
-    showToast('Erro ao excluir curso: ' + (e.message || e), 'danger');
-  }
-};
-
 // --- Dashboard do curso (só Interno) — ponto de entrada único pra Aulas e
 // Avaliação Final, que saíram da listagem principal de Cursos. Métricas de
 // verdade (progresso dos colaboradores etc.) ainda são um placeholder.
@@ -8111,15 +8095,10 @@ window.abrirDashboardCursoModal = async function(idCurso) {
         <div style="padding:24px">
           <div style="display:flex;gap:8px;margin-bottom:20px">
             <button type="button" class="btn" onclick="abrirAulasCursoModal(window._dashboardCursoAtualId)">Adicionar Aulas</button>
-            <button type="button" class="btn" onclick="abrirAvaliacaoFinalModal(window._dashboardCursoAtualId)">📝 Avaliação Final</button>
+            <button type="button" class="btn" onclick="abrirAvaliacaoFinalModal(window._dashboardCursoAtualId)">Avaliação Final</button>
           </div>
           <div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-bottom:8px">Ordem das Aulas</div>
           <div id="dashboard-aulas-lista" style="margin-bottom:20px"></div>
-          <div class="empty-state">
-            <div class="empty-state-icon">📊</div>
-            <div class="empty-state-title">Métricas do curso: em breve</div>
-            <div class="empty-state-desc">Progresso dos colaboradores e outros indicadores vão aparecer aqui.</div>
-          </div>
         </div>
       </div>`;
     document.body.appendChild(modal);
