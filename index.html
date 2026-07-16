@@ -9738,7 +9738,11 @@ async function montarPlayerAulaDrive(mountId, idAula) {
   } catch (e) {
     console.error('Erro ao preparar streaming da aula:', e);
     if (videoEl.isConnected) {
-      videoEl.outerHTML = '<div style="color:#fff;display:flex;align-items:center;justify-content:center;height:100%;text-align:center;padding:16px">Não foi possível carregar o vídeo. Tente novamente em instantes.</div>';
+      // Mensagem detalhada temporária (inclui e.message) pra facilitar
+      // diagnóstico em dispositivos onde não dá pra abrir o DevTools —
+      // depois que o streaming estiver estável, dá pra voltar a uma
+      // mensagem genérica sem o detalhe técnico.
+      videoEl.outerHTML = `<div style="color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;text-align:center;padding:16px;gap:6px"><div>Não foi possível carregar o vídeo. Tente novamente em instantes.</div><div style="font-size:11px;opacity:.7">${(e.message || e).toString().replace(/</g, '&lt;')}</div></div>`;
     }
     return;
   }
