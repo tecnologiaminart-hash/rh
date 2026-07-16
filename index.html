@@ -4589,26 +4589,7 @@ function postRender(id) {
   // Print
   document.querySelectorAll('.btn-print').forEach(b => b.addEventListener('click', () => window.print()));
   habilitarScrollHorizontalTabelas();
-  ajustarAlturaVideoAula();
 }
-
-// Altura do player de vídeo da aula (Meus Cursos) calculada em JS a partir da
-// largura já renderizada — em vez de CSS aspect-ratio, que tem uma pegadinha
-// real no Chromium/WebKit: combinado com min-height, o navegador recalcula a
-// LARGURA a partir da altura travada e ignora o container, vazando pra fora
-// da tela no mobile (constatado testando). Medindo a largura primeiro e só
-// então fixando a altura em px, não tem como estourar. O piso de 220px
-// existe porque caixas muito baixas (a proporção 16:9 pura já fica bem baixa
-// em tela de celular) fazem o player do Drive/YouTube desalinhar os próprios
-// controles (barra de progresso "flutuando" separada do vídeo).
-function ajustarAlturaVideoAula() {
-  const box = document.getElementById('aula-video-box');
-  if (!box) return;
-  const largura = box.getBoundingClientRect().width;
-  if (!largura) return;
-  box.style.height = Math.max(220, Math.round(largura * 9 / 16)) + 'px';
-}
-window.addEventListener('resize', ajustarAlturaVideoAula);
 
 // Embrulha toda <table> renderizada no conteúdo num container com scroll
 // horizontal próprio (.table-scroll) — sem isso, tabelas com muitas colunas
@@ -9244,10 +9225,10 @@ function renderPlayerCursoHtml() {
   const podeFazerOuRefazerAvaliacao = window._playerReview && progresso && progresso.resultado_avaliacao !== 'Aprovado' && perguntas.length > 0;
 
   return cabecalho + `
-    <div class="table-card" style="padding:20px">
+    <div class="table-card" style="padding:20px;overflow:visible">
       <div style="font-size:13px;color:var(--text3);margin-bottom:6px">Aula ${window._playerAulaIndex + 1} de ${aulas.length}</div>
       <div style="font-size:16px;font-weight:700;margin-bottom:12px">${aula.titulo}</div>
-      <div id="aula-video-box" style="width:100%;background:#000;border-radius:6px;overflow:hidden;margin-bottom:16px">
+      <div style="width:100%;aspect-ratio:16/9;background:#000;margin-bottom:16px">
         ${embedVideoAulaHtml(aula)}
       </div>
       ${aula.descricao ? `<div style="font-size:13px;color:var(--text2);margin-bottom:12px;white-space:pre-wrap">${aula.descricao}</div>` : ''}
@@ -9297,20 +9278,22 @@ window.voltarAulaRevisao = function() {
 function embedVideoAulaHtml(aula) {
   if (!aula.url_video) return '<div style="color:#fff;display:flex;align-items:center;justify-content:center;height:100%">Vídeo não disponível</div>';
   // display:block nos três (iframe/video são inline por padrão) — sem isso
-  // sobra uns pixels de gap embaixo (alinhamento de baseline) que, somado ao
-  // container com aspect-ratio, é o que fazia o player "vazar" um fundo preto
-  // por cima dos controles no mobile.
+  // sobra uns pixels de gap embaixo (alinhamento de baseline). border-radius
+  // vai direto no iframe/video (eles recortam o próprio conteúdo sozinhos) em
+  // vez de depender de um wrapper com overflow:hidden — iframe encaixotado
+  // num ancestral com overflow:hidden é uma causa clássica e documentada de
+  // "tela preta"/repaint quebrado em iframe no iOS Safari.
   if (aula.tipo_video === 'upload') {
     const id = extrairDriveFileId(aula.url_video);
     const src = id ? `https://drive.google.com/file/d/${id}/preview` : aula.url_video;
-    return `<iframe src="${src}" style="display:block;width:100%;height:100%;border:none" allow="autoplay" allowfullscreen></iframe>`;
+    return `<iframe src="${src}" style="display:block;width:100%;height:100%;border:none;border-radius:6px" allow="autoplay" allowfullscreen></iframe>`;
   }
   const youtubeId = extrairYoutubeId(aula.url_video);
   if (youtubeId) {
     // modestbranding+rel=0 reduzem a marca do YouTube e sugestões de outros
     // vídeos ao final — não dá pra remover o link "Assistir no YouTube" por
     // completo (exigência do próprio YouTube pra embeds).
-    return `<iframe src="https://www.youtube.com/embed/${youtubeId}?modestbranding=1&rel=0" style="display:block;width:100%;height:100%;border:none" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+    return `<iframe src="https://www.youtube.com/embed/${youtubeId}?modestbranding=1&rel=0" style="display:block;width:100%;height:100%;border:none;border-radius:6px" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
   }
   // Link direto de arquivo de vídeo: sem interface do Google, então dá pra
   // tirar o menu de botão direito (que tem "Abrir vídeo em nova guia") e
@@ -9320,7 +9303,7 @@ function embedVideoAulaHtml(aula) {
   // preload="metadata" evita o quadro preto sólido antes do 1º play: sem
   // isso alguns navegadores mobile só buscam o vídeo no toque em play,
   // deixando a tela preta (sem nem o primeiro frame) até isso acontecer.
-  return `<video src="${aula.url_video}" controls playsinline webkit-playsinline="true" preload="metadata" controlsList="nodownload noremoteplayback" disablePictureInPicture oncontextmenu="return false" style="display:block;width:100%;height:100%;object-fit:contain;background:#000"></video>`;
+  return `<video src="${aula.url_video}" controls playsinline webkit-playsinline="true" preload="metadata" controlsList="nodownload noremoteplayback" disablePictureInPicture oncontextmenu="return false" style="display:block;width:100%;height:100%;object-fit:contain;background:#000;border-radius:6px"></video>`;
 }
 
 function extrairYoutubeId(url) {
