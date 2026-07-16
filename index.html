@@ -12,6 +12,8 @@
 <meta property="og:image" content="https://tecnologiaminart-hash.github.io/rh/assets/logo-minart.png">
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.css">
+<script src="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js"></script>
@@ -9657,9 +9659,12 @@ window.voltarAulaRevisao = function() {
   }
 };
 
-// Vídeo por Upload (Drive) usa o preview embutido do Drive; Link tenta
-// reconhecer YouTube (iframe embed) e, se não for, cai pra uma tag <video>
-// simples como melhor esforço (funciona pra link direto de arquivo de vídeo).
+// Vídeo por Upload (Drive) usa um <video> real (Plyr) alimentado por
+// streaming via Edge Function — ver montarPlayerAulaDrive(). O navegador
+// nunca recebe o ID do arquivo no Drive, só um token de streaming
+// descartável (ver obterUrlStreamAula()). Link tenta reconhecer YouTube
+// (iframe embed) e, se não for, cai pra uma tag <video> simples como melhor
+// esforço (funciona pra link direto de arquivo de vídeo).
 function embedVideoAulaHtml(aula) {
   if (!aula.url_video) return '<div style="color:#fff;display:flex;align-items:center;justify-content:center;height:100%">Vídeo não disponível</div>';
   // display:block nos três (iframe/video são inline por padrão) — sem isso
@@ -9669,9 +9674,13 @@ function embedVideoAulaHtml(aula) {
   // num ancestral com overflow:hidden é uma causa clássica e documentada de
   // "tela preta"/repaint quebrado em iframe no iOS Safari.
   if (aula.tipo_video === 'upload') {
-    const id = extrairDriveFileId(aula.url_video);
-    const src = id ? `https://drive.google.com/file/d/${id}/preview` : aula.url_video;
-    return `<iframe src="${src}" style="display:block;width:100%;height:100%;border:none;border-radius:6px" allow="autoplay" allowfullscreen></iframe>`;
+    // mountId único por render: a mesma aula pode reaparecer em containers
+    // diferentes (preview do admin vs. player do aluno) e o innerHTML do
+    // container anterior pode ainda não ter sido descartado no momento do
+    // setTimeout(0) que monta o player.
+    const mountId = 'video-aula-' + (window._plyrMountSeq = (window._plyrMountSeq || 0) + 1);
+    setTimeout(() => montarPlayerAulaDrive(mountId, aula.id), 0);
+    return `<video id="${mountId}" playsinline webkit-playsinline="true" controls controlsList="nodownload noremoteplayback" disablePictureInPicture oncontextmenu="return false" style="display:block;width:100%;height:100%;object-fit:contain;background:#000;border-radius:6px"></video>`;
   }
   const youtubeId = extrairYoutubeId(aula.url_video);
   if (youtubeId) {
@@ -9694,6 +9703,78 @@ function embedVideoAulaHtml(aula) {
 function extrairYoutubeId(url) {
   const m = String(url || '').match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{6,})/);
   return m ? m[1] : null;
+}
+
+// ------------------------------------------------------------
+// PLAYER HTML5 (Plyr) PARA VÍDEO DO DRIVE — substitui o antigo iframe
+// /preview do Drive. O <video> nunca aponta pro Drive diretamente: o src
+// aponta pra Edge Function "stream-aula", que faz o proxy de streaming
+// (com suporte a Range Requests) autenticando na Google Drive API com uma
+// Service Account. O ID do arquivo no Drive nunca chega ao navegador — só
+// um token de streaming de curta duração, escopado a essa aula.
+// ------------------------------------------------------------
+async function montarPlayerAulaDrive(mountId, idAula) {
+  const videoEl = document.getElementById(mountId);
+  if (!videoEl) return; // troca rápida de aula: o container já foi substituído
+
+  try {
+    videoEl.src = await obterUrlStreamAula(idAula);
+  } catch (e) {
+    console.error('Erro ao preparar streaming da aula:', e);
+    if (videoEl.isConnected) {
+      videoEl.outerHTML = '<div style="color:#fff;display:flex;align-items:center;justify-content:center;height:100%;text-align:center;padding:16px">Não foi possível carregar o vídeo. Tente novamente em instantes.</div>';
+    }
+    return;
+  }
+
+  new Plyr(videoEl, { seekTime: 10 });
+
+  // Token de streaming expira depois de um tempo (ver TOKEN_TTL_SECONDS na
+  // Edge Function get-video-token). Se isso acontecer no meio da aula (aba
+  // deixada pausada por muito tempo, por exemplo), o Drive passa a responder
+  // 401 nos próximos Range Requests e o navegador dispara 'error' no
+  // <video> — nesse caso busca um token novo e retoma de onde parou, sem o
+  // aluno perceber.
+  videoEl.addEventListener('error', async () => {
+    if (videoEl.dataset.renovandoToken) return;
+    videoEl.dataset.renovandoToken = '1';
+    const tempoAtual = videoEl.currentTime;
+    const estavaTocando = !videoEl.paused;
+    try {
+      videoEl.src = await obterUrlStreamAula(idAula);
+      videoEl.currentTime = tempoAtual;
+      if (estavaTocando) videoEl.play().catch(() => {});
+    } catch (e) {
+      console.error('Falha ao renovar streaming da aula:', e);
+    } finally {
+      delete videoEl.dataset.renovandoToken;
+    }
+  });
+}
+
+// Pede à Edge Function get-video-token um token de streaming de curta
+// duração pra essa aula (valida a sessão do usuário e a liberação do curso
+// no servidor) e monta a URL da Edge Function stream-aula com esse token.
+async function obterUrlStreamAula(idAula) {
+  if (!supaClient) throw new Error('Supabase não inicializado.');
+  const { data: { session } } = await supaClient.auth.getSession();
+  if (!session) throw new Error('Sessão expirada.');
+
+  const resp = await fetch(`${SUPA_URL}/functions/v1/get-video-token`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session.access_token}`,
+      'apikey': SUPA_KEY,
+    },
+    body: JSON.stringify({ aula_id: idAula }),
+  });
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => ({}));
+    throw new Error(body.error || `Erro ${resp.status} ao gerar token de vídeo.`);
+  }
+  const { token } = await resp.json();
+  return `${SUPA_URL}/functions/v1/stream-aula?aula=${idAula}&token=${encodeURIComponent(token)}`;
 }
 
 window.marcarAulaConcluida = async function(idAula) {

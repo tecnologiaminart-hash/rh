@@ -1,0 +1,9 @@
+# Configuração das Edge Functions via Supabase CLI.
+# get-video-token exige sessão válida (Authorization: Bearer <access_token>)
+# — verify_jwt fica ligado (padrão).
+# stream-aula é carregada direto pelo <video src="...">, que não manda
+# header Authorization — a autorização dela é o token de streaming na query
+# string (ver supabase/functions/stream-aula/index.ts), por isso a
+# verificação de JWT da plataforma fica desligada aqui.
+[functions.stream-aula]
+verify_jwt = false
