@@ -7916,34 +7916,76 @@ function pageCursos() {
   document.getElementById('topbar-actions').innerHTML =
     `<button class="btn btn-primary" onclick="abrirCursoModal()">+ Novo Curso</button>`;
 
+  if (!window._cursosFiltro) window._cursosFiltro = { tipo: '' };
+  if (!window._cursosOrdem) window._cursosOrdem = 'nome';
+
   const renderTabela = () => {
     const tbody = document.getElementById('cursos-tbody');
     if (!tbody) return;
-    const lista = [...(window._cursos || [])].sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+
+    let lista = [...(window._cursos || [])];
+    if (window._cursosFiltro.tipo) lista = lista.filter(c => c.tipo === window._cursosFiltro.tipo);
+
+    lista.sort((a, b) => {
+      if (window._cursosOrdem === 'carga-desc' || window._cursosOrdem === 'carga-asc') {
+        const ca = a.carga_horaria !== null && a.carga_horaria !== undefined ? parseFloat(a.carga_horaria) : null;
+        const cb = b.carga_horaria !== null && b.carga_horaria !== undefined ? parseFloat(b.carga_horaria) : null;
+        if (ca === null && cb === null) return 0;
+        if (ca === null) return 1;
+        if (cb === null) return -1;
+        return window._cursosOrdem === 'carga-desc' ? cb - ca : ca - cb;
+      }
+      if (window._cursosOrdem === 'tipo') return (a.tipo || '').localeCompare(b.tipo || '');
+      return (a.nome || '').localeCompare(b.nome || '');
+    });
+
     tbody.innerHTML = lista.length === 0
-      ? '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum curso cadastrado ainda.</td></tr>'
-      : lista.map(c => `
+      ? '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Nenhum curso encontrado.</td></tr>'
+      : lista.map(c => {
+          const qtdLiberados = (window._cursoLiberacoes || []).filter(l => l.id_curso === c.id && l.status === 'Liberado').length;
+          return `
         <tr>
           <td><strong style="cursor:pointer" onclick="abrirCursoModal(${c.id})">${c.nome}</strong></td>
           <td><span class="badge ${c.tipo === 'Interno' ? 'badge-info' : 'badge-gray'}">${c.tipo}</span></td>
           <td>${c.carga_horaria !== null && c.carga_horaria !== undefined && c.carga_horaria !== '' ? (c.tipo === 'Interno' ? formatarHorasMinutos(Math.round(c.carga_horaria * 3600)) : `${c.carga_horaria}h`) : '—'}</td>
           <td style="white-space:normal;max-width:320px">${c.descricao || '—'}</td>
+          <td>
+            <span class="badge badge-info">${qtdLiberados}</span>
+            <button class="action-btn" title="Ver lista de usuários liberados" onclick="abrirUsuariosLiberadosCursoModal(${c.id})">👥</button>
+          </td>
           <td style="white-space:nowrap">
             ${c.tipo === 'Interno' ? `
               <button class="action-btn" title="Dashboard" onclick="abrirDashboardCursoModal(${c.id})">📊</button>
             ` : ''}
             <button class="action-btn" title="Editar" onclick="abrirCursoModal(${c.id})">✎</button>
           </td>
-        </tr>`).join('');
+        </tr>`;
+        }).join('');
   };
 
   window._renderCursos = renderTabela;
-  Promise.all([loadCursosForApp(), loadCursoAulasForApp()]).then(renderTabela);
+  Promise.all([loadCursosForApp(), loadCursoAulasForApp(), loadCursoLiberacoesForApp()]).then(renderTabela);
 
   return `
   <div class="table-card">
     <div class="table-header">
       <span class="table-title">Cursos</span>
+      <input class="search-input" placeholder="Buscar curso..." oninput="filtrarTabelaGenerica('cursos-tbody', this.value)" style="margin-left:12px">
+    </div>
+    <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:var(--bg2)">
+      <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase">Tipo:</span>
+      <select class="form-select" style="width:auto" onchange="filtrarTipoCursos(this.value)">
+        <option value="" ${window._cursosFiltro.tipo === '' ? 'selected' : ''}>Todos os tipos</option>
+        <option value="Interno" ${window._cursosFiltro.tipo === 'Interno' ? 'selected' : ''}>Interno</option>
+        <option value="Externo" ${window._cursosFiltro.tipo === 'Externo' ? 'selected' : ''}>Externo</option>
+      </select>
+      <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-left:12px">Ordenar:</span>
+      <select class="form-select" style="width:auto" onchange="ordenarCursos(this.value)">
+        <option value="nome" ${window._cursosOrdem === 'nome' ? 'selected' : ''}>Nome (A-Z)</option>
+        <option value="tipo" ${window._cursosOrdem === 'tipo' ? 'selected' : ''}>Tipo (A-Z)</option>
+        <option value="carga-desc" ${window._cursosOrdem === 'carga-desc' ? 'selected' : ''}>Carga Horária (maior → menor)</option>
+        <option value="carga-asc" ${window._cursosOrdem === 'carga-asc' ? 'selected' : ''}>Carga Horária (menor → maior)</option>
+      </select>
     </div>
     <table>
       <thead>
@@ -7952,15 +7994,58 @@ function pageCursos() {
           <th>Tipo</th>
           <th>Carga Horária</th>
           <th>Descrição</th>
+          <th>Usuários Liberados</th>
           <th>Ações</th>
         </tr>
       </thead>
       <tbody id="cursos-tbody">
-        <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
+        <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
       </tbody>
     </table>
   </div>`;
 }
+
+window.filtrarTipoCursos = function(valor) {
+  if (!window._cursosFiltro) window._cursosFiltro = { tipo: '' };
+  window._cursosFiltro.tipo = valor;
+  if (window._renderCursos) window._renderCursos();
+};
+
+window.ordenarCursos = function(valor) {
+  window._cursosOrdem = valor;
+  if (window._renderCursos) window._renderCursos();
+};
+
+// Lista, num modal, os colaboradores com curso_liberacoes.status = 'Liberado'
+// pra esse curso — botão "👥" na listagem principal de Cursos.
+window.abrirUsuariosLiberadosCursoModal = async function(idCurso) {
+  await loadCursoLiberacoesForApp();
+  const curso = (window._cursos || []).find(c => c.id === idCurso);
+
+  if (!document.getElementById('usuarios-liberados-curso-modal')) {
+    const modal = document.createElement('div');
+    modal.id = 'usuarios-liberados-curso-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:6px;width:480px;max-width:95vw;max-height:85vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:15px;font-weight:700" id="usuarios-liberados-curso-modal-title">Usuários Liberados</div>
+          <button type="button" class="btn btn-sm" onclick="document.getElementById('usuarios-liberados-curso-modal').style.display='none'">✕ Fechar</button>
+        </div>
+        <div style="padding:24px" id="usuarios-liberados-curso-body"></div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  document.getElementById('usuarios-liberados-curso-modal-title').textContent = `Usuários Liberados — ${curso ? curso.nome : ''}`;
+  const liberacoes = (window._cursoLiberacoes || []).filter(l => l.id_curso === idCurso && l.status === 'Liberado');
+  const body = document.getElementById('usuarios-liberados-curso-body');
+  body.innerHTML = liberacoes.length === 0
+    ? '<div style="text-align:center;padding:24px;color:var(--text3)">Nenhum usuário liberado para este curso.</div>'
+    : liberacoes.map(l => `<div style="padding:8px 0;border-bottom:1px solid var(--bg2);font-size:13px">${nomeColaboradorPorId(l.id_colaborador)}</div>`).join('');
+
+  document.getElementById('usuarios-liberados-curso-modal').style.display = 'flex';
+};
 
 window.abrirCursoModal = function(id = null) {
   window._editingCursoId = id;
@@ -8184,8 +8269,16 @@ window.dragAulaDrop = function(event, idAulaAlvo) {
   const aulas = (window._cursoAulas || []).filter(a => a.id_curso === idCurso).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
   const aulaOrigem = aulas.find(a => a.id === idOrigem);
   const semOrigem = aulas.filter(a => a.id !== idOrigem);
-  const indiceAlvo = semOrigem.findIndex(a => a.id === idAulaAlvo);
+  let indiceAlvo = semOrigem.findIndex(a => a.id === idAulaAlvo);
   if (!aulaOrigem || indiceAlvo === -1) return;
+
+  // Solta na metade de baixo do card-alvo = entra depois dele; metade de
+  // cima = antes. Sem isso, soltar sempre inserisse "antes do alvo" — dava
+  // pra levar qualquer aula pro topo (soltando no 1º card), mas nunca pro
+  // final de verdade (soltar no último card só deixava ela penúltima).
+  const rect = event.currentTarget.getBoundingClientRect();
+  const soltouNaMetadeDeBaixo = (event.clientY - rect.top) > rect.height / 2;
+  if (soltouNaMetadeDeBaixo) indiceAlvo += 1;
 
   semOrigem.splice(indiceAlvo, 0, aulaOrigem);
   persistirNovaOrdemAulas(semOrigem);
@@ -9341,9 +9434,9 @@ function pageCadastroUsuarioTreinamento() {
           const dados = (window._dadosPessoaisEpi || []).find(d => String(d.id_colaborador) === String(u.colaborador_id));
           const linkWhats = dados ? linkWhatsappAcessoTreinamento(dados.telefone, nomeColaborador, u.email) : null;
           return `
-          <tr>
+          <tr style="cursor:pointer" onclick="abrirCursosLiberadosColaboradorModal(${u.colaborador_id})" title="Ver cursos liberados para este colaborador">
             <td><strong>${nomeColaborador}</strong></td>
-            <td>
+            <td onclick="event.stopPropagation()">
               <div style="display:flex;align-items:center;gap:6px">
                 <span>${u.email || '—'}</span>
                 <button class="action-btn" title="Editar e-mail" onclick="abrirEditarEmailUsuarioModal(${u.id}, '${u.auth_user_id}', '${(u.email || '').replace(/'/g, "\\'")}')">✎</button>
@@ -9352,7 +9445,7 @@ function pageCadastroUsuarioTreinamento() {
             <td>${u.perfis ? u.perfis.nome : '—'}</td>
             <td><span class="badge ${u.ativo ? 'badge-active' : 'badge-gray'}">${u.ativo ? 'Ativo' : 'Inativo'}</span></td>
             <td style="color:var(--text3);font-size:12px">${criado}</td>
-            <td>
+            <td onclick="event.stopPropagation()">
               ${linkWhats
                 ? `<a class="action-btn" title="Enviar acesso por WhatsApp" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block" href="${linkWhats}"><i class="fa-brands fa-whatsapp" style="color:#25D366;font-size:16px"></i></a>`
                 : `<span class="action-btn" style="opacity:.4;cursor:default" title="Cadastre o telefone em Dados Pessoais para liberar o envio"><i class="fa-brands fa-whatsapp" style="font-size:16px"></i></span>`}
@@ -9372,6 +9465,7 @@ function pageCadastroUsuarioTreinamento() {
   <div class="table-card">
     <div class="table-header">
       <span class="table-title">Cadastro de Usuário e Liberação</span>
+      <input class="search-input" placeholder="Buscar colaborador..." oninput="filtrarTabelaGenerica('cadastro-usuario-tbody', this.value)" style="margin-left:12px">
     </div>
     <table>
       <thead>
@@ -9401,6 +9495,55 @@ function linkWhatsappAcessoTreinamento(numero, nomeColaborador, email) {
   const mensagem = `Olá, ${nomeColaborador || ''}! Seu acesso ao Treinamento da Minart Móveis foi criado.\n\nAcesse: ${link}\nE-mail: ${email || ''}\nSenha inicial: 12345678\n\nNo primeiro acesso, o sistema vai pedir para você trocar essa senha.`;
   return `https://wa.me/${digits}?text=${encodeURIComponent(mensagem)}`;
 }
+
+// Mostra, num modal, todos os cursos liberados (curso_liberacoes) pra um
+// colaborador — aberto ao clicar na linha dele em Cadastro de Usuário e Liberação.
+window.abrirCursosLiberadosColaboradorModal = async function(idColaborador) {
+  await Promise.all([
+    (!window._cursos || window._cursos.length === 0) ? loadCursosForApp() : Promise.resolve(),
+    loadCursoLiberacoesForApp(),
+  ]);
+
+  if (!document.getElementById('cursos-liberados-colab-modal')) {
+    const modal = document.createElement('div');
+    modal.id = 'cursos-liberados-colab-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:6px;width:520px;max-width:95vw;max-height:85vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:15px;font-weight:700" id="cursos-liberados-colab-modal-title">Cursos Liberados</div>
+          <button type="button" class="btn btn-sm" onclick="document.getElementById('cursos-liberados-colab-modal').style.display='none'">✕ Fechar</button>
+        </div>
+        <div style="padding:24px" id="cursos-liberados-colab-body"></div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  document.getElementById('cursos-liberados-colab-modal-title').textContent = `Cursos Liberados — ${nomeColaboradorPorId(idColaborador)}`;
+
+  const liberacoes = (window._cursoLiberacoes || []).filter(l => l.id_colaborador === idColaborador);
+  const body = document.getElementById('cursos-liberados-colab-body');
+  body.innerHTML = liberacoes.length === 0
+    ? '<div style="text-align:center;padding:24px;color:var(--text3)">Nenhum curso liberado para este colaborador.</div>'
+    : `<table style="width:100%">
+        <thead><tr>
+          <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Curso</th>
+          <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Status</th>
+        </tr></thead>
+        <tbody>
+          ${liberacoes.map(l => {
+            const curso = (window._cursos || []).find(c => c.id === l.id_curso);
+            return `
+            <tr>
+              <td style="padding:8px 0;font-size:13px">${curso ? curso.nome : '—'}</td>
+              <td style="padding:8px 0"><span class="badge ${l.status === 'Liberado' ? 'badge-active' : 'badge-inactive'}">${l.status}</span></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+
+  document.getElementById('cursos-liberados-colab-modal').style.display = 'flex';
+};
 
 window.abrirEditarEmailUsuarioModal = function(usuarioId, authUserId, emailAtual) {
   if (!document.getElementById('editar-email-usuario-modal')) {
