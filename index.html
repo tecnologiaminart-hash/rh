@@ -8089,6 +8089,14 @@ async function recalcularCargaHorariaCurso(idCurso) {
   if (curso) curso.carga_horaria = cargaHoraria;
 }
 
+// Resolve o nome do cargo vinculado a um curso (cursos.id_cargos) usando o
+// mesmo campo de id/nome detectado dinamicamente em loadCargosForApp().
+function nomeCargoPorId(idCargo) {
+  if (!idCargo) return null;
+  const cargo = (window._cargos || []).find(cg => String(cg[window._cargoIdField] || cg.id_cargo || cg.id || cg.id_cargos) === String(idCargo));
+  return cargo ? (cargo.nome_cargo || cargo.nome || cargo.cargo || idCargo) : null;
+}
+
 function pageCursos() {
   document.getElementById('topbar-actions').innerHTML =
     `<button class="btn btn-primary" onclick="abrirCursoModal()">+ Novo Curso</button>`;
@@ -8117,7 +8125,7 @@ function pageCursos() {
     });
 
     tbody.innerHTML = lista.length === 0
-      ? '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Nenhum curso encontrado.</td></tr>'
+      ? '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhum curso encontrado.</td></tr>'
       : lista.map(c => {
           const qtdLiberados = (window._cursoLiberacoes || []).filter(l => l.id_curso === c.id && l.status === 'Liberado').length;
           return `
@@ -8125,6 +8133,7 @@ function pageCursos() {
           <td><strong style="cursor:pointer" onclick="abrirCursoModal(${c.id})">${c.nome}</strong></td>
           <td><span class="badge ${c.tipo === 'Interno' ? 'badge-info' : 'badge-gray'}">${c.tipo}</span></td>
           <td>${c.carga_horaria !== null && c.carga_horaria !== undefined && c.carga_horaria !== '' ? (c.tipo === 'Interno' ? formatarHorasMinutos(Math.round(c.carga_horaria * 3600)) : `${c.carga_horaria}h`) : '—'}</td>
+          <td>${nomeCargoPorId(c.id_cargos) || '—'}</td>
           <td style="white-space:normal;max-width:320px">${c.descricao || '—'}</td>
           <td>
             <span class="badge badge-info">${qtdLiberados}</span>
@@ -8142,7 +8151,12 @@ function pageCursos() {
   };
 
   window._renderCursos = renderTabela;
-  Promise.all([loadCursosForApp(), loadCursoAulasForApp(), loadCursoLiberacoesForApp()]).then(renderTabela);
+  Promise.all([
+    loadCursosForApp(),
+    loadCursoAulasForApp(),
+    loadCursoLiberacoesForApp(),
+    (!window._cargos || window._cargos.length === 0) ? loadCargosForApp() : Promise.resolve(),
+  ]).then(renderTabela);
 
   return `
   <div class="table-card">
@@ -8171,13 +8185,14 @@ function pageCursos() {
           <th>Nome</th>
           <th>Tipo</th>
           <th>Carga Horária</th>
+          <th>Cargo</th>
           <th>Descrição</th>
           <th>Usuários Liberados</th>
           <th>Ações</th>
         </tr>
       </thead>
       <tbody id="cursos-tbody">
-        <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
+        <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
       </tbody>
     </table>
   </div>`;
@@ -8548,8 +8563,10 @@ window.baixarMetricasCursoXlsx = function() {
   XLSX.writeFile(wb, nomeArquivo);
 };
 
-window.abrirCursoModal = function(id = null) {
+window.abrirCursoModal = async function(id = null) {
   window._editingCursoId = id;
+
+  if (!window._cargos || window._cargos.length === 0) await loadCargosForApp();
 
   if (!document.getElementById('curso-modal')) {
     const modal = document.createElement('div');
@@ -8576,6 +8593,10 @@ window.abrirCursoModal = function(id = null) {
               <div id="cur-carga-horaria-computada" style="display:none;padding:9px 12px;background:var(--bg2);border-radius:4px;font-size:13px;color:var(--text2)"></div>
             </div>
             <div class="form-group form-full"><label class="form-label">Descrição</label><textarea class="form-input" id="cur-descricao" rows="4" placeholder="Descrição do curso"></textarea></div>
+            <div class="form-group form-full">
+              <label class="form-label">Cargo (opcional)</label>
+              <select class="form-select" id="cur-cargo"><option value="">— Nenhum —</option></select>
+            </div>
           </div>
         </div>
         <div class="modal-footer">
@@ -8586,6 +8607,14 @@ window.abrirCursoModal = function(id = null) {
     document.body.appendChild(modal);
   }
 
+  const selectCargo = document.getElementById('cur-cargo');
+  selectCargo.innerHTML = '<option value="">— Nenhum —</option>' +
+    (window._cargos || []).map(cargo => {
+      const cid = cargo[window._cargoIdField] || cargo.id_cargo || cargo.id || cargo.id_cargos || '';
+      const nome = cargo.nome_cargo || cargo.nome || cargo.cargo || cid;
+      return `<option value="${cid}">${nome}</option>`;
+    }).join('');
+
   if (id) {
     const curso = (window._cursos || []).find(c => c.id === id);
     document.getElementById('curso-modal-title').textContent = `Editar Curso — ${curso ? curso.nome : ''}`;
@@ -8593,12 +8622,14 @@ window.abrirCursoModal = function(id = null) {
     document.getElementById('cur-tipo').value = curso?.tipo || 'Interno';
     document.getElementById('cur-carga-horaria').value = (curso && curso.carga_horaria !== null && curso.carga_horaria !== undefined) ? curso.carga_horaria : '';
     document.getElementById('cur-descricao').value = curso?.descricao || '';
+    selectCargo.value = (curso && curso.id_cargos !== null && curso.id_cargos !== undefined) ? curso.id_cargos : '';
   } else {
     document.getElementById('curso-modal-title').textContent = 'Novo Curso';
     document.getElementById('cur-nome').value = '';
     document.getElementById('cur-tipo').value = 'Interno';
     document.getElementById('cur-carga-horaria').value = '';
     document.getElementById('cur-descricao').value = '';
+    selectCargo.value = '';
   }
   toggleTipoCursoModal(document.getElementById('cur-tipo').value);
 
@@ -8630,9 +8661,10 @@ window.salvarCurso = async function() {
   const nome = document.getElementById('cur-nome').value.trim();
   const tipo = document.getElementById('cur-tipo').value;
   const descricao = document.getElementById('cur-descricao').value.trim();
+  const cargoSelecionado = document.getElementById('cur-cargo').value;
   if (!nome) return showToast('Informe o nome do curso.');
 
-  const payload = { nome, tipo, descricao: descricao || null };
+  const payload = { nome, tipo, descricao: descricao || null, id_cargos: cargoSelecionado || null };
   if (tipo === 'Externo') {
     // Externo não tem aulas: carga horária continua um número digitado à mão.
     const cargaRaw = document.getElementById('cur-carga-horaria').value;
@@ -9450,6 +9482,15 @@ function identidadeAlunoAtual() {
   return { idColaborador, idUsuario };
 }
 
+// Login de teste/convidado (sem colaborador vinculado) navega livremente
+// entre as aulas desde o início — sem a trava de "marcar concluído pra
+// passar de aula" que colaborador normal tem na 1ª passada pelo curso (ver
+// modoLivre em renderPlayerCursoHtml).
+function ehUsuarioConvidado() {
+  const { idColaborador, idUsuario } = identidadeAlunoAtual();
+  return !idColaborador && !!idUsuario;
+}
+
 function pageMeusCursos() {
   document.getElementById('topbar-actions').innerHTML = '';
 
@@ -9631,6 +9672,13 @@ function renderPlayerCursoHtml() {
   const aulaConcluida = concluidas.includes(aula.id);
   const ultimaAula = window._playerAulaIndex === aulas.length - 1;
 
+  // Convidado (login de teste/sem colaborador) navega livre entre as aulas
+  // desde o início; colaborador normal só ganha esse modo livre depois de já
+  // ter concluído o curso (window._playerReview) — ver ehUsuarioConvidado().
+  // Enquanto colaborador ainda está fazendo o curso pela 1ª vez, continua
+  // precisando marcar cada aula como concluída pra passar pra próxima.
+  const modoLivre = window._playerReview || ehUsuarioConvidado();
+
   // Em revisão, "concluído" só é verdade de fato se o status já virou
   // "concluido" (aprovado, ou sem avaliação). Reprovado/nunca avaliado ainda
   // está "em_andamento" — mostra um aviso diferente e libera o botão de
@@ -9639,19 +9687,34 @@ function renderPlayerCursoHtml() {
   const perguntas = (window._cursoAvaliacaoPerguntas || []).filter(p => p.id_curso === idCurso);
   const podeFazerOuRefazerAvaliacao = window._playerReview && progresso && progresso.resultado_avaliacao !== 'Aprovado' && perguntas.length > 0;
 
+  // Lista de todas as aulas em linha, clicáveis — só aparece no modo livre
+  // (ver irParaAulaIndex). No modo com trava, navegação continua só
+  // sequencial (Passar de Aula, liberado depois de marcar concluído).
+  const listaAulasHtml = modoLivre ? `
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+      ${aulas.map((a, i) => {
+        const concluidaNaLista = concluidas.includes(a.id);
+        const ativa = i === window._playerAulaIndex;
+        const tituloCurto = a.titulo.length > 28 ? a.titulo.slice(0, 28) + '…' : a.titulo;
+        return `<button type="button" class="btn btn-sm ${ativa ? 'btn-primary' : ''}" onclick="irParaAulaIndex(${i})" title="${a.titulo.replace(/"/g, '&quot;')}">${concluidaNaLista ? '✓ ' : ''}${i + 1}. ${tituloCurto}</button>`;
+      }).join('')}
+    </div>` : '';
+
   return cabecalho + `
     <div class="table-card" style="padding:20px;overflow:visible">
       <div style="font-size:13px;color:var(--text3);margin-bottom:6px">Aula ${window._playerAulaIndex + 1} de ${aulas.length}</div>
       <div style="font-size:16px;font-weight:700;margin-bottom:12px">${aula.titulo}</div>
+      ${listaAulasHtml}
       <div style="width:100%;aspect-ratio:16/9;background:#000;margin-bottom:16px">
         ${embedVideoAulaHtml(aula)}
       </div>
       ${aula.descricao ? `<div style="font-size:13px;color:var(--text2);margin-bottom:12px;white-space:pre-wrap">${aula.descricao}</div>` : ''}
       ${aula.url_material_pdf ? `<button class="btn btn-sm" style="margin-bottom:16px" onclick="visualizarDocumento('${aula.url_material_pdf}')">📎 Material da aula</button>` : ''}
       <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin-top:8px">
-        ${window._playerReview ? `
-        <div>${emRevisaoConcluidoDeVerdade ? '<span class="badge badge-active">✓ Curso concluído</span>' : '<span class="badge badge-pending">Aulas concluídas — avaliação pendente</span>'}</div>
+        ${modoLivre ? `
+        <div>${window._playerReview ? (emRevisaoConcluidoDeVerdade ? '<span class="badge badge-active">✓ Curso concluído</span>' : '<span class="badge badge-pending">Aulas concluídas — avaliação pendente</span>') : (aulaConcluida ? '<span class="badge badge-active">✓ Aula concluída</span>' : '<span class="badge badge-gray">Não concluída</span>')}</div>
         <div style="display:flex;flex-wrap:wrap;gap:8px">
+          ${!aulaConcluida ? `<button class="btn" onclick="marcarAulaConcluida(${aula.id})">Marcar como concluído</button>` : ''}
           <button class="btn" ${window._playerAulaIndex === 0 ? 'disabled style="opacity:.4;cursor:not-allowed"' : ''} onclick="voltarAulaRevisao()">← Aula Anterior</button>
           <button class="btn" ${ultimaAula ? 'disabled style="opacity:.4;cursor:not-allowed"' : ''} onclick="avancarAulaRevisao()">Próxima Aula →</button>
           ${podeFazerOuRefazerAvaliacao ? `<button class="btn btn-primary" onclick="irParaAvaliacaoRevisao()">Fazer Avaliação</button>` : ''}
@@ -9664,6 +9727,15 @@ function renderPlayerCursoHtml() {
       </div>
     </div>`;
 }
+
+// Salta direto pra uma aula específica pelo índice — usado pela lista de
+// aulas em linha do modo livre (ver renderPlayerCursoHtml/modoLivre). Sem
+// trava nenhuma: quem chega aqui já está em modo livre (convidado, ou
+// colaborador que já concluiu o curso).
+window.irParaAulaIndex = function(index) {
+  window._playerAulaIndex = index;
+  navigate('meus-cursos', 'Cursos');
+};
 
 window.irParaAvaliacaoRevisao = function() {
   window._playerModo = 'avaliacao';
