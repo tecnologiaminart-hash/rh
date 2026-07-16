@@ -8165,7 +8165,7 @@ window.abrirAulaModal = function(idCurso, idAula = null) {
         </div>
         <div style="padding:24px">
           <div class="form-grid">
-            <div class="form-group form-full"><label class="form-label">Título</label><input class="form-input" id="aul-titulo" placeholder="Título da aula"></div>
+            <div class="form-group form-full" id="aul-titulo-wrap"><label class="form-label">Título</label><input class="form-input" id="aul-titulo" placeholder="Título da aula"></div>
             <div class="form-group form-full">
               <label class="form-label">Vídeo</label>
               <div style="display:flex;gap:16px;margin:6px 0 10px;font-size:13px;font-weight:400;text-transform:none">
@@ -8173,9 +8173,10 @@ window.abrirAulaModal = function(idCurso, idAula = null) {
                 <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="aul-tipo-video" value="upload" onchange="toggleTipoVideoAula('upload')"> Upload para o Drive</label>
               </div>
               <input class="form-input" id="aul-video-link" placeholder="https://...">
-              <input class="form-input" id="aul-video-upload" type="file" accept="video/*" style="display:none" onchange="preencherDuracaoAulaDoArquivo(this.files[0]); preencherTituloAulaDoArquivo(this.files[0])">
+              <input class="form-input" id="aul-video-upload" type="file" accept="video/*" multiple style="display:none" onchange="onSelecionarArquivosVideoAula(this.files)">
               <div id="aul-video-atual" style="font-size:12px;color:var(--text3);margin-top:6px"></div>
               <div id="aul-duracao-detectada" style="font-size:12px;color:var(--text3);margin-top:6px"></div>
+              <div id="aul-upload-multiplo-aviso" style="display:none;background:#fff8e1;border:1px solid #f1c40f;border-radius:6px;padding:12px 16px;margin-top:10px;font-size:13px;font-weight:400;text-transform:none"></div>
             </div>
             <div class="form-group form-full" id="aul-duracao-link-wrap">
               <label class="form-label">Duração</label>
@@ -8186,8 +8187,8 @@ window.abrirAulaModal = function(idCurso, idAula = null) {
                 <span style="font-size:13px;color:var(--text3)">min</span>
               </div>
             </div>
-            <div class="form-group form-full"><label class="form-label">Descrição</label><textarea class="form-input" id="aul-descricao" rows="3"></textarea></div>
-            <div class="form-group form-full">
+            <div class="form-group form-full" id="aul-descricao-wrap"><label class="form-label">Descrição</label><textarea class="form-input" id="aul-descricao" rows="3"></textarea></div>
+            <div class="form-group form-full" id="aul-material-wrap">
               <label class="form-label">Material em PDF (opcional)</label>
               <input class="form-input" id="aul-material" type="file" accept="application/pdf">
               <div id="aul-material-atual" style="font-size:12px;color:var(--text3);margin-top:6px"></div>
@@ -8208,7 +8209,18 @@ window.abrirAulaModal = function(idCurso, idAula = null) {
   document.getElementById('aul-descricao').value = aula?.descricao || '';
   document.getElementById('aul-video-link').value = (aula && aula.tipo_video === 'link') ? (aula.url_video || '') : '';
   document.getElementById('aul-video-upload').value = '';
+  // Envio de vários vídeos de uma vez só faz sentido criando aulas novas —
+  // ao editar uma aula existente, o seletor de arquivo volta a aceitar só um.
+  document.getElementById('aul-video-upload').multiple = !idAula;
   document.getElementById('aul-material').value = '';
+
+  // Volta os campos Título/Descrição/Material e o aviso de envio em lote ao
+  // estado padrão (visíveis / escondido) — só ficam diferentes depois que o
+  // admin escolher vários arquivos de uma vez (ver onSelecionarArquivosVideoAula).
+  document.getElementById('aul-titulo-wrap').style.display = '';
+  document.getElementById('aul-descricao-wrap').style.display = '';
+  document.getElementById('aul-material-wrap').style.display = '';
+  document.getElementById('aul-upload-multiplo-aviso').style.display = 'none';
 
   // Duração: em segundos igual antes, só muda a forma de preencher — Link
   // usa os campos Horas/Minutos abaixo; Upload captura sozinho do arquivo
@@ -8242,45 +8254,143 @@ window.toggleTipoVideoAula = function(tipo) {
   duracaoLinkWrap.style.display = tipo === 'link' ? '' : 'none';
 };
 
-// Lê a duração do vídeo selecionado (metadata local, sem precisar subir o
-// arquivo) e guarda em window._aulaDuracaoSegundosUpload, mostrando só um
-// texto de confirmação — não existe mais campo de duração editável no Upload.
-window.preencherDuracaoAulaDoArquivo = function(file) {
+// Lê a duração de um arquivo de vídeo (metadata local, sem precisar subir o
+// arquivo) — devolve segundos (inteiro) ou null se não conseguir detectar.
+function lerDuracaoVideoArquivo(file) {
+  return new Promise((resolve) => {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.onloadedmetadata = () => {
+      window.URL.revokeObjectURL(video.src);
+      const segundos = Math.round(video.duration);
+      resolve(isFinite(segundos) && segundos > 0 ? segundos : null);
+    };
+    video.onerror = () => resolve(null);
+    video.src = URL.createObjectURL(file);
+  });
+}
+
+// Sugere um título a partir do nome do arquivo (sem extensão, com "_"/"-"
+// virando espaço).
+function tituloAPartirDoArquivo(file) {
+  return file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+}
+
+// Único arquivo selecionado: detecta duração (guarda em
+// window._aulaDuracaoSegundosUpload, sem campo visível) e sugere o Título —
+// ambos continuam editáveis normalmente depois.
+async function preencherDuracaoETituloDoArquivo(file) {
   const detectadaEl = document.getElementById('aul-duracao-detectada');
-  if (!file) return;
-  const video = document.createElement('video');
-  video.preload = 'metadata';
-  video.onloadedmetadata = () => {
-    window.URL.revokeObjectURL(video.src);
-    const segundos = Math.round(video.duration);
-    if (isFinite(segundos) && segundos > 0) {
-      window._aulaDuracaoSegundosUpload = segundos;
-      if (detectadaEl) detectadaEl.textContent = `Duração detectada: ${formatarHorasMinutos(segundos)}`;
+  const tituloEl = document.getElementById('aul-titulo');
+  const segundos = await lerDuracaoVideoArquivo(file);
+  if (segundos) {
+    window._aulaDuracaoSegundosUpload = segundos;
+    if (detectadaEl) detectadaEl.textContent = `Duração detectada: ${formatarHorasMinutos(segundos)}`;
+  } else if (detectadaEl) {
+    detectadaEl.textContent = 'Não foi possível detectar a duração deste arquivo.';
+  }
+  const nomeSemExtensao = tituloAPartirDoArquivo(file);
+  if (tituloEl && nomeSemExtensao) tituloEl.value = nomeSemExtensao;
+}
+
+// Disparado ao escolher o(s) arquivo(s) de vídeo pra Upload. Com 1 arquivo,
+// funciona como aula única (título/duração sugeridos, descrição e material
+// disponíveis). Com vários, cada um vira uma aula separada só com
+// título/vídeo/duração — não dá pra anexar descrição nem material
+// individualmente nesse modo, então esses campos somem e um aviso aparece.
+window.onSelecionarArquivosVideoAula = function(files) {
+  const avisoEl = document.getElementById('aul-upload-multiplo-aviso');
+  const tituloWrap = document.getElementById('aul-titulo-wrap');
+  const descricaoWrap = document.getElementById('aul-descricao-wrap');
+  const materialWrap = document.getElementById('aul-material-wrap');
+  const detectadaEl = document.getElementById('aul-duracao-detectada');
+  if (!files || files.length === 0) return;
+
+  if (files.length > 1 && window._editingAulaId) {
+    showToast('Ao editar uma aula existente, selecione apenas um arquivo de vídeo.');
+    document.getElementById('aul-video-upload').value = '';
+    return;
+  }
+
+  if (files.length > 1) {
+    if (tituloWrap) tituloWrap.style.display = 'none';
+    if (descricaoWrap) descricaoWrap.style.display = 'none';
+    if (materialWrap) materialWrap.style.display = 'none';
+    if (detectadaEl) detectadaEl.textContent = '';
+    window._aulaDuracaoSegundosUpload = null;
+    if (avisoEl) {
+      avisoEl.style.display = '';
+      avisoEl.textContent = `Você selecionou ${files.length} arquivos: cada um vai virar uma aula separada (título a partir do nome do arquivo, duração detectada automaticamente). Como são várias aulas de uma vez, não é possível anexar descrição nem material em PDF individual agora — edite depois, aula por aula, se precisar.`;
     }
-  };
-  video.onerror = () => {
-    console.warn('Não foi possível ler a duração do vídeo selecionado.');
-    if (detectadaEl) detectadaEl.textContent = 'Não foi possível detectar a duração deste arquivo.';
-  };
-  video.src = URL.createObjectURL(file);
+  } else {
+    if (tituloWrap) tituloWrap.style.display = '';
+    if (descricaoWrap) descricaoWrap.style.display = '';
+    if (materialWrap) materialWrap.style.display = '';
+    if (avisoEl) avisoEl.style.display = 'none';
+    preencherDuracaoETituloDoArquivo(files[0]);
+  }
 };
 
-// Sugere o Título a partir do nome do arquivo (sem extensão, com "_"/"-"
-// virando espaço) — o campo continua um input normal, então dá pra editar
-// livremente depois de preenchido.
-window.preencherTituloAulaDoArquivo = function(file) {
-  if (!file) return;
-  const tituloEl = document.getElementById('aul-titulo');
-  if (!tituloEl) return;
-  const nomeSemExtensao = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
-  if (nomeSemExtensao) tituloEl.value = nomeSemExtensao;
-};
+// Cria uma aula por arquivo (só título/vídeo/duração — sem descrição nem
+// material), reaproveitando (ou criando, na primeira vez) a pasta do curso
+// no Drive.
+async function salvarAulasEmLote(files) {
+  const idCurso = window._editingAulaCursoId;
+  const btn = document.getElementById('aul-btn-salvar');
+  if (btn) { btn.disabled = true; btn.textContent = 'Salvando...'; }
+
+  try {
+    const curso = (window._cursos || []).find(c => c.id === idCurso);
+    let driveFolderId = curso?.drive_folder_id || null;
+    if (!driveFolderId) {
+      driveFolderId = await window.criarPastaCursoNoDrive(curso?.nome || 'Curso');
+      const { error: errorPasta } = await supaClient.from('cursos').update({ drive_folder_id: driveFolderId }).eq('id', idCurso);
+      if (errorPasta) throw errorPasta;
+      if (curso) curso.drive_folder_id = driveFolderId;
+    }
+
+    let maiorOrdem = Math.max(0, ...(window._cursoAulas || []).filter(a => a.id_curso === idCurso).map(a => a.ordem || 0));
+
+    for (const file of Array.from(files)) {
+      const duracaoSegundos = await lerDuracaoVideoArquivo(file);
+      const urlVideo = await window.enviarArquivoAulaParaDrive(file, { driveFolderId });
+      maiorOrdem += 1;
+      const { error } = await supaClient.from('curso_aulas').insert([{
+        id_curso: idCurso,
+        titulo: tituloAPartirDoArquivo(file) || file.name,
+        tipo_video: 'upload',
+        url_video: urlVideo,
+        descricao: null,
+        duracao_segundos: duracaoSegundos,
+        url_material_pdf: null,
+        ordem: maiorOrdem,
+      }]);
+      if (error) throw error;
+    }
+
+    await loadCursoAulasForApp();
+    await recalcularCargaHorariaCurso(idCurso);
+    if (window._renderAulasCurso) window._renderAulasCurso();
+    document.getElementById('aula-modal').style.display = 'none';
+    showToast(`${files.length} aulas criadas!`);
+  } catch (e) {
+    console.error('Erro ao salvar aulas em lote:', e);
+    showToast('Erro ao salvar aulas: ' + (e.message || e), 'danger');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Salvar'; }
+  }
+}
 
 window.salvarAula = async function() {
-  const titulo = document.getElementById('aul-titulo').value.trim();
   const tipoVideo = document.querySelector('input[name="aul-tipo-video"]:checked')?.value || 'link';
+  const arquivosVideo = document.getElementById('aul-video-upload').files;
+  if (tipoVideo === 'upload' && arquivosVideo.length > 1 && !window._editingAulaId) {
+    return salvarAulasEmLote(arquivosVideo);
+  }
+
+  const titulo = document.getElementById('aul-titulo').value.trim();
   const linkVideo = document.getElementById('aul-video-link').value.trim();
-  const arquivoVideo = document.getElementById('aul-video-upload').files[0];
+  const arquivoVideo = arquivosVideo[0];
   const descricao = document.getElementById('aul-descricao').value.trim();
   const arquivoMaterial = document.getElementById('aul-material').files[0];
 
