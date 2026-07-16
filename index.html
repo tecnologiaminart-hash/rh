@@ -451,9 +451,6 @@ const N8N_AULA_WEBHOOK_URL = 'https://automatiza.minart.com.br/webhook/upload-au
 // n8n/criar-usuario-treinamento.workflow.json, preencher a service_role key nos
 // nodes HTTP Request, ativar o workflow e colar a "Production URL" abaixo.
 const N8N_CRIAR_USUARIO_WEBHOOK_URL = 'https://automatiza.minart.com.br/webhook/criar-usuario-treinamento';
-// Perfil Treinamento não usa o app de RH: depois de logado (e com a senha já
-// trocada, se for o primeiro acesso) é mandado direto para a Academia Minart.
-const ACADEMIA_MINART_URL = 'https://tecnologiaminart-hash.github.io/rh/academiaminart/';
 
 let _colaboradoresSupabase = [];
 let _editingStatusColabId = null;
@@ -779,13 +776,10 @@ async function doLogin() {
 
 document.getElementById('l-pass').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
 
-// Perfil Treinamento não usa o app de RH — vai direto para a Academia
-// Minart em vez de abrir o app. Os demais perfis seguem normalmente.
+// Perfil Treinamento agora usa o próprio app de RH (aba "Cursos", id
+// 'meus-cursos') em vez de ser redirecionado pra fora — só enxerga essa
+// página porque é a única liberada pra esse perfil em `permissoes`.
 function entrarNoDestinoCorreto() {
-  if (currentUser && currentUser.perfil === 'Treinamento') {
-    window.location.href = ACADEMIA_MINART_URL;
-    return;
-  }
   enterApp();
 }
 
@@ -931,6 +925,10 @@ const NAV = [
   {
     id: 'dashboard', label: 'Dashboard', icon: '▦',
     action: () => navigate('dashboard', 'Dashboard')
+  },
+  {
+    id: 'meus-cursos', label: 'Cursos', icon: '🎓',
+    action: () => navigate('meus-cursos', 'Cursos')
   },
   {
     id: 'colaboradores', label: 'Colaboradores', icon: '◉',
@@ -4454,6 +4452,7 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
   }
   const pages = {
     'dashboard':       pageDashboard,
+    'meus-cursos':     pageMeusCursos,
     'col-documentos':  (typeof pageDocumentos === 'function') ? pageDocumentos : (function(){ console.error('pageDocumentos não está definida'); return function(){ return `<div class="empty-state"><div class="empty-state-icon">⚠</div><div class="empty-state-title">Página indisponível</div><div class="empty-state-desc">pageDocumentos não definida.</div></div>`; }; })(),
     'col-status':      pageStatus,
     'col-temporarios': pageColaboradoresTemporarios,
@@ -8700,6 +8699,394 @@ window.excluirPerguntaAvaliacao = async function(id) {
     console.error('Erro ao excluir pergunta:', e);
     showToast('Erro ao excluir pergunta: ' + (e.message || e), 'danger');
   }
+};
+
+// ------------------------------------------------------------
+// PERFIL TREINAMENTO > CURSOS — cursos liberados (curso_liberacoes) pro
+// colaborador logado, com player de aulas e avaliação final. Progresso vai
+// pra curso_progresso (ver sql/criar-curso-progresso-treinamento.sql).
+// ------------------------------------------------------------
+const NOTA_MINIMA_APROVACAO_CURSO = 70; // % de acerto na avaliação final
+
+async function loadCursoProgressoForApp(idColaborador) {
+  if (!supaClient) {
+    console.error('Supabase client não inicializado para curso_progresso.');
+    window._cursoProgresso = [];
+    return;
+  }
+  const { data, error } = await supaClient.from('curso_progresso').select('*').eq('id_colaborador', idColaborador);
+  if (error) {
+    console.error('Erro ao carregar progresso de cursos:', error.message);
+    window._cursoProgresso = [];
+  } else {
+    window._cursoProgresso = data;
+  }
+}
+
+function pageMeusCursos() {
+  document.getElementById('topbar-actions').innerHTML = '';
+
+  const idColaborador = currentUser?.colaboradorId;
+  if (!idColaborador) {
+    return `<div class="empty-state"><div class="empty-state-icon">🔒</div><div class="empty-state-title">Colaborador não vinculado</div><div class="empty-state-desc">Seu usuário não está vinculado a um colaborador. Contate o administrador.</div></div>`;
+  }
+
+  // Enquanto o player estiver "aberto" (curso selecionado), a página mostra a
+  // aula/avaliação/resultado em vez da lista — ver abrirPlayerCurso().
+  if (window._playerCursoId) {
+    return renderPlayerCursoHtml();
+  }
+
+  if (!window._meusCursosAba) window._meusCursosAba = 'andamento';
+
+  window._renderMeusCursos = renderMeusCursosLista;
+  Promise.all([
+    loadCursosForApp(),
+    loadCursoLiberacoesForApp(),
+    loadCursoProgressoForApp(idColaborador),
+  ]).then(renderMeusCursosLista);
+
+  return `
+  <div class="table-card">
+    <div class="table-header" style="gap:8px">
+      <button class="btn ${window._meusCursosAba === 'andamento' ? 'btn-primary' : ''}" onclick="mudarAbaMeusCursos('andamento')">Cursos em Andamento</button>
+      <button class="btn ${window._meusCursosAba === 'concluidos' ? 'btn-primary' : ''}" onclick="mudarAbaMeusCursos('concluidos')">Cursos Concluídos</button>
+    </div>
+    <div id="meus-cursos-lista" style="padding:20px">
+      <div style="text-align:center;color:var(--text3)">Carregando...</div>
+    </div>
+  </div>`;
+}
+
+window.mudarAbaMeusCursos = function(aba) {
+  window._meusCursosAba = aba;
+  navigate('meus-cursos', 'Cursos');
+};
+
+function renderMeusCursosLista() {
+  const container = document.getElementById('meus-cursos-lista');
+  if (!container) return;
+  const idColaborador = currentUser?.colaboradorId;
+
+  const liberados = (window._cursoLiberacoes || []).filter(l => l.id_colaborador === idColaborador && l.status === 'Liberado');
+  const itens = liberados
+    .map(l => ({
+      curso: (window._cursos || []).find(c => c.id === l.id_curso),
+      progresso: (window._cursoProgresso || []).find(p => p.id_curso === l.id_curso),
+    }))
+    .filter(item => item.curso);
+
+  const filtrados = itens.filter(({ progresso }) => {
+    const concluido = progresso && progresso.status === 'concluido';
+    return window._meusCursosAba === 'concluidos' ? concluido : !concluido;
+  });
+
+  if (filtrados.length === 0) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🎓</div><div class="empty-state-title">${window._meusCursosAba === 'concluidos' ? 'Nenhum curso concluído ainda' : 'Nenhum curso liberado em andamento'}</div></div>`;
+    return;
+  }
+
+  container.innerHTML = filtrados.map(({ curso, progresso }) => {
+    const badge = progresso && progresso.status === 'concluido'
+      ? `<span class="badge ${progresso.resultado_avaliacao === 'Reprovado' ? 'badge-inactive' : 'badge-active'}">${progresso.resultado_avaliacao || 'Concluído'}</span>`
+      : (progresso ? '<span class="badge badge-pending">Em andamento</span>' : '<span class="badge badge-gray">Não iniciado</span>');
+    return `
+    <div class="table-card" style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;margin-bottom:10px;cursor:pointer" onclick="abrirPlayerCurso(${curso.id})">
+      <div>
+        <div style="font-weight:700;font-size:14px">${curso.nome}</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">${curso.descricao || ''}</div>
+      </div>
+      ${badge}
+    </div>`;
+  }).join('');
+}
+
+// --- Player: aula por aula, depois avaliação final ---
+
+window.abrirPlayerCurso = async function(idCurso) {
+  await Promise.all([
+    (!window._cursoAulas) ? loadCursoAulasForApp() : Promise.resolve(),
+    (!window._cursoAvaliacaoPerguntas) ? loadCursoAvaliacaoPerguntasForApp() : Promise.resolve(),
+  ]);
+
+  const progresso = (window._cursoProgresso || []).find(p => p.id_curso === idCurso);
+  const aulas = (window._cursoAulas || []).filter(a => a.id_curso === idCurso).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+  const concluidas = (progresso && progresso.aulas_concluidas) || [];
+  const indicePrimeiraPendente = aulas.findIndex(a => !concluidas.includes(a.id));
+
+  window._playerCursoId = idCurso;
+  window._playerAulaIndex = indicePrimeiraPendente === -1 ? Math.max(0, aulas.length - 1) : indicePrimeiraPendente;
+  // Sem aulas cadastradas, ou todas já concluídas: vai direto pra avaliação.
+  window._playerModo = (aulas.length > 0 && indicePrimeiraPendente !== -1) ? 'aula' : 'avaliacao';
+  window._respostasAvaliacaoAluno = {};
+
+  navigate('meus-cursos', 'Cursos');
+};
+
+window.sairDoPlayerCurso = function() {
+  window._playerCursoId = null;
+  window._playerAulaIndex = null;
+  window._playerModo = null;
+  navigate('meus-cursos', 'Cursos');
+};
+
+function renderPlayerCursoHtml() {
+  const idCurso = window._playerCursoId;
+  const curso = (window._cursos || []).find(c => c.id === idCurso);
+
+  const cabecalho = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <button class="btn btn-sm" onclick="sairDoPlayerCurso()">← Voltar aos Cursos</button>
+      <div style="font-size:15px;font-weight:700">${curso ? curso.nome : ''}</div>
+      <div style="width:130px"></div>
+    </div>`;
+
+  if (window._playerModo === 'avaliacao') return cabecalho + renderAvaliacaoAlunoHtml(idCurso);
+  if (window._playerModo === 'resultado') return cabecalho + renderResultadoAvaliacaoHtml();
+
+  const aulas = (window._cursoAulas || []).filter(a => a.id_curso === idCurso).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+  const aula = aulas[window._playerAulaIndex];
+  if (!aula) return cabecalho + `<div class="empty-state"><div class="empty-state-title">Este curso ainda não tem aulas cadastradas.</div></div>`;
+
+  const progresso = (window._cursoProgresso || []).find(p => p.id_curso === idCurso);
+  const concluidas = (progresso && progresso.aulas_concluidas) || [];
+  const aulaConcluida = concluidas.includes(aula.id);
+  const ultimaAula = window._playerAulaIndex === aulas.length - 1;
+
+  return cabecalho + `
+    <div class="table-card" style="padding:20px">
+      <div style="font-size:13px;color:var(--text3);margin-bottom:6px">Aula ${window._playerAulaIndex + 1} de ${aulas.length}</div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:12px">${aula.titulo}</div>
+      <div style="position:relative;padding-top:56.25%;background:#000;border-radius:6px;overflow:hidden;margin-bottom:16px">
+        <div style="position:absolute;inset:0">${embedVideoAulaHtml(aula)}</div>
+      </div>
+      ${aula.descricao ? `<div style="font-size:13px;color:var(--text2);margin-bottom:12px;white-space:pre-wrap">${aula.descricao}</div>` : ''}
+      ${aula.url_material_pdf ? `<button class="btn btn-sm" style="margin-bottom:16px" onclick="visualizarDocumento('${aula.url_material_pdf}')">📎 Material da aula</button>` : ''}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+        <div>${aulaConcluida ? '<span class="badge badge-active">✓ Aula concluída</span>' : '<span class="badge badge-gray">Não concluída</span>'}</div>
+        <div style="display:flex;gap:8px">
+          ${!aulaConcluida ? `<button class="btn btn-primary" onclick="marcarAulaConcluida(${aula.id})">Marcar como concluído</button>` : ''}
+          <button class="btn ${aulaConcluida ? 'btn-primary' : ''}" ${aulaConcluida ? '' : 'disabled style="opacity:.4;cursor:not-allowed"'} onclick="avancarAulaPlayer()">${ultimaAula ? 'Concluir Curso →' : 'Passar de Aula →'}</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+// Vídeo por Upload (Drive) usa o preview embutido do Drive; Link tenta
+// reconhecer YouTube (iframe embed) e, se não for, cai pra uma tag <video>
+// simples como melhor esforço (funciona pra link direto de arquivo de vídeo).
+function embedVideoAulaHtml(aula) {
+  if (!aula.url_video) return '<div style="color:#fff;display:flex;align-items:center;justify-content:center;height:100%">Vídeo não disponível</div>';
+  if (aula.tipo_video === 'upload') {
+    const id = extrairDriveFileId(aula.url_video);
+    const src = id ? `https://drive.google.com/file/d/${id}/preview` : aula.url_video;
+    return `<iframe src="${src}" style="position:absolute;inset:0;width:100%;height:100%;border:none" allow="autoplay"></iframe>`;
+  }
+  const youtubeId = extrairYoutubeId(aula.url_video);
+  if (youtubeId) {
+    return `<iframe src="https://www.youtube.com/embed/${youtubeId}" style="position:absolute;inset:0;width:100%;height:100%;border:none" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+  }
+  return `<video src="${aula.url_video}" controls style="position:absolute;inset:0;width:100%;height:100%"></video>`;
+}
+
+function extrairYoutubeId(url) {
+  const m = String(url || '').match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{6,})/);
+  return m ? m[1] : null;
+}
+
+window.marcarAulaConcluida = async function(idAula) {
+  if (!confirm('Confirma que já assistiu essa aula e quer marcar como concluída? Só dá pra passar de aula depois disso.')) return;
+
+  const idCurso = window._playerCursoId;
+  const idColaborador = currentUser?.colaboradorId;
+
+  try {
+    const progresso = (window._cursoProgresso || []).find(p => p.id_curso === idCurso);
+    const concluidasAtuais = (progresso && progresso.aulas_concluidas) || [];
+    const novasConcluidas = concluidasAtuais.includes(idAula) ? concluidasAtuais : [...concluidasAtuais, idAula];
+
+    if (progresso) {
+      const { error } = await supaClient.from('curso_progresso').update({ aulas_concluidas: novasConcluidas }).eq('id', progresso.id);
+      if (error) throw error;
+      progresso.aulas_concluidas = novasConcluidas;
+    } else {
+      const { data, error } = await supaClient.from('curso_progresso').insert([{
+        id_curso: idCurso,
+        id_colaborador: idColaborador,
+        aulas_concluidas: novasConcluidas,
+        status: 'em_andamento',
+      }]).select();
+      if (error) throw error;
+      if (!window._cursoProgresso) window._cursoProgresso = [];
+      window._cursoProgresso.push(data[0]);
+    }
+
+    showToast('Aula marcada como concluída!');
+    navigate('meus-cursos', 'Cursos');
+  } catch (e) {
+    console.error('Erro ao marcar aula como concluída:', e);
+    showToast('Erro ao marcar aula como concluída: ' + (e.message || e), 'danger');
+  }
+};
+
+window.avancarAulaPlayer = function() {
+  const idCurso = window._playerCursoId;
+  const aulas = (window._cursoAulas || []).filter(a => a.id_curso === idCurso).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+  const progresso = (window._cursoProgresso || []).find(p => p.id_curso === idCurso);
+  const concluidas = (progresso && progresso.aulas_concluidas) || [];
+  const aulaAtual = aulas[window._playerAulaIndex];
+  if (!aulaAtual || !concluidas.includes(aulaAtual.id)) return; // trava de segurança — botão já vem desabilitado
+
+  if (window._playerAulaIndex < aulas.length - 1) {
+    window._playerAulaIndex += 1;
+    navigate('meus-cursos', 'Cursos');
+    return;
+  }
+
+  const perguntas = (window._cursoAvaliacaoPerguntas || []).filter(p => p.id_curso === idCurso);
+  if (perguntas.length === 0) {
+    finalizarCursoSemAvaliacao();
+  } else {
+    window._playerModo = 'avaliacao';
+    window._respostasAvaliacaoAluno = {};
+    navigate('meus-cursos', 'Cursos');
+  }
+};
+
+// Curso sem nenhuma pergunta de avaliação final cadastrada: conclui direto
+// ao terminar a última aula, sem bloquear o colaborador esperando uma
+// avaliação que o admin ainda não montou.
+async function finalizarCursoSemAvaliacao() {
+  const idCurso = window._playerCursoId;
+  try {
+    const progresso = (window._cursoProgresso || []).find(p => p.id_curso === idCurso);
+    const payload = {
+      status: 'concluido',
+      resultado_avaliacao: null,
+      percentual_acerto: null,
+      concluido_em: new Date().toISOString(),
+    };
+    if (progresso) {
+      const { error } = await supaClient.from('curso_progresso').update(payload).eq('id', progresso.id);
+      if (error) throw error;
+      Object.assign(progresso, payload);
+    } else {
+      const { data, error } = await supaClient.from('curso_progresso').insert([{
+        id_curso: idCurso,
+        id_colaborador: currentUser?.colaboradorId,
+        aulas_concluidas: [],
+        ...payload,
+      }]).select();
+      if (error) throw error;
+      if (!window._cursoProgresso) window._cursoProgresso = [];
+      window._cursoProgresso.push(data[0]);
+    }
+
+    window._meusCursosAba = 'concluidos';
+    showToast('Curso concluído!');
+    window.sairDoPlayerCurso();
+  } catch (e) {
+    console.error('Erro ao concluir curso:', e);
+    showToast('Erro ao concluir curso: ' + (e.message || e), 'danger');
+  }
+}
+
+// --- Avaliação final (aluno) ---
+
+function renderAvaliacaoAlunoHtml(idCurso) {
+  const perguntas = (window._cursoAvaliacaoPerguntas || []).filter(p => p.id_curso === idCurso).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+  if (!window._respostasAvaliacaoAluno) window._respostasAvaliacaoAluno = {};
+
+  return `
+  <div class="table-card" style="padding:20px">
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px">Avaliação Final</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:20px">Responda todas as perguntas abaixo e clique em Enviar Avaliação.</div>
+    ${perguntas.map((p, i) => `
+      <div style="margin-bottom:20px">
+        <div style="font-weight:700;font-size:13px;margin-bottom:8px">${i + 1}. ${p.enunciado}</div>
+        ${(p.alternativas || []).map((alt, altIdx) => `
+          <label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;font-size:13px">
+            <input type="radio" name="resp-pergunta-${p.id}" value="${altIdx}" onchange="responderPerguntaAluno(${p.id}, ${altIdx})">
+            ${alt.texto}
+          </label>`).join('')}
+      </div>`).join('')}
+    <div id="avaliacao-aluno-aviso" style="display:none;color:var(--danger);font-size:13px;font-weight:600;margin-bottom:12px"></div>
+    <button class="btn btn-primary" onclick="enviarAvaliacaoAluno()">Enviar Avaliação</button>
+  </div>`;
+}
+
+window.responderPerguntaAluno = function(idPergunta, altIdx) {
+  if (!window._respostasAvaliacaoAluno) window._respostasAvaliacaoAluno = {};
+  window._respostasAvaliacaoAluno[idPergunta] = altIdx;
+};
+
+window.enviarAvaliacaoAluno = async function() {
+  const idCurso = window._playerCursoId;
+  const perguntas = (window._cursoAvaliacaoPerguntas || []).filter(p => p.id_curso === idCurso);
+  const respostas = window._respostasAvaliacaoAluno || {};
+  const avisoEl = document.getElementById('avaliacao-aluno-aviso');
+
+  if (Object.keys(respostas).length < perguntas.length) {
+    if (avisoEl) { avisoEl.textContent = 'Responda todas as perguntas antes de enviar.'; avisoEl.style.display = ''; }
+    return;
+  }
+
+  let acertos = 0;
+  perguntas.forEach(p => {
+    const alt = (p.alternativas || [])[respostas[p.id]];
+    if (alt && alt.correta) acertos += 1;
+  });
+  const percentual = perguntas.length > 0 ? Math.round((acertos / perguntas.length) * 100) : 100;
+  const aprovado = percentual >= NOTA_MINIMA_APROVACAO_CURSO;
+
+  try {
+    const progresso = (window._cursoProgresso || []).find(p => p.id_curso === idCurso);
+    const payload = {
+      status: 'concluido',
+      resultado_avaliacao: aprovado ? 'Aprovado' : 'Reprovado',
+      percentual_acerto: percentual,
+      concluido_em: new Date().toISOString(),
+    };
+    if (progresso) {
+      const { error } = await supaClient.from('curso_progresso').update(payload).eq('id', progresso.id);
+      if (error) throw error;
+      Object.assign(progresso, payload);
+    } else {
+      const { data, error } = await supaClient.from('curso_progresso').insert([{
+        id_curso: idCurso,
+        id_colaborador: currentUser?.colaboradorId,
+        aulas_concluidas: [],
+        ...payload,
+      }]).select();
+      if (error) throw error;
+      if (!window._cursoProgresso) window._cursoProgresso = [];
+      window._cursoProgresso.push(data[0]);
+    }
+
+    window._resultadoAvaliacaoAluno = { acertos, total: perguntas.length, percentual, aprovado };
+    window._playerModo = 'resultado';
+    navigate('meus-cursos', 'Cursos');
+  } catch (e) {
+    console.error('Erro ao enviar avaliação:', e);
+    showToast('Erro ao enviar avaliação: ' + (e.message || e), 'danger');
+  }
+};
+
+function renderResultadoAvaliacaoHtml() {
+  const r = window._resultadoAvaliacaoAluno;
+  if (!r) return '';
+  return `
+  <div class="table-card" style="padding:40px;text-align:center">
+    <div style="font-size:40px;margin-bottom:16px">${r.aprovado ? '✅' : '❌'}</div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:8px">${r.aprovado ? 'Aprovado!' : 'Reprovado'}</div>
+    <div style="font-size:14px;color:var(--text3);margin-bottom:24px">Você acertou ${r.acertos} de ${r.total} perguntas (${r.percentual}%).</div>
+    <button class="btn btn-primary" onclick="finalizarVisualizacaoResultado()">Voltar aos Cursos</button>
+  </div>`;
+}
+
+window.finalizarVisualizacaoResultado = function() {
+  window._meusCursosAba = 'concluidos';
+  window.sairDoPlayerCurso();
 };
 
 // ------------------------------------------------------------
