@@ -10860,12 +10860,21 @@ function renderAcompCursosModal() {
     return;
   }
 
-  // Em andamento: cursos Interno liberados que ainda não foram concluídos —
+  // Em andamento: cursos Interno liberados (curso_liberacoes) + cursos Externo
+  // registrados manualmente ("Registrar Curso Externo") com progresso ainda
+  // sem Período Fim — união dos dois, já que Externo nunca tem liberação.
   // "Não iniciado" quando ainda não existe linha de progresso, "Em andamento"
   // quando já existe mas o status ainda não virou "concluido".
   const liberacoes = (window._cursoLiberacoes || []).filter(l => l.id_colaborador === idColaborador && l.status === 'Liberado');
-  const itens = liberacoes
-    .map(l => ({ curso: (window._cursos || []).find(c => c.id === l.id_curso), progresso: progressos.find(p => p.id_curso === l.id_curso) }))
+  // Chave sempre em String: id_curso do <select> do registro manual chega
+  // como string, e comparar direto com o number vindo do Supabase (liberações/
+  // window._cursos) faria o curso "sumir" da lista por não bater ===.
+  const mapaCursos = new Map();
+  liberacoes.forEach(l => mapaCursos.set(String(l.id_curso), progressos.find(p => String(p.id_curso) === String(l.id_curso)) || null));
+  progressos.forEach(p => { if (!mapaCursos.has(String(p.id_curso))) mapaCursos.set(String(p.id_curso), p); });
+
+  const itens = [...mapaCursos.entries()]
+    .map(([idCursoStr, progresso]) => ({ curso: (window._cursos || []).find(c => String(c.id) === idCursoStr), progresso }))
     .filter(item => item.curso && (!item.progresso || item.progresso.status !== 'concluido'));
 
   body.innerHTML = itens.length === 0
@@ -10879,17 +10888,22 @@ function renderAcompCursosModal() {
           <div style="display:flex;align-items:center;gap:8px">
             <span style="font-size:12px;color:var(--text3)">${percentualConcluidoCurso(curso.id, progresso)}% concluído</span>
             ${progresso ? '<span class="badge badge-pending">Em andamento</span>' : '<span class="badge badge-gray">Não iniciado</span>'}
+            ${curso.tipo === 'Externo' && progresso ? `<button class="action-btn" title="Editar registro do curso externo" onclick="abrirRegistrarCursoConcluidoModal(${curso.id})">✎</button>` : ''}
           </div>
         </div>`).join('');
 }
 
-// Registro manual de conclusão — só faz sentido pra cursos Externo (Interno
-// é concluído pelo próprio colaborador jogando o player até o fim, ver
-// finalizarCursoSemAvaliacao/enviarAvaliacaoAluno). Usa upsert porque
-// curso_progresso tem unique(id_curso, id_colaborador): se já existir uma
-// linha (ex.: corrigindo as datas de um registro anterior), atualiza em vez
-// de tentar duplicar.
-window.abrirRegistrarCursoConcluidoModal = function() {
+// Registro manual — só faz sentido pra cursos Externo (Interno é concluído
+// pelo próprio colaborador jogando o player até o fim, ver
+// finalizarCursoSemAvaliacao/enviarAvaliacaoAluno). Sem Período Fim o
+// registro fica "Em andamento"; preenchendo os dois vira "Concluído" — o
+// status nunca é escolhido direto, é derivado das datas (ver
+// atualizarStatusPreviewRegistroCurso). Usa upsert porque curso_progresso tem
+// unique(id_curso, id_colaborador): reabrir esse modal num curso já
+// registrado (via o ✎ na lista "Em Andamento") edita a mesma linha em vez de
+// duplicar — nesse caso o curso vem travado (não dá pra trocar o curso de um
+// registro já existente, só as datas).
+window.abrirRegistrarCursoConcluidoModal = function(idCursoEditar) {
   if (!document.getElementById('registrar-curso-concluido-modal')) {
     const modal = document.createElement('div');
     modal.id = 'registrar-curso-concluido-modal';
@@ -10897,7 +10911,7 @@ window.abrirRegistrarCursoConcluidoModal = function() {
     modal.innerHTML = `
       <div style="background:#fff;border-radius:6px;width:440px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.2)">
         <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-          <div style="font-size:15px;font-weight:700">Registrar Curso Concluído</div>
+          <div style="font-size:15px;font-weight:700" id="rcc-modal-title">Registrar Curso Externo</div>
           <button type="button" class="btn btn-sm" onclick="document.getElementById('registrar-curso-concluido-modal').style.display='none'">✕</button>
         </div>
         <div style="padding:24px">
@@ -10907,11 +10921,15 @@ window.abrirRegistrarCursoConcluidoModal = function() {
           </div>
           <div class="form-group" style="margin-bottom:16px">
             <label class="form-label">Período Início</label>
-            <input class="form-input" type="date" id="rcc-inicio">
+            <input class="form-input" type="date" id="rcc-inicio" onchange="atualizarStatusPreviewRegistroCurso()">
+          </div>
+          <div class="form-group" style="margin-bottom:16px">
+            <label class="form-label">Período Fim <span style="font-weight:400;text-transform:none;color:var(--text3)">(opcional — deixe em branco enquanto o curso não terminou)</span></label>
+            <input class="form-input" type="date" id="rcc-fim" onchange="atualizarStatusPreviewRegistroCurso()">
           </div>
           <div class="form-group">
-            <label class="form-label">Período Fim</label>
-            <input class="form-input" type="date" id="rcc-fim">
+            <label class="form-label">Status</label>
+            <div id="rcc-status-preview"></div>
           </div>
         </div>
         <div class="modal-footer">
@@ -10925,10 +10943,32 @@ window.abrirRegistrarCursoConcluidoModal = function() {
   const cursosExternos = (window._cursos || []).filter(c => c.tipo === 'Externo');
   const sel = document.getElementById('rcc-curso');
   sel.innerHTML = '<option value="">— Selecione —</option>' + cursosExternos.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
-  document.getElementById('rcc-inicio').value = '';
-  document.getElementById('rcc-fim').value = '';
+
+  const progressoExistente = idCursoEditar
+    ? (window._acompCursoProgresso || []).find(p => String(p.id_curso) === String(idCursoEditar) && String(p.id_colaborador) === String(window._acompColaboradorId))
+    : null;
+
+  document.getElementById('rcc-modal-title').textContent = progressoExistente ? 'Editar Curso Externo' : 'Registrar Curso Externo';
+  document.getElementById('rcc-btn-salvar').textContent = progressoExistente ? 'Salvar' : 'Registrar';
+  sel.value = idCursoEditar || '';
+  sel.disabled = !!progressoExistente;
+  document.getElementById('rcc-inicio').value = progressoExistente?.iniciado_em ? String(progressoExistente.iniciado_em).slice(0, 10) : '';
+  document.getElementById('rcc-fim').value = progressoExistente?.concluido_em ? String(progressoExistente.concluido_em).slice(0, 10) : '';
+  atualizarStatusPreviewRegistroCurso();
 
   document.getElementById('registrar-curso-concluido-modal').style.display = 'flex';
+};
+
+// Status é só um reflexo do que já está nos campos (não dá pra escolher
+// direto) — atualiza a cada mudança de data pra deixar claro, antes mesmo de
+// salvar, que ficar sem Período Fim é o que joga o curso pra "Em andamento".
+window.atualizarStatusPreviewRegistroCurso = function() {
+  const preview = document.getElementById('rcc-status-preview');
+  if (!preview) return;
+  const fim = document.getElementById('rcc-fim').value;
+  preview.innerHTML = fim
+    ? '<span class="badge badge-active">Concluído</span>'
+    : '<span class="badge badge-pending">Em andamento</span>';
 };
 
 window.salvarRegistroCursoConcluido = async function() {
@@ -10938,34 +10978,34 @@ window.salvarRegistroCursoConcluido = async function() {
   const idColaborador = window._acompColaboradorId;
   if (!idCurso) return showToast('Selecione o curso.');
   if (!inicio) return showToast('Informe o período de início.');
-  if (!fim) return showToast('Informe o período de fim.');
   if (!idColaborador) return showToast('Colaborador não identificado.');
 
   const btn = document.getElementById('rcc-btn-salvar');
-  if (btn) { btn.disabled = true; btn.textContent = 'Registrando...'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Salvando...'; }
 
   try {
+    const concluido = !!fim;
     const payload = {
       id_curso: idCurso,
       id_colaborador: idColaborador,
-      status: 'concluido',
+      status: concluido ? 'concluido' : 'em_andamento',
       aulas_concluidas: [],
       resultado_avaliacao: null,
       percentual_acerto: null,
       iniciado_em: inicio,
-      concluido_em: fim,
+      concluido_em: concluido ? fim : null,
     };
     const { error } = await supaClient.from('curso_progresso').upsert(payload, { onConflict: 'id_curso,id_colaborador' });
     if (error) throw error;
 
     await loadCursoProgressoColabAcomp(idColaborador);
-    window._acompCursosAba = 'concluidos';
+    window._acompCursosAba = concluido ? 'concluidos' : 'andamento';
     if (window._renderAcompCursosModal) window._renderAcompCursosModal();
     document.getElementById('registrar-curso-concluido-modal').style.display = 'none';
-    showToast('Curso concluído registrado!');
+    showToast(concluido ? 'Curso concluído registrado!' : 'Curso registrado como em andamento!');
   } catch (e) {
-    console.error('Erro ao registrar curso concluído:', e);
-    showToast('Erro ao registrar curso concluído: ' + (e.message || e), 4000);
+    console.error('Erro ao registrar curso:', e);
+    showToast('Erro ao registrar curso: ' + (e.message || e), 4000);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Registrar'; }
   }
@@ -11135,7 +11175,7 @@ function pageRelatorioColaborador() {
         <div class="ms-dropdown-panel" id="rel-ms-panel-colaboradores" style="width:320px"></div>
       </div>
       <div style="min-width:240px">
-        <label class="form-label">Status a Imprimir (Todos os Colaboradores)</label>
+        <label class="form-label">Status a Imprimir</label>
         <select class="form-select" id="rel-status-todos">
           <option value="ativos_pendentes" selected>Ativos e Pendente Documentação</option>
           <option value="todos">Todos (incluir Inativos)</option>
