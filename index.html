@@ -8232,6 +8232,27 @@ async function loadCursoProgressoDoCursoForApp(idCurso) {
   }
 }
 
+// Progresso (curso_progresso) de TODOS os colaboradores em TODOS os cursos —
+// usado pela seção "Treinamentos" de Relatórios e Impressão, que pode listar
+// vários colaboradores de uma vez (relatório de "Todos"). Sem filtro, igual a
+// loadCursoLiberacoesForApp; diferente de _cursoProgresso (Meus Cursos),
+// _acompCursoProgresso (Acompanhamento e Registros, 1 colaborador) e
+// _cursoProgressoDoCurso (Métricas do Curso, 1 curso).
+async function loadCursoProgressoTodosForApp() {
+  if (!supaClient) {
+    console.error('Supabase client não inicializado para curso_progresso.');
+    window._cursoProgressoTodos = [];
+    return;
+  }
+  const { data, error } = await supaClient.from('curso_progresso').select('*');
+  if (error) {
+    console.error('Erro ao carregar progresso de cursos (todos):', error.message);
+    window._cursoProgressoTodos = [];
+  } else {
+    window._cursoProgressoTodos = data;
+  }
+}
+
 // Métricas do Curso — botão "📈" na listagem principal de Cursos. Agrega
 // curso_liberacoes (só existe pra Interno) e curso_progresso (Interno e
 // Externo, este via "Registrar curso concluído" em Acompanhamento e
@@ -8253,9 +8274,13 @@ window.abrirMetricasCursoModal = async function(idCurso) {
     modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;';
     modal.innerHTML = `
       <div style="background:#fff;border-radius:6px;width:760px;max-width:95vw;max-height:85vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.2)">
-        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
           <div style="font-size:15px;font-weight:700" id="metricas-curso-modal-title">Métricas do Curso</div>
-          <button type="button" class="btn btn-sm" onclick="document.getElementById('metricas-curso-modal').style.display='none'">✕ Fechar</button>
+          <div style="display:flex;gap:8px">
+            <button type="button" class="btn btn-sm" onclick="baixarMetricasCursoPdf()">🖨 Imprimir PDF</button>
+            <button type="button" class="btn btn-sm" onclick="baixarMetricasCursoXlsx()">⬇ Baixar XLSX</button>
+            <button type="button" class="btn btn-sm" onclick="document.getElementById('metricas-curso-modal').style.display='none'">✕ Fechar</button>
+          </div>
         </div>
         <div style="padding:24px" id="metricas-curso-body"></div>
       </div>`;
@@ -8271,6 +8296,7 @@ function renderMetricasCursoModal(idCurso) {
   const body = document.getElementById('metricas-curso-body');
   if (!body) return;
 
+  const curso = (window._cursos || []).find(c => c.id === idCurso);
   const liberacoes = (window._cursoLiberacoes || []).filter(l => l.id_curso === idCurso && l.status === 'Liberado');
   const progressos = window._cursoProgressoDoCurso || [];
 
@@ -8313,6 +8339,29 @@ function renderMetricasCursoModal(idCurso) {
       <div class="kpi-value">${valor}</div>
     </div>`;
 
+  // Guarda o estado calculado pra "Imprimir PDF"/"Baixar XLSX" lerem sem
+  // recalcular tudo de novo — linhasExport já em texto puro (sem HTML/badge),
+  // pronto pra virar linha de planilha/PDF.
+  const linhasExport = lista.map(p => {
+    const nome = nomeExibicaoLiberacaoOuProgresso(p) + (!p.id_colaborador ? ' (Convidado)' : '');
+    const status = p.progresso && p.progresso.status === 'concluido' ? 'Concluído' : p.progresso ? 'Em andamento' : 'Não iniciado';
+    const pct = `${percentualConcluidoCurso(idCurso, p.progresso)}%`;
+    const avaliacao = p.progresso && p.progresso.resultado_avaliacao
+      ? `${p.progresso.resultado_avaliacao}${p.progresso.percentual_acerto !== null && p.progresso.percentual_acerto !== undefined ? ` (${p.progresso.percentual_acerto}%)` : ''}`
+      : '—';
+    const periodoInicio = p.progresso && p.progresso.iniciado_em ? new Date(p.progresso.iniciado_em).toLocaleDateString('pt-BR') : '—';
+    const periodoFim = p.progresso && p.progresso.concluido_em ? new Date(p.progresso.concluido_em).toLocaleDateString('pt-BR') : '—';
+    return [nome, status, pct, avaliacao, periodoInicio, periodoFim];
+  });
+  window._metricasCursoAtual = {
+    curso,
+    linhas: linhasExport,
+    kpis: {
+      total, naoIniciados: naoIniciados.length, emAndamento: emAndamento.length, concluidos: concluidos.length,
+      taxaConclusao, taxaAprovacao, mediaAcerto, mediaDias,
+    },
+  };
+
   body.innerHTML = `
     <div class="kpi-grid" style="margin-bottom:24px">
       ${kpi('Pessoas com Registro', total)}
@@ -8327,15 +8376,18 @@ function renderMetricasCursoModal(idCurso) {
     <div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-bottom:8px">Detalhamento por Pessoa</div>
     ${lista.length === 0
       ? '<div style="text-align:center;padding:24px;color:var(--text3)">Ninguém liberado ou com progresso neste curso ainda.</div>'
-      : `<table style="width:100%">
+      : `<div style="overflow-x:auto">
+        <table style="width:100%">
           <thead><tr>
             <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Pessoa</th>
             <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Status</th>
             <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">% Concluído</th>
             <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Avaliação</th>
+            <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Período Início</th>
+            <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Período Fim</th>
           </tr></thead>
           <tbody>
-            ${lista.map(p => {
+            ${lista.map((p, i) => {
               const nome = nomeExibicaoLiberacaoOuProgresso(p);
               const status = p.progresso && p.progresso.status === 'concluido'
                 ? '<span class="badge badge-active">Concluído</span>'
@@ -8344,17 +8396,116 @@ function renderMetricasCursoModal(idCurso) {
               const avaliacao = p.progresso && p.progresso.resultado_avaliacao
                 ? `<span class="badge ${p.progresso.resultado_avaliacao === 'Aprovado' ? 'badge-active' : 'badge-inactive'}">${p.progresso.resultado_avaliacao}${p.progresso.percentual_acerto !== null && p.progresso.percentual_acerto !== undefined ? ` (${p.progresso.percentual_acerto}%)` : ''}</span>`
                 : '—';
+              const [, , , , periodoInicio, periodoFim] = linhasExport[i];
               return `
               <tr>
-                <td style="padding:8px 0;font-size:13px">${nome}${!p.id_colaborador ? ' <span class="badge badge-gray">Convidado</span>' : ''}</td>
+                <td style="padding:8px 0;font-size:13px;white-space:nowrap">${nome}${!p.id_colaborador ? ' <span class="badge badge-gray">Convidado</span>' : ''}</td>
                 <td style="padding:8px 0">${status}</td>
                 <td style="padding:8px 0;font-size:13px">${pct}%</td>
                 <td style="padding:8px 0">${avaliacao}</td>
+                <td style="padding:8px 0;font-size:13px;color:var(--text3);white-space:nowrap">${periodoInicio}</td>
+                <td style="padding:8px 0;font-size:13px;color:var(--text3);white-space:nowrap">${periodoFim}</td>
               </tr>`;
             }).join('')}
           </tbody>
-        </table>`}`;
+        </table>
+      </div>`}`;
 }
+
+// Exportações do modal Métricas do Curso (window._metricasCursoAtual, montado
+// em renderMetricasCursoModal) — PDF em paisagem (6 colunas não cabem bem em
+// retrato) e XLSX reaproveitando o mesmo helper de planilha com bordas
+// (construirPlanilhaComTitulos) usado no Relatório e Impressão.
+window.baixarMetricasCursoPdf = function() {
+  const estado = window._metricasCursoAtual;
+  if (!window.jspdf || !estado) { showToast('Abra as métricas do curso antes de gerar o PDF.'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'landscape' });
+  const margemEsq = 14;
+  let y = 18;
+
+  doc.setFontSize(15);
+  doc.setFont(undefined, 'bold');
+  doc.text(`Métricas do Curso — ${estado.curso ? estado.curso.nome : ''}`, margemEsq, y);
+  y += 8;
+
+  doc.setFontSize(9);
+  doc.setFont(undefined, 'normal');
+  doc.setTextColor(120);
+  doc.text(`Impresso em: ${new Date().toLocaleString('pt-BR')}`, margemEsq, y);
+  doc.setTextColor(0);
+  y += 8;
+
+  const k = estado.kpis;
+  doc.setFontSize(10);
+  doc.text(
+    `Pessoas com Registro: ${k.total}   Não Iniciados: ${k.naoIniciados}   Em Andamento: ${k.emAndamento}   Concluídos: ${k.concluidos}   ` +
+    `Taxa de Conclusão: ${k.taxaConclusao}%   Taxa de Aprovação: ${k.taxaAprovacao !== null ? k.taxaAprovacao + '%' : '—'}   ` +
+    `Média de Acerto: ${k.mediaAcerto !== null ? k.mediaAcerto + '%' : '—'}   Tempo Médio: ${k.mediaDias !== null ? k.mediaDias + ' dia(s)' : '—'}`,
+    margemEsq, y, { maxWidth: 270 }
+  );
+  y += 14;
+
+  const colunas = [
+    { titulo: 'Pessoa', x: margemEsq, w: 78 },
+    { titulo: 'Status', x: margemEsq + 80, w: 30 },
+    { titulo: '% Concl.', x: margemEsq + 112, w: 20 },
+    { titulo: 'Avaliação', x: margemEsq + 134, w: 44 },
+    { titulo: 'Período Início', x: margemEsq + 180, w: 32 },
+    { titulo: 'Período Fim', x: margemEsq + 214, w: 32 },
+  ];
+
+  const desenharCabecalho = () => {
+    doc.setFont(undefined, 'bold');
+    doc.setFontSize(10);
+    colunas.forEach(c => doc.text(c.titulo, c.x, y));
+    y += 2;
+    doc.setLineWidth(0.2);
+    doc.line(margemEsq, y, margemEsq + 232, y);
+    y += 6;
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(9);
+  };
+
+  desenharCabecalho();
+  (estado.linhas || []).forEach(linha => {
+    if (y > 185) { doc.addPage(); y = 18; desenharCabecalho(); }
+    colunas.forEach((c, i) => {
+      const texto = doc.splitTextToSize(String(linha[i] ?? ''), c.w)[0] || '';
+      doc.text(texto, c.x, y);
+    });
+    y += 7;
+  });
+
+  const nomeArquivo = `metricas-curso-${(estado.curso?.nome || 'curso').trim().replace(/\s+/g, '-').toLowerCase()}.pdf`;
+  doc.save(nomeArquivo);
+};
+
+window.baixarMetricasCursoXlsx = function() {
+  const estado = window._metricasCursoAtual;
+  if (!window.XLSX || !estado) { showToast('Abra as métricas do curso antes de gerar o XLSX.'); return; }
+
+  const k = estado.kpis;
+  const linhas = [
+    ['Métricas do Curso', estado.curso ? estado.curso.nome : ''],
+    ['Pessoas com Registro', k.total],
+    ['Não Iniciados', k.naoIniciados],
+    ['Em Andamento', k.emAndamento],
+    ['Concluídos', k.concluidos],
+    ['Taxa de Conclusão', `${k.taxaConclusao}%`],
+    ['Taxa de Aprovação', k.taxaAprovacao !== null ? `${k.taxaAprovacao}%` : '—'],
+    ['Média de Acerto', k.mediaAcerto !== null ? `${k.mediaAcerto}%` : '—'],
+    ['Tempo Médio de Conclusão', k.mediaDias !== null ? `${k.mediaDias} dia(s)` : '—'],
+    [],
+    ['Pessoa', 'Status', '% Concluído', 'Avaliação', 'Período Início', 'Período Fim'],
+    ...(estado.linhas || []),
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, construirPlanilhaComTitulos(linhas, { autoWidth: true }), 'Métricas do Curso');
+  const nomeArquivo = `metricas-curso-${(estado.curso?.nome || 'curso').trim().replace(/\s+/g, '-').toLowerCase()}.xlsx`;
+  XLSX.writeFile(wb, nomeArquivo);
+};
 
 window.abrirCursoModal = function(id = null) {
   window._editingCursoId = id;
@@ -10872,6 +11023,7 @@ const SECOES_RELATORIO = [
   { key: 'epis', label: 'EPIs / Tamanhos' },
   { key: 'perfil', label: 'Mapeamento de Perfil' },
   { key: 'ocorrencias', label: 'Ocorrências' },
+  { key: 'treinamentos', label: 'Treinamentos' },
 ];
 
 function pageRelatorioColaborador() {
@@ -10892,6 +11044,9 @@ function pageRelatorioColaborador() {
     loadDadosPessoaisEpiForApp(),
     loadMapeamentoPerfilForApp(),
     loadOcorrenciasFromSupabase(),
+    loadCursosForApp(),
+    loadCursoLiberacoesForApp(),
+    loadCursoProgressoTodosForApp(),
   ]).then(popularSelect);
 
   return `
@@ -11017,12 +11172,37 @@ function montarDadosRelatorioColaborador(idColaborador) {
   const ocorrencias = (_ocorrenciasSupabase || [])
     .filter(o => String(o.id_colaborador) === String(idColaborador))
     .sort((a, b) => (b.data_ocorrencia || '').localeCompare(a.data_ocorrencia || ''));
-  return { colab, historico, dadosPessoais, perfil, ocorrencias };
+  const treinamentos = montarTreinamentosRelatorioColaborador(idColaborador);
+  return { colab, historico, dadosPessoais, perfil, ocorrencias, treinamentos };
+}
+
+// Une curso_liberacoes (só Interno) e curso_progresso (Interno e Externo,
+// este via "Registrar curso concluído") pra esse colaborador — mesma lógica
+// de Métricas do Curso/Acompanhamento e Registros, só que aqui filtrando por
+// colaborador em vez de por curso.
+function montarTreinamentosRelatorioColaborador(idColaborador) {
+  const liberacoes = (window._cursoLiberacoes || []).filter(l => String(l.id_colaborador) === String(idColaborador) && l.status === 'Liberado');
+  const progressos = (window._cursoProgressoTodos || []).filter(p => String(p.id_colaborador) === String(idColaborador));
+
+  const mapaCursos = new Map();
+  liberacoes.forEach(l => mapaCursos.set(l.id_curso, { id_curso: l.id_curso, progresso: null }));
+  progressos.forEach(p => {
+    const atual = mapaCursos.get(p.id_curso) || { id_curso: p.id_curso, progresso: null };
+    atual.progresso = p;
+    mapaCursos.set(p.id_curso, atual);
+  });
+
+  const todos = [...mapaCursos.values()]
+    .map(t => ({ curso: (window._cursos || []).find(c => c.id === t.id_curso), progresso: t.progresso }))
+    .filter(t => t.curso);
+  const concluidos = todos.filter(t => t.progresso && t.progresso.status === 'concluido');
+  const emAndamento = todos.filter(t => !concluidos.includes(t));
+  return { todos, emAndamento, concluidos };
 }
 
 // Monta o miolo HTML (sem o card externo) de um colaborador, respeitando as seções escolhidas.
 function construirHtmlSecoesColaborador(dadosColab, secoes) {
-  const { colab, historico, dadosPessoais, perfil, ocorrencias } = dadosColab;
+  const { colab, historico, dadosPessoais, perfil, ocorrencias, treinamentos } = dadosColab;
   const linha = (label, valor) => `<div style="display:flex;padding:6px 0;border-bottom:1px solid var(--bg2);font-size:13px"><div style="width:240px;color:var(--text3);flex-shrink:0">${label}</div><div style="flex:1">${valor || '—'}</div></div>`;
   const salarioNum = salarioBaseDoColaborador(colab);
   const salarioFmt = salarioNum !== null ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(salarioNum) : '—';
@@ -11139,6 +11319,35 @@ function construirHtmlSecoesColaborador(dadosColab, secoes) {
       </table>`}`;
   }
 
+  if (secoes.includes('treinamentos')) {
+    const t = treinamentos || { emAndamento: [], concluidos: [] };
+    html += `
+      <div class="form-section-title" style="margin-top:24px">Treinamentos</div>
+      <div style="font-size:12px;font-weight:700;color:var(--text2);margin:8px 0 4px">Cursos em Andamento</div>
+      ${t.emAndamento.length === 0 ? '<div style="font-size:13px;color:var(--text3);padding:4px 0 8px">Nenhum curso em andamento.</div>' : t.emAndamento.map(item => `
+        <div style="display:flex;padding:6px 0;border-bottom:1px solid var(--bg2);font-size:13px">
+          <div style="flex:1">${item.curso.nome}</div>
+          <div style="color:var(--text3)">${item.progresso ? 'Em andamento' : 'Não iniciado'}</div>
+        </div>`).join('')}
+      <div style="font-size:12px;font-weight:700;color:var(--text2);margin:16px 0 4px">Cursos Concluídos</div>
+      ${t.concluidos.length === 0 ? '<div style="font-size:13px;color:var(--text3);padding:4px 0 8px">Nenhum curso concluído.</div>' : `
+      <table style="width:100%;margin-top:8px">
+        <thead><tr>
+          <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Curso</th>
+          <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Período Início</th>
+          <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Período Fim</th>
+          <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Avaliação</th>
+        </tr></thead>
+        <tbody>${t.concluidos.map(item => `
+          <tr>
+            <td style="padding:6px 0;font-size:13px">${item.curso.nome}</td>
+            <td style="padding:6px 0;font-size:13px">${item.progresso.iniciado_em ? new Date(item.progresso.iniciado_em).toLocaleDateString('pt-BR') : '—'}</td>
+            <td style="padding:6px 0;font-size:13px">${item.progresso.concluido_em ? new Date(item.progresso.concluido_em).toLocaleDateString('pt-BR') : '—'}</td>
+            <td style="padding:6px 0;font-size:13px">${item.progresso.resultado_avaliacao ? `${item.progresso.resultado_avaliacao}${item.progresso.percentual_acerto !== null && item.progresso.percentual_acerto !== undefined ? ` (${item.progresso.percentual_acerto}%)` : ''}` : '—'}</td>
+          </tr>`).join('')}</tbody>
+      </table>`}`;
+  }
+
   return html;
 }
 
@@ -11228,7 +11437,7 @@ window.gerarRelatorioTodos = function() {
 // Escreve as seções de um colaborador no documento PDF, usando state.y como cursor
 // vertical compartilhado (objeto mutável, já que números não passam por referência).
 function escreverColaboradorNoPdf(doc, state, dadosColab, secoes, margemEsq) {
-  const { colab, historico, dadosPessoais, perfil, ocorrencias } = dadosColab;
+  const { colab, historico, dadosPessoais, perfil, ocorrencias, treinamentos } = dadosColab;
 
   const checarQuebra = (qtdLinhas) => { if (state.y + qtdLinhas * 6 > 280) { doc.addPage(); state.y = 18; } };
   const titulo = (texto) => {
@@ -11353,6 +11562,23 @@ function escreverColaboradorNoPdf(doc, state, dadosColab, secoes, margemEsq) {
         campo('Descrição', o.descricao || '—');
         campo('Registrado Por', o.registrado_por || '—');
         state.y += 2;
+      });
+    }
+  }
+
+  if (secoes.includes('treinamentos')) {
+    titulo('Treinamentos');
+    const t = treinamentos || { emAndamento: [], concluidos: [] };
+    if (t.emAndamento.length === 0 && t.concluidos.length === 0) {
+      campo('Treinamentos', 'Nenhum curso liberado ou com progresso registrado.');
+    } else {
+      t.emAndamento.forEach(item => {
+        campo(item.curso.nome, item.progresso ? 'Em andamento' : 'Não iniciado');
+      });
+      t.concluidos.forEach(item => {
+        const periodo = `${item.progresso.iniciado_em ? new Date(item.progresso.iniciado_em).toLocaleDateString('pt-BR') : '—'} – ${item.progresso.concluido_em ? new Date(item.progresso.concluido_em).toLocaleDateString('pt-BR') : '—'}`;
+        const avaliacao = item.progresso.resultado_avaliacao ? `${item.progresso.resultado_avaliacao}${item.progresso.percentual_acerto !== null && item.progresso.percentual_acerto !== undefined ? ` (${item.progresso.percentual_acerto}%)` : ''}` : '—';
+        campo(`${item.curso.nome} (Concluído)`, `Período: ${periodo} | Avaliação: ${avaliacao}`);
       });
     }
   }
@@ -11518,6 +11744,27 @@ function construirBlocosSecoesRelatorio(colaboradores) {
     });
   });
 
+  // Uma tabela só (em vez de duas, Em Andamento/Concluídos, como na tela e no
+  // PDF) — a coluna Status já diferencia, e assim fica 1 guia por seção como
+  // as demais, sem precisar duplicar NOME_ABA_SECAO_RELATORIO.
+  blocos.treinamentos = { titulo: 'Treinamentos', linhas: [['Nome', 'Curso', 'Status', 'Período Início', 'Período Fim', 'Avaliação']] };
+  colaboradores.forEach(({ colab, treinamentos }) => {
+    (treinamentos?.todos || []).forEach(item => {
+      const status = item.progresso && item.progresso.status === 'concluido' ? 'Concluído' : item.progresso ? 'Em andamento' : 'Não iniciado';
+      const avaliacao = item.progresso && item.progresso.resultado_avaliacao
+        ? `${item.progresso.resultado_avaliacao}${item.progresso.percentual_acerto !== null && item.progresso.percentual_acerto !== undefined ? ` (${item.progresso.percentual_acerto}%)` : ''}`
+        : '';
+      blocos.treinamentos.linhas.push([
+        colab.nome_colaborador || '',
+        item.curso.nome || '',
+        status,
+        item.progresso?.iniciado_em ? new Date(item.progresso.iniciado_em).toLocaleDateString('pt-BR') : '',
+        item.progresso?.concluido_em ? new Date(item.progresso.concluido_em).toLocaleDateString('pt-BR') : '',
+        avaliacao,
+      ]);
+    });
+  });
+
   return blocos;
 }
 
@@ -11528,6 +11775,7 @@ const NOME_ABA_SECAO_RELATORIO = {
   epis: 'EPIs',
   perfil: 'Mapeamento de Perfil',
   ocorrencias: 'Ocorrências',
+  treinamentos: 'Treinamentos',
 };
 
 // Empilha os blocos das seções escolhidas numa única lista de linhas (aoa),
