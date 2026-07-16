@@ -3982,7 +3982,33 @@ async function loadDocumentosFromSupabase() {
 }
 
 function renderDocColabRows() {
-  const emp = _colaboradoresSupabase || [];
+  if (!window._docFiltros) window._docFiltros = { cargo: '', status: 'ativos_pendentes' };
+  if (!window._docOrdem) window._docOrdem = 'nome';
+
+  // Atualiza as opções do filtro de Cargo com os cargos realmente em uso pelos colaboradores.
+  const selCargo = document.getElementById('doc-filtro-cargo');
+  if (selCargo) {
+    const cargosDistintos = [...new Set((_colaboradoresSupabase || []).map(c => c.cargos ? c.cargos.nome_cargo : null).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    selCargo.innerHTML = '<option value="">Todos os cargos</option>' +
+      cargosDistintos.map(c => `<option value="${c}" ${window._docFiltros.cargo === c ? 'selected' : ''}>${c}</option>`).join('');
+  }
+
+  let emp = [...(_colaboradoresSupabase || [])];
+  if (window._docFiltros.cargo) emp = emp.filter(c => (c.cargos ? c.cargos.nome_cargo : '') === window._docFiltros.cargo);
+  if (window._docFiltros.status === 'ativos_pendentes') emp = emp.filter(c => c.status_colaborador === 'Ativo' || c.status_colaborador === 'Pendente Documentação');
+  else if (window._docFiltros.status) emp = emp.filter(c => c.status_colaborador === window._docFiltros.status);
+
+  emp.sort((a, b) => {
+    if (window._docOrdem === 'cargo') {
+      return (a.cargos ? a.cargos.nome_cargo : '').localeCompare(b.cargos ? b.cargos.nome_cargo : '');
+    }
+    return (a.nome_colaborador || '').localeCompare(b.nome_colaborador || '');
+  });
+
+  if (emp.length === 0) {
+    return `<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text3)">Nenhum colaborador encontrado.</td></tr>`;
+  }
+
   return emp.map(colab => {
     const cid = colab.id_colaborador || colab.id || colab.id_colab || colab.id_colaboradores || colab.codigo || '';
     const nome = colab.nome_colaborador || colab.nome || colab.name || '—';
@@ -4006,9 +4032,32 @@ window.renderDocColabTable = function() {
   if (tbody) tbody.innerHTML = renderDocColabRows();
 };
 
+window.filtrarDocCargo = function(valor) {
+  if (!window._docFiltros) window._docFiltros = { cargo: '', status: 'ativos_pendentes' };
+  window._docFiltros.cargo = valor;
+  window.renderDocColabTable();
+};
+
+window.filtrarDocStatus = function(valor) {
+  if (!window._docFiltros) window._docFiltros = { cargo: '', status: 'ativos_pendentes' };
+  window._docFiltros.status = valor;
+  window.renderDocColabTable();
+};
+
+window.ordenarDocColab = function(valor) {
+  window._docOrdem = valor;
+  window.renderDocColabTable();
+};
+
 // Página: Documentos por Colaborador
 function pageDocumentos() {
   if (!window._documentosPorColab) window._documentosPorColab = {};
+
+  // Toda vez que a aba abre, o filtro de status volta pro padrão (Ativos e
+  // Pendente Documentação) — diferente das outras telas, que mantêm o último
+  // filtro escolhido entre navegações.
+  window._docFiltros = { cargo: '', status: 'ativos_pendentes' };
+  window._docOrdem = 'nome';
 
   // Se colaboradores não carregados, tenta carregar e mostra mensagem
   if (!_colaboradoresSupabase || _colaboradoresSupabase.length === 0) {
@@ -4045,6 +4094,26 @@ function pageDocumentos() {
       <div class="table-header">
         <span class="table-title">Documentos por Colaborador</span>
         <input class="search-input" id="doc-search" placeholder="Buscar colaborador..." oninput="filtrarDocColab(this.value)">
+      </div>
+      <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:var(--bg2)">
+        <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase">Filtrar:</span>
+        <select class="form-select" id="doc-filtro-cargo" style="width:auto" onchange="filtrarDocCargo(this.value)">
+          <option value="">Todos os cargos</option>
+        </select>
+        <select class="form-select" style="width:auto" onchange="filtrarDocStatus(this.value)">
+          <option value="ativos_pendentes" selected>Ativos e Pendente Documentação</option>
+          <option value="">Todos os status</option>
+          <option value="Ativo">Ativo</option>
+          <option value="Inativo">Inativo</option>
+          <option value="Férias">Férias</option>
+          <option value="Afastado">Afastado</option>
+          <option value="Pendente Documentação">Pendente Documentação</option>
+        </select>
+        <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-left:12px">Ordenar:</span>
+        <select class="form-select" style="width:auto" onchange="ordenarDocColab(this.value)">
+          <option value="nome" selected>Nome (A-Z)</option>
+          <option value="cargo">Cargo (A-Z)</option>
+        </select>
       </div>
       <table>
         <thead><tr><th>Colaborador</th><th>Cargo</th><th>Status</th><th>Documentos</th><th>Ações</th></tr></thead>
@@ -8035,6 +8104,7 @@ function pageCursos() {
             ${c.tipo === 'Interno' ? `
               <button class="action-btn" title="Dashboard" onclick="abrirDashboardCursoModal(${c.id})">📊</button>
             ` : ''}
+            <button class="action-btn" title="Métricas do Curso" onclick="abrirMetricasCursoModal(${c.id})">📈</button>
             <button class="action-btn" title="Editar" onclick="abrirCursoModal(${c.id})">✎</button>
           </td>
         </tr>`;
@@ -8132,6 +8202,159 @@ window.abrirUsuariosLiberadosCursoModal = async function(idCurso) {
 
   document.getElementById('usuarios-liberados-curso-modal').style.display = 'flex';
 };
+
+// Resolve o nome de exibição de uma linha de curso_liberacoes/curso_progresso
+// — colaborador normal via id_colaborador, convidado via id_usuario (ver
+// sql/adicionar-usuario-convidado*.sql).
+function nomeExibicaoLiberacaoOuProgresso(row) {
+  if (row.id_colaborador) return nomeColaboradorPorId(row.id_colaborador);
+  const u = (window._usuariosCadastrados || []).find(x => x.id === row.id_usuario);
+  return u ? (u.usuario_convidado || u.email || '—') : '—';
+}
+
+// Progresso (curso_progresso) de TODAS as pessoas num curso específico — usado
+// pelas Métricas do Curso. Diferente de window._cursoProgresso (usado em
+// "Meus Cursos", filtrado por aluno) e window._acompCursoProgresso (usado em
+// Acompanhamento e Registros, filtrado por colaborador): aqui o filtro é pelo
+// curso, pra agregar todo mundo que já mexeu nele.
+async function loadCursoProgressoDoCursoForApp(idCurso) {
+  if (!supaClient) {
+    console.error('Supabase client não inicializado para curso_progresso.');
+    window._cursoProgressoDoCurso = [];
+    return;
+  }
+  const { data, error } = await supaClient.from('curso_progresso').select('*').eq('id_curso', idCurso);
+  if (error) {
+    console.error('Erro ao carregar progresso do curso:', error.message);
+    window._cursoProgressoDoCurso = [];
+  } else {
+    window._cursoProgressoDoCurso = data;
+  }
+}
+
+// Métricas do Curso — botão "📈" na listagem principal de Cursos. Agrega
+// curso_liberacoes (só existe pra Interno) e curso_progresso (Interno e
+// Externo, este via "Registrar curso concluído" em Acompanhamento e
+// Registros) numa lista única de "pessoas" que já têm alguma relação com o
+// curso, pra não depender só de liberação — Externo nunca tem liberação.
+window.abrirMetricasCursoModal = async function(idCurso) {
+  await Promise.all([
+    loadCursoLiberacoesForApp(),
+    loadCursoProgressoDoCursoForApp(idCurso),
+    (!window._cursoAulas) ? loadCursoAulasForApp() : Promise.resolve(),
+    (!window._usuariosCadastrados) ? loadUsuariosCadastrados() : Promise.resolve(),
+  ]);
+
+  const curso = (window._cursos || []).find(c => c.id === idCurso);
+
+  if (!document.getElementById('metricas-curso-modal')) {
+    const modal = document.createElement('div');
+    modal.id = 'metricas-curso-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:6px;width:760px;max-width:95vw;max-height:85vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:15px;font-weight:700" id="metricas-curso-modal-title">Métricas do Curso</div>
+          <button type="button" class="btn btn-sm" onclick="document.getElementById('metricas-curso-modal').style.display='none'">✕ Fechar</button>
+        </div>
+        <div style="padding:24px" id="metricas-curso-body"></div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  document.getElementById('metricas-curso-modal-title').textContent = `Métricas do Curso — ${curso ? curso.nome : ''}`;
+  renderMetricasCursoModal(idCurso);
+  document.getElementById('metricas-curso-modal').style.display = 'flex';
+};
+
+function renderMetricasCursoModal(idCurso) {
+  const body = document.getElementById('metricas-curso-body');
+  if (!body) return;
+
+  const liberacoes = (window._cursoLiberacoes || []).filter(l => l.id_curso === idCurso && l.status === 'Liberado');
+  const progressos = window._cursoProgressoDoCurso || [];
+
+  // Uma "pessoa" pode aparecer só na liberação (ainda não começou), só no
+  // progresso (Externo, registrado manualmente sem liberação) ou nos dois.
+  const chave = row => row.id_colaborador ? `c:${row.id_colaborador}` : `u:${row.id_usuario}`;
+  const pessoas = new Map();
+  liberacoes.forEach(l => pessoas.set(chave(l), { id_colaborador: l.id_colaborador, id_usuario: l.id_usuario, progresso: null }));
+  progressos.forEach(p => {
+    const k = chave(p);
+    const atual = pessoas.get(k) || { id_colaborador: p.id_colaborador, id_usuario: p.id_usuario, progresso: null };
+    atual.progresso = p;
+    pessoas.set(k, atual);
+  });
+  const lista = [...pessoas.values()];
+
+  const concluidos = lista.filter(p => p.progresso && p.progresso.status === 'concluido');
+  const emAndamento = lista.filter(p => p.progresso && p.progresso.status === 'em_andamento');
+  const naoIniciados = lista.filter(p => !p.progresso);
+  const total = lista.length;
+  const taxaConclusao = total > 0 ? Math.round((concluidos.length / total) * 100) : 0;
+
+  const comAvaliacao = progressos.filter(p => p.resultado_avaliacao);
+  const aprovados = comAvaliacao.filter(p => p.resultado_avaliacao === 'Aprovado').length;
+  const taxaAprovacao = comAvaliacao.length > 0 ? Math.round((aprovados / comAvaliacao.length) * 100) : null;
+
+  const comPercentual = progressos.filter(p => p.percentual_acerto !== null && p.percentual_acerto !== undefined);
+  const mediaAcerto = comPercentual.length > 0
+    ? Math.round(comPercentual.reduce((acc, p) => acc + parseFloat(p.percentual_acerto), 0) / comPercentual.length)
+    : null;
+
+  const comDuracao = concluidos.filter(p => p.progresso.iniciado_em && p.progresso.concluido_em);
+  const mediaDias = comDuracao.length > 0
+    ? Math.round(comDuracao.reduce((acc, p) => acc + (new Date(p.progresso.concluido_em) - new Date(p.progresso.iniciado_em)) / 86400000, 0) / comDuracao.length)
+    : null;
+
+  const kpi = (label, valor) => `
+    <div class="kpi-card">
+      <div class="kpi-label">${label}</div>
+      <div class="kpi-value">${valor}</div>
+    </div>`;
+
+  body.innerHTML = `
+    <div class="kpi-grid" style="margin-bottom:24px">
+      ${kpi('Pessoas com Registro', total)}
+      ${kpi('Não Iniciados', naoIniciados.length)}
+      ${kpi('Em Andamento', emAndamento.length)}
+      ${kpi('Concluídos', concluidos.length)}
+      ${kpi('Taxa de Conclusão', `${taxaConclusao}%`)}
+      ${kpi('Taxa de Aprovação', taxaAprovacao !== null ? `${taxaAprovacao}%` : '—')}
+      ${kpi('Média de Acerto', mediaAcerto !== null ? `${mediaAcerto}%` : '—')}
+      ${kpi('Tempo Médio de Conclusão', mediaDias !== null ? `${mediaDias} dia${mediaDias === 1 ? '' : 's'}` : '—')}
+    </div>
+    <div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-bottom:8px">Detalhamento por Pessoa</div>
+    ${lista.length === 0
+      ? '<div style="text-align:center;padding:24px;color:var(--text3)">Ninguém liberado ou com progresso neste curso ainda.</div>'
+      : `<table style="width:100%">
+          <thead><tr>
+            <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Pessoa</th>
+            <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Status</th>
+            <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">% Concluído</th>
+            <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Avaliação</th>
+          </tr></thead>
+          <tbody>
+            ${lista.map(p => {
+              const nome = nomeExibicaoLiberacaoOuProgresso(p);
+              const status = p.progresso && p.progresso.status === 'concluido'
+                ? '<span class="badge badge-active">Concluído</span>'
+                : p.progresso ? '<span class="badge badge-pending">Em andamento</span>' : '<span class="badge badge-gray">Não iniciado</span>';
+              const pct = percentualConcluidoCurso(idCurso, p.progresso);
+              const avaliacao = p.progresso && p.progresso.resultado_avaliacao
+                ? `<span class="badge ${p.progresso.resultado_avaliacao === 'Aprovado' ? 'badge-active' : 'badge-inactive'}">${p.progresso.resultado_avaliacao}${p.progresso.percentual_acerto !== null && p.progresso.percentual_acerto !== undefined ? ` (${p.progresso.percentual_acerto}%)` : ''}</span>`
+                : '—';
+              return `
+              <tr>
+                <td style="padding:8px 0;font-size:13px">${nome}${!p.id_colaborador ? ' <span class="badge badge-gray">Convidado</span>' : ''}</td>
+                <td style="padding:8px 0">${status}</td>
+                <td style="padding:8px 0;font-size:13px">${pct}%</td>
+                <td style="padding:8px 0">${avaliacao}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>`}`;
+}
 
 window.abrirCursoModal = function(id = null) {
   window._editingCursoId = id;
