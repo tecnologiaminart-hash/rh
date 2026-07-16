@@ -8141,9 +8141,9 @@ function pageCursos() {
           </td>
           <td style="white-space:nowrap">
             ${c.tipo === 'Interno' ? `
-              <button class="action-btn" title="Dashboard" onclick="abrirDashboardCursoModal(${c.id})">📊</button>
+              <button class="action-btn" title="Dashboard" onclick="abrirDashboardCursoModal(${c.id})">Dashboard 📊</button>
             ` : ''}
-            <button class="action-btn" title="Métricas do Curso" onclick="abrirMetricasCursoModal(${c.id})">📈</button>
+            <button class="action-btn" title="Métricas do Curso" onclick="abrirMetricasCursoModal(${c.id})">Métricas 📈</button>
             <button class="action-btn" title="Editar" onclick="abrirCursoModal(${c.id})">✎</button>
           </td>
         </tr>`;
@@ -8847,12 +8847,22 @@ window.abrirPreviewAulaAdmin = function(idAula) {
       <div style="background:#fff;border-radius:6px;width:640px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.25)">
         <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
           <div style="font-size:15px;font-weight:700" id="preview-aula-modal-title">Aula</div>
-          <button type="button" class="btn btn-sm" onclick="document.getElementById('preview-aula-modal').style.display='none'">✕ Fechar</button>
+          <div style="display:flex;gap:8px">
+            <button type="button" class="btn btn-sm" id="preview-aula-modal-editar">✎ Editar</button>
+            <button type="button" class="btn btn-sm" onclick="document.getElementById('preview-aula-modal').style.display='none'">✕ Fechar</button>
+          </div>
         </div>
         <div style="padding:24px" id="preview-aula-modal-body"></div>
       </div>`;
     document.body.appendChild(modal);
   }
+
+  // Editar descrição/material fica no formulário completo (abrirAulaModal) —
+  // esse preview é só leitura (vídeo + descrição + link do material).
+  document.getElementById('preview-aula-modal-editar').onclick = () => {
+    document.getElementById('preview-aula-modal').style.display = 'none';
+    window.abrirAulaModal(aula.id_curso, aula.id);
+  };
 
   document.getElementById('preview-aula-modal-title').textContent = aula.titulo;
   document.getElementById('preview-aula-modal-body').innerHTML = `
@@ -8950,7 +8960,10 @@ window.abrirAulaModal = function(idCurso, idAula = null) {
             <div class="form-group form-full" id="aul-material-wrap">
               <label class="form-label">Material em PDF (opcional)</label>
               <input class="form-input" id="aul-material" type="file" accept="application/pdf">
-              <div id="aul-material-atual" style="font-size:12px;color:var(--text3);margin-top:6px"></div>
+              <div id="aul-material-atual" style="margin-top:6px"></div>
+              <label id="aul-material-remover-wrap" style="display:none;align-items:center;gap:6px;margin-top:8px;font-size:12px;font-weight:400;text-transform:none;cursor:pointer;color:var(--danger)">
+                <input type="checkbox" id="aul-material-remover"> Remover material atual ao salvar
+              </label>
             </div>
           </div>
         </div>
@@ -8996,7 +9009,13 @@ window.abrirAulaModal = function(idCurso, idAula = null) {
   toggleTipoVideoAula(tipoAtual);
 
   document.getElementById('aul-video-atual').textContent = (aula && aula.tipo_video === 'upload' && aula.url_video) ? `Vídeo atual: ${aula.url_video}` : '';
-  document.getElementById('aul-material-atual').textContent = (aula && aula.url_material_pdf) ? `Material atual: ${aula.url_material_pdf}` : '';
+
+  const temMaterialAtual = !!(aula && aula.url_material_pdf);
+  document.getElementById('aul-material-atual').innerHTML = temMaterialAtual
+    ? `<button type="button" class="btn btn-sm" onclick="visualizarDocumento('${aula.url_material_pdf}')">📎 Ver material atual</button>`
+    : '';
+  document.getElementById('aul-material-remover-wrap').style.display = temMaterialAtual ? 'flex' : 'none';
+  document.getElementById('aul-material-remover').checked = false;
 
   document.getElementById('aula-modal').style.display = 'flex';
 };
@@ -9190,6 +9209,8 @@ window.salvarAula = async function() {
     let urlMaterial = aulaExistente?.url_material_pdf || null;
     if (arquivoMaterial) {
       urlMaterial = await window.enviarArquivoAulaParaDrive(arquivoMaterial, { driveFolderId });
+    } else if (document.getElementById('aul-material-remover')?.checked) {
+      urlMaterial = null;
     }
 
     // Duração: Link vem dos campos Horas/Minutos; Upload vem do que foi
