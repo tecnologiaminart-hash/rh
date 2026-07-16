@@ -1152,6 +1152,10 @@ async function carregarUsuarioLogado(authUser) {
 
   return {
     colaboradorId: usuario.colaborador_id,
+    // Só usado quando não há colaborador vinculado (login de teste/convidado,
+    // ver sql/adicionar-usuario-convidado.sql) — identifica o aluno em
+    // curso_liberacoes/curso_progresso via id_usuario no lugar de id_colaborador.
+    usuarioId: usuario.id,
     perfil: usuario.perfis.nome,
     permissoes: new Set((permissoes || []).map(p => p.pagina_id)),
   };
@@ -9003,13 +9007,17 @@ window.excluirPerguntaAvaliacao = async function(id) {
 // ------------------------------------------------------------
 const NOTA_MINIMA_APROVACAO_CURSO = 70; // % de acerto na avaliação final
 
-async function loadCursoProgressoForApp(idColaborador) {
+// idColaborador OU idUsuario (nunca os dois) — idUsuario só é usado por login
+// de teste/convidado sem colaborador vinculado (ver
+// sql/adicionar-usuario-convidado-progresso.sql).
+async function loadCursoProgressoForApp(idColaborador, idUsuario) {
   if (!supaClient) {
     console.error('Supabase client não inicializado para curso_progresso.');
     window._cursoProgresso = [];
     return;
   }
-  const { data, error } = await supaClient.from('curso_progresso').select('*').eq('id_colaborador', idColaborador);
+  const query = supaClient.from('curso_progresso').select('*');
+  const { data, error } = idColaborador ? await query.eq('id_colaborador', idColaborador) : await query.eq('id_usuario', idUsuario);
   if (error) {
     console.error('Erro ao carregar progresso de cursos:', error.message);
     window._cursoProgresso = [];
@@ -9018,11 +9026,20 @@ async function loadCursoProgressoForApp(idColaborador) {
   }
 }
 
+// Identifica o "aluno" logado pra Meus Cursos/curso_liberacoes/curso_progresso:
+// colaborador normal usa colaboradorId; login de teste/convidado (sem
+// colaborador) usa usuarioId no lugar (ver sql/adicionar-usuario-convidado*.sql).
+function identidadeAlunoAtual() {
+  const idColaborador = currentUser?.colaboradorId || null;
+  const idUsuario = !idColaborador ? (currentUser?.usuarioId || null) : null;
+  return { idColaborador, idUsuario };
+}
+
 function pageMeusCursos() {
   document.getElementById('topbar-actions').innerHTML = '';
 
-  const idColaborador = currentUser?.colaboradorId;
-  if (!idColaborador) {
+  const { idColaborador, idUsuario } = identidadeAlunoAtual();
+  if (!idColaborador && !idUsuario) {
     return `<div class="empty-state"><div class="empty-state-icon">🔒</div><div class="empty-state-title">Colaborador não vinculado</div><div class="empty-state-desc">Seu usuário não está vinculado a um colaborador. Contate o administrador.</div></div>`;
   }
 
@@ -9038,7 +9055,7 @@ function pageMeusCursos() {
   Promise.all([
     loadCursosForApp(),
     loadCursoLiberacoesForApp(),
-    loadCursoProgressoForApp(idColaborador),
+    loadCursoProgressoForApp(idColaborador, idUsuario),
   ]).then(renderMeusCursosLista);
 
   return `
@@ -9061,9 +9078,10 @@ window.mudarAbaMeusCursos = function(aba) {
 function renderMeusCursosLista() {
   const container = document.getElementById('meus-cursos-lista');
   if (!container) return;
-  const idColaborador = currentUser?.colaboradorId;
+  const { idColaborador, idUsuario } = identidadeAlunoAtual();
 
-  const liberados = (window._cursoLiberacoes || []).filter(l => l.id_colaborador === idColaborador && l.status === 'Liberado');
+  const liberados = (window._cursoLiberacoes || []).filter(l =>
+    l.status === 'Liberado' && (idColaborador ? l.id_colaborador === idColaborador : l.id_usuario === idUsuario));
   const itens = liberados
     .map(l => ({
       curso: (window._cursos || []).find(c => c.id === l.id_curso),
@@ -9109,9 +9127,11 @@ window.abrirPlayerCurso = async function(idCurso) {
   let progresso = (window._cursoProgresso || []).find(p => p.id_curso === idCurso);
   if (!progresso) {
     try {
+      const { idColaborador, idUsuario } = identidadeAlunoAtual();
       const { data, error } = await supaClient.from('curso_progresso').insert([{
         id_curso: idCurso,
-        id_colaborador: currentUser?.colaboradorId,
+        id_colaborador: idColaborador,
+        id_usuario: idUsuario,
         aulas_concluidas: [],
         status: 'em_andamento',
       }]).select();
