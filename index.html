@@ -8173,7 +8173,7 @@ window.abrirAulaModal = function(idCurso, idAula = null) {
                 <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="aul-tipo-video" value="upload" onchange="toggleTipoVideoAula('upload')"> Upload para o Drive</label>
               </div>
               <input class="form-input" id="aul-video-link" placeholder="https://...">
-              <input class="form-input" id="aul-video-upload" type="file" accept="video/*" style="display:none" onchange="preencherDuracaoAulaDoArquivo(this.files[0])">
+              <input class="form-input" id="aul-video-upload" type="file" accept="video/*" style="display:none" onchange="preencherDuracaoAulaDoArquivo(this.files[0]); preencherTituloAulaDoArquivo(this.files[0])">
               <div id="aul-video-atual" style="font-size:12px;color:var(--text3);margin-top:6px"></div>
               <div id="aul-duracao-detectada" style="font-size:12px;color:var(--text3);margin-top:6px"></div>
             </div>
@@ -8263,6 +8263,17 @@ window.preencherDuracaoAulaDoArquivo = function(file) {
     if (detectadaEl) detectadaEl.textContent = 'Não foi possível detectar a duração deste arquivo.';
   };
   video.src = URL.createObjectURL(file);
+};
+
+// Sugere o Título a partir do nome do arquivo (sem extensão, com "_"/"-"
+// virando espaço) — o campo continua um input normal, então dá pra editar
+// livremente depois de preenchido.
+window.preencherTituloAulaDoArquivo = function(file) {
+  if (!file) return;
+  const tituloEl = document.getElementById('aul-titulo');
+  if (!tituloEl) return;
+  const nomeSemExtensao = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+  if (nomeSemExtensao) tituloEl.value = nomeSemExtensao;
 };
 
 window.salvarAula = async function() {
