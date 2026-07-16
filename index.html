@@ -8520,7 +8520,8 @@ async function loadUsuariosCadastrados() {
 
 function pageCadastroUsuarioTreinamento() {
   document.getElementById('topbar-actions').innerHTML =
-    `<button class="btn btn-primary" onclick="abrirCadastroUsuarioModal()">+ Selecionar Colaborador</button>`;
+    `<button class="btn" onclick="abrirLiberacoesCursosModal()">🔓 Liberação de Cursos para Usuário</button>
+     <button class="btn btn-primary" onclick="abrirCadastroUsuarioModal()">+ Selecionar Colaborador</button>`;
 
   const renderTabela = () => {
     const tbody = document.getElementById('cadastro-usuario-tbody');
@@ -8781,6 +8782,197 @@ window.salvarCadastroUsuario = async function() {
     showToast('Erro ao cadastrar usuário: ' + (e.message || e), 'danger');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Cadastrar'; }
+  }
+};
+
+// ------------------------------------------------------------
+// LIBERAÇÃO DE CURSOS PARA USUÁRIO — vincula um curso Interno a um
+// colaborador que já tem login de Treinamento, com status Liberado/Bloqueado
+// (ver sql/criar-curso-liberacoes.sql).
+// ------------------------------------------------------------
+async function loadCursoLiberacoesForApp() {
+  if (!supaClient) {
+    console.error('Supabase client não inicializado para curso_liberacoes.');
+    window._cursoLiberacoes = [];
+    return;
+  }
+  const { data, error } = await supaClient.from('curso_liberacoes').select('*').order('created_at', { ascending: false });
+  if (error) {
+    console.error('Erro ao carregar liberações de curso:', error.message);
+    window._cursoLiberacoes = [];
+  } else {
+    window._cursoLiberacoes = data;
+  }
+}
+
+// Cores do select de Status: Liberado = verde, Bloqueado = vermelho.
+function corSelectLiberacao(status) {
+  return status === 'Liberado' ? 'background:#e8f5ec;color:#1a7a3c' : 'background:#f5e8e8;color:#a03030';
+}
+window.aplicarCorLiberacao = function(selectEl) {
+  selectEl.style.cssText += ';' + corSelectLiberacao(selectEl.value);
+};
+
+window.abrirLiberacoesCursosModal = async function() {
+  await Promise.all([
+    loadCursoLiberacoesForApp(),
+    (!window._cursos || window._cursos.length === 0) ? loadCursosForApp() : Promise.resolve(),
+    (!window._usuariosCadastrados) ? loadUsuariosCadastrados() : Promise.resolve(),
+  ]);
+
+  if (!document.getElementById('liberacoes-cursos-modal')) {
+    const modal = document.createElement('div');
+    modal.id = 'liberacoes-cursos-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:6px;width:720px;max-width:95vw;max-height:85vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:15px;font-weight:700">Liberação de Cursos para Usuário</div>
+          <div style="display:flex;gap:8px">
+            <button type="button" class="btn btn-sm btn-primary" onclick="abrirNovaLiberacaoModal()">+ Nova Liberação</button>
+            <button type="button" class="btn btn-sm" onclick="document.getElementById('liberacoes-cursos-modal').style.display='none'">✕ Fechar</button>
+          </div>
+        </div>
+        <div style="padding:24px" id="liberacoes-cursos-body"></div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  window._renderLiberacoesCursos = renderLiberacoesCursosModal;
+  renderLiberacoesCursosModal();
+  document.getElementById('liberacoes-cursos-modal').style.display = 'flex';
+};
+
+function renderLiberacoesCursosModal() {
+  const body = document.getElementById('liberacoes-cursos-body');
+  if (!body) return;
+
+  const lista = [...(window._cursoLiberacoes || [])];
+  body.innerHTML = lista.length === 0
+    ? '<div style="text-align:center;padding:24px;color:var(--text3)">Nenhuma liberação cadastrada ainda.</div>'
+    : `<table style="width:100%">
+        <thead><tr>
+          <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Colaborador</th>
+          <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Curso</th>
+          <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Status</th>
+          <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Ações</th>
+        </tr></thead>
+        <tbody>
+          ${lista.map(l => {
+            const curso = (window._cursos || []).find(c => c.id === l.id_curso);
+            return `
+            <tr>
+              <td style="padding:8px 0;font-size:13px">${nomeColaboradorPorId(l.id_colaborador)}</td>
+              <td style="padding:8px 0;font-size:13px">${curso ? curso.nome : '—'}</td>
+              <td style="padding:8px 0">
+                <select class="form-select" style="width:auto;${corSelectLiberacao(l.status)}" onchange="aplicarCorLiberacao(this); alterarStatusLiberacao(${l.id}, this.value)">
+                  <option value="Liberado" ${l.status === 'Liberado' ? 'selected' : ''}>Liberado</option>
+                  <option value="Bloqueado" ${l.status === 'Bloqueado' ? 'selected' : ''}>Bloqueado</option>
+                </select>
+              </td>
+              <td style="padding:8px 0">
+                <button class="action-btn" title="Excluir" onclick="excluirLiberacaoCurso(${l.id})" style="color:var(--danger)">✕</button>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+}
+
+window.alterarStatusLiberacao = async function(id, novoStatus) {
+  try {
+    const { error } = await supaClient.from('curso_liberacoes').update({ status: novoStatus }).eq('id', id);
+    if (error) throw error;
+    const registro = (window._cursoLiberacoes || []).find(l => l.id === id);
+    if (registro) registro.status = novoStatus;
+    showToast('Status atualizado!');
+  } catch (e) {
+    console.error('Erro ao atualizar status da liberação:', e);
+    showToast('Erro ao atualizar status: ' + (e.message || e), 'danger');
+  }
+};
+
+window.excluirLiberacaoCurso = async function(id) {
+  if (!confirm('Excluir esta liberação?')) return;
+  try {
+    const { error } = await supaClient.from('curso_liberacoes').delete().eq('id', id);
+    if (error) throw error;
+    await loadCursoLiberacoesForApp();
+    if (window._renderLiberacoesCursos) window._renderLiberacoesCursos();
+    showToast('Liberação excluída!');
+  } catch (e) {
+    console.error('Erro ao excluir liberação:', e);
+    showToast('Erro ao excluir liberação: ' + (e.message || e), 'danger');
+  }
+};
+
+// Só colaboradores que já têm login de Treinamento (perfil_id=3) fazem
+// sentido aqui — sem login, não tem como acessar curso nenhum ainda.
+window.abrirNovaLiberacaoModal = function() {
+  if (!document.getElementById('nova-liberacao-modal')) {
+    const modal = document.createElement('div');
+    modal.id = 'nova-liberacao-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1100;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:6px;width:440px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:15px;font-weight:700">Nova Liberação</div>
+          <button type="button" class="btn btn-sm" onclick="document.getElementById('nova-liberacao-modal').style.display='none'">✕</button>
+        </div>
+        <div style="padding:24px">
+          <div class="form-group" style="margin-bottom:16px">
+            <label class="form-label">Colaborador</label>
+            <select class="form-select" id="nl-colaborador"><option value="">— Selecione —</option></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Curso (Interno)</label>
+            <select class="form-select" id="nl-curso"><option value="">— Selecione —</option></select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn" onclick="document.getElementById('nova-liberacao-modal').style.display='none'">Cancelar</button>
+          <button type="button" class="btn btn-primary" id="nl-btn-salvar" onclick="salvarNovaLiberacao()">Liberar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  const usuariosTreinamento = (window._usuariosCadastrados || []).filter(u => u.perfil_id === 3);
+  const selColab = document.getElementById('nl-colaborador');
+  selColab.innerHTML = '<option value="">— Selecione —</option>' +
+    usuariosTreinamento.map(u => `<option value="${u.colaborador_id}">${nomeColaboradorPorId(u.colaborador_id)}</option>`).join('');
+
+  const cursosInternos = (window._cursos || []).filter(c => c.tipo === 'Interno');
+  const selCurso = document.getElementById('nl-curso');
+  selCurso.innerHTML = '<option value="">— Selecione —</option>' +
+    cursosInternos.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+
+  document.getElementById('nova-liberacao-modal').style.display = 'flex';
+};
+
+window.salvarNovaLiberacao = async function() {
+  const idColaborador = document.getElementById('nl-colaborador').value;
+  const idCurso = document.getElementById('nl-curso').value;
+  if (!idColaborador) return showToast('Selecione o colaborador.');
+  if (!idCurso) return showToast('Selecione o curso.');
+
+  const btn = document.getElementById('nl-btn-salvar');
+  if (btn) { btn.disabled = true; btn.textContent = 'Liberando...'; }
+
+  try {
+    const { error } = await supaClient.from('curso_liberacoes')
+      .upsert({ id_curso: idCurso, id_colaborador: idColaborador, status: 'Liberado' }, { onConflict: 'id_curso,id_colaborador' });
+    if (error) throw error;
+
+    await loadCursoLiberacoesForApp();
+    if (window._renderLiberacoesCursos) window._renderLiberacoesCursos();
+    document.getElementById('nova-liberacao-modal').style.display = 'none';
+    showToast('Curso liberado para o colaborador!');
+  } catch (e) {
+    console.error('Erro ao liberar curso:', e);
+    showToast('Erro ao liberar curso: ' + (e.message || e), 'danger');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Liberar'; }
   }
 };
 
