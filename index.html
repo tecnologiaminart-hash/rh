@@ -9228,8 +9228,8 @@ function renderPlayerCursoHtml() {
     <div class="table-card" style="padding:20px">
       <div style="font-size:13px;color:var(--text3);margin-bottom:6px">Aula ${window._playerAulaIndex + 1} de ${aulas.length}</div>
       <div style="font-size:16px;font-weight:700;margin-bottom:12px">${aula.titulo}</div>
-      <div style="position:relative;padding-top:56.25%;background:#000;border-radius:6px;overflow:hidden;margin-bottom:16px">
-        <div style="position:absolute;inset:0">${embedVideoAulaHtml(aula)}</div>
+      <div style="width:100%;max-width:100%;aspect-ratio:16/9;background:#000;border-radius:6px;overflow:hidden;margin-bottom:16px">
+        ${embedVideoAulaHtml(aula)}
       </div>
       ${aula.descricao ? `<div style="font-size:13px;color:var(--text2);margin-bottom:12px;white-space:pre-wrap">${aula.descricao}</div>` : ''}
       ${aula.url_material_pdf ? `<button class="btn btn-sm" style="margin-bottom:16px" onclick="visualizarDocumento('${aula.url_material_pdf}')">📎 Material da aula</button>` : ''}
@@ -9277,24 +9277,31 @@ window.voltarAulaRevisao = function() {
 // simples como melhor esforço (funciona pra link direto de arquivo de vídeo).
 function embedVideoAulaHtml(aula) {
   if (!aula.url_video) return '<div style="color:#fff;display:flex;align-items:center;justify-content:center;height:100%">Vídeo não disponível</div>';
+  // display:block nos três (iframe/video são inline por padrão) — sem isso
+  // sobra uns pixels de gap embaixo (alinhamento de baseline) que, somado ao
+  // container com aspect-ratio, é o que fazia o player "vazar" um fundo preto
+  // por cima dos controles no mobile.
   if (aula.tipo_video === 'upload') {
     const id = extrairDriveFileId(aula.url_video);
     const src = id ? `https://drive.google.com/file/d/${id}/preview` : aula.url_video;
-    return `<iframe src="${src}" style="position:absolute;inset:0;width:100%;height:100%;border:none" allow="autoplay" allowfullscreen></iframe>`;
+    return `<iframe src="${src}" style="display:block;width:100%;height:100%;border:none" allow="autoplay" allowfullscreen></iframe>`;
   }
   const youtubeId = extrairYoutubeId(aula.url_video);
   if (youtubeId) {
     // modestbranding+rel=0 reduzem a marca do YouTube e sugestões de outros
     // vídeos ao final — não dá pra remover o link "Assistir no YouTube" por
     // completo (exigência do próprio YouTube pra embeds).
-    return `<iframe src="https://www.youtube.com/embed/${youtubeId}?modestbranding=1&rel=0" style="position:absolute;inset:0;width:100%;height:100%;border:none" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+    return `<iframe src="https://www.youtube.com/embed/${youtubeId}?modestbranding=1&rel=0" style="display:block;width:100%;height:100%;border:none" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
   }
   // Link direto de arquivo de vídeo: sem interface do Google, então dá pra
   // tirar o menu de botão direito (que tem "Abrir vídeo em nova guia") e
   // esconder download/Picture-in-Picture dos controles nativos.
   // playsinline é essencial no mobile: sem ele o Safari/iOS não renderiza o
   // vídeo na página (só toca em tela cheia nativa, ou nem chega a exibir).
-  return `<video src="${aula.url_video}" controls playsinline webkit-playsinline="true" controlsList="nodownload noremoteplayback" disablePictureInPicture oncontextmenu="return false" style="position:absolute;inset:0;width:100%;height:100%"></video>`;
+  // preload="metadata" evita o quadro preto sólido antes do 1º play: sem
+  // isso alguns navegadores mobile só buscam o vídeo no toque em play,
+  // deixando a tela preta (sem nem o primeiro frame) até isso acontecer.
+  return `<video src="${aula.url_video}" controls playsinline webkit-playsinline="true" preload="metadata" controlsList="nodownload noremoteplayback" disablePictureInPicture oncontextmenu="return false" style="display:block;width:100%;height:100%;object-fit:contain;background:#000"></video>`;
 }
 
 function extrairYoutubeId(url) {
