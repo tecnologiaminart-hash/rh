@@ -9618,7 +9618,9 @@ window.abrirPlayerCurso = async function(idCurso) {
   // enviarAvaliacaoAluno, que também bloqueia reenvio nesse caso).
   if (todasAulasConcluidas) {
     window._playerReview = true;
-    window._playerAulaIndex = 0;
+    // null = modo livre começa na tela "escolha uma aula" (sem abrir vídeo
+    // nenhum de cara) — ver renderPlayerCursoHtml/irParaAulaIndex.
+    window._playerAulaIndex = null;
     if (aulas.length > 0) {
       window._playerModo = 'aula';
     } else if (podeFazerOuRefazerAvaliacao) {
@@ -9632,7 +9634,10 @@ window.abrirPlayerCurso = async function(idCurso) {
   }
 
   window._playerReview = false;
-  window._playerAulaIndex = indicePrimeiraPendente;
+  // Convidado também começa na tela "escolha uma aula" (modo livre desde o
+  // início — ver ehUsuarioConvidado()); colaborador normal, ainda com aulas
+  // pendentes, segue igual: abre direto na próxima aula pendente.
+  window._playerAulaIndex = ehUsuarioConvidado() ? null : indicePrimeiraPendente;
   window._playerModo = 'aula';
   window._respostasAvaliacaoAluno = {};
 
@@ -9664,13 +9669,10 @@ function renderPlayerCursoHtml() {
   }
 
   const aulas = (window._cursoAulas || []).filter(a => a.id_curso === idCurso).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
-  const aula = aulas[window._playerAulaIndex];
-  if (!aula) return cabecalho + `<div class="empty-state"><div class="empty-state-title">Este curso ainda não tem aulas cadastradas.</div></div>`;
+  if (aulas.length === 0) return cabecalho + `<div class="empty-state"><div class="empty-state-title">Este curso ainda não tem aulas cadastradas.</div></div>`;
 
   const progresso = (window._cursoProgresso || []).find(p => p.id_curso === idCurso);
   const concluidas = (progresso && progresso.aulas_concluidas) || [];
-  const aulaConcluida = concluidas.includes(aula.id);
-  const ultimaAula = window._playerAulaIndex === aulas.length - 1;
 
   // Convidado (login de teste/sem colaborador) navega livre entre as aulas
   // desde o início; colaborador normal só ganha esse modo livre depois de já
@@ -9678,6 +9680,41 @@ function renderPlayerCursoHtml() {
   // Enquanto colaborador ainda está fazendo o curso pela 1ª vez, continua
   // precisando marcar cada aula como concluída pra passar pra próxima.
   const modoLivre = window._playerReview || ehUsuarioConvidado();
+
+  // Lista vertical de aulas, clicáveis — reaproveitada nos dois estados do
+  // modo livre: sozinha (tela "Selecione uma aula", _playerAulaIndex ainda
+  // null) e ao lado do player, depois que uma aula é escolhida.
+  const listaVerticalHtml = `
+    <div style="display:flex;flex-direction:column;gap:8px">
+      ${aulas.map((a, i) => {
+        const concluidaNaLista = concluidas.includes(a.id);
+        const ativa = i === window._playerAulaIndex;
+        return `
+        <div class="table-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;cursor:pointer;${ativa ? 'border:2px solid var(--accent)' : ''}" onclick="irParaAulaIndex(${i})">
+          <div style="display:flex;align-items:center;gap:8px;min-width:0">
+            <span style="font-size:12px;color:var(--text3);flex-shrink:0">${i + 1}.</span>
+            <span style="font-size:13px;font-weight:${ativa ? '700' : '500'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.titulo}</span>
+          </div>
+          ${concluidaNaLista ? '<span class="badge badge-active" style="flex-shrink:0">✓</span>' : ''}
+        </div>`;
+      }).join('')}
+    </div>`;
+
+  // Modo livre sem aula escolhida ainda: mostra só a lista, sem abrir vídeo
+  // nenhum de cara (ver abrirPlayerCurso — _playerAulaIndex começa null).
+  if (modoLivre && window._playerAulaIndex === null) {
+    return cabecalho + `
+      <div class="table-card" style="padding:20px">
+        <div style="font-size:14px;font-weight:700;margin-bottom:14px">Selecione uma aula</div>
+        ${listaVerticalHtml}
+      </div>`;
+  }
+
+  const aula = aulas[window._playerAulaIndex];
+  if (!aula) return cabecalho + `<div class="empty-state"><div class="empty-state-title">Aula não encontrada.</div></div>`;
+
+  const aulaConcluida = concluidas.includes(aula.id);
+  const ultimaAula = window._playerAulaIndex === aulas.length - 1;
 
   // Em revisão, "concluído" só é verdade de fato se o status já virou
   // "concluido" (aprovado, ou sem avaliação). Reprovado/nunca avaliado ainda
@@ -9687,44 +9724,37 @@ function renderPlayerCursoHtml() {
   const perguntas = (window._cursoAvaliacaoPerguntas || []).filter(p => p.id_curso === idCurso);
   const podeFazerOuRefazerAvaliacao = window._playerReview && progresso && progresso.resultado_avaliacao !== 'Aprovado' && perguntas.length > 0;
 
-  // Lista de todas as aulas em linha, clicáveis — só aparece no modo livre
-  // (ver irParaAulaIndex). No modo com trava, navegação continua só
-  // sequencial (Passar de Aula, liberado depois de marcar concluído).
-  const listaAulasHtml = modoLivre ? `
-    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
-      ${aulas.map((a, i) => {
-        const concluidaNaLista = concluidas.includes(a.id);
-        const ativa = i === window._playerAulaIndex;
-        const tituloCurto = a.titulo.length > 28 ? a.titulo.slice(0, 28) + '…' : a.titulo;
-        return `<button type="button" class="btn btn-sm ${ativa ? 'btn-primary' : ''}" onclick="irParaAulaIndex(${i})" title="${a.titulo.replace(/"/g, '&quot;')}">${concluidaNaLista ? '✓ ' : ''}${i + 1}. ${tituloCurto}</button>`;
-      }).join('')}
-    </div>` : '';
-
   return cabecalho + `
-    <div class="table-card" style="padding:20px;overflow:visible">
-      <div style="font-size:13px;color:var(--text3);margin-bottom:6px">Aula ${window._playerAulaIndex + 1} de ${aulas.length}</div>
-      <div style="font-size:16px;font-weight:700;margin-bottom:12px">${aula.titulo}</div>
-      ${listaAulasHtml}
-      <div style="width:100%;aspect-ratio:16/9;background:#000;margin-bottom:16px">
-        ${embedVideoAulaHtml(aula)}
+    <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
+      <div class="table-card" style="padding:20px;overflow:visible;flex:2 1 400px;min-width:280px">
+        <div style="font-size:13px;color:var(--text3);margin-bottom:6px">Aula ${window._playerAulaIndex + 1} de ${aulas.length}</div>
+        <div style="font-size:16px;font-weight:700;margin-bottom:12px">${aula.titulo}</div>
+        <div style="width:100%;aspect-ratio:16/9;background:#000;margin-bottom:16px">
+          ${embedVideoAulaHtml(aula)}
+        </div>
+        ${aula.descricao ? `<div style="font-size:13px;color:var(--text2);margin-bottom:12px;white-space:pre-wrap">${aula.descricao}</div>` : ''}
+        ${aula.url_material_pdf ? `<button class="btn btn-sm" style="margin-bottom:16px" onclick="visualizarDocumento('${aula.url_material_pdf}')">📎 Material da aula</button>` : ''}
+        <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin-top:8px">
+          ${modoLivre ? `
+          <div>${window._playerReview ? (emRevisaoConcluidoDeVerdade ? '<span class="badge badge-active">✓ Curso concluído</span>' : '<span class="badge badge-pending">Aulas concluídas — avaliação pendente</span>') : (aulaConcluida ? '<span class="badge badge-active">✓ Aula concluída</span>' : '<span class="badge badge-gray">Não concluída</span>')}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            ${!aulaConcluida ? `<button class="btn" onclick="marcarAulaConcluida(${aula.id})">Marcar como concluído</button>` : ''}
+            <button class="btn" ${window._playerAulaIndex === 0 ? 'disabled style="opacity:.4;cursor:not-allowed"' : ''} onclick="voltarAulaRevisao()">← Aula Anterior</button>
+            <button class="btn" ${ultimaAula ? 'disabled style="opacity:.4;cursor:not-allowed"' : ''} onclick="avancarAulaRevisao()">Próxima Aula →</button>
+            ${podeFazerOuRefazerAvaliacao ? `<button class="btn btn-primary" onclick="irParaAvaliacaoRevisao()">Fazer Avaliação</button>` : ''}
+          </div>` : `
+          <div>${aulaConcluida ? '<span class="badge badge-active">✓ Aula concluída</span>' : '<span class="badge badge-gray">Não concluída</span>'}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            ${!aulaConcluida ? `<button class="btn btn-primary" onclick="marcarAulaConcluida(${aula.id})">Marcar como concluído</button>` : ''}
+            <button class="btn ${aulaConcluida ? 'btn-primary' : ''}" ${aulaConcluida ? '' : 'disabled style="opacity:.4;cursor:not-allowed"'} onclick="avancarAulaPlayer()">${ultimaAula ? 'Concluir Curso →' : 'Passar de Aula →'}</button>
+          </div>`}
+        </div>
       </div>
-      ${aula.descricao ? `<div style="font-size:13px;color:var(--text2);margin-bottom:12px;white-space:pre-wrap">${aula.descricao}</div>` : ''}
-      ${aula.url_material_pdf ? `<button class="btn btn-sm" style="margin-bottom:16px" onclick="visualizarDocumento('${aula.url_material_pdf}')">📎 Material da aula</button>` : ''}
-      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin-top:8px">
-        ${modoLivre ? `
-        <div>${window._playerReview ? (emRevisaoConcluidoDeVerdade ? '<span class="badge badge-active">✓ Curso concluído</span>' : '<span class="badge badge-pending">Aulas concluídas — avaliação pendente</span>') : (aulaConcluida ? '<span class="badge badge-active">✓ Aula concluída</span>' : '<span class="badge badge-gray">Não concluída</span>')}</div>
-        <div style="display:flex;flex-wrap:wrap;gap:8px">
-          ${!aulaConcluida ? `<button class="btn" onclick="marcarAulaConcluida(${aula.id})">Marcar como concluído</button>` : ''}
-          <button class="btn" ${window._playerAulaIndex === 0 ? 'disabled style="opacity:.4;cursor:not-allowed"' : ''} onclick="voltarAulaRevisao()">← Aula Anterior</button>
-          <button class="btn" ${ultimaAula ? 'disabled style="opacity:.4;cursor:not-allowed"' : ''} onclick="avancarAulaRevisao()">Próxima Aula →</button>
-          ${podeFazerOuRefazerAvaliacao ? `<button class="btn btn-primary" onclick="irParaAvaliacaoRevisao()">Fazer Avaliação</button>` : ''}
-        </div>` : `
-        <div>${aulaConcluida ? '<span class="badge badge-active">✓ Aula concluída</span>' : '<span class="badge badge-gray">Não concluída</span>'}</div>
-        <div style="display:flex;flex-wrap:wrap;gap:8px">
-          ${!aulaConcluida ? `<button class="btn btn-primary" onclick="marcarAulaConcluida(${aula.id})">Marcar como concluído</button>` : ''}
-          <button class="btn ${aulaConcluida ? 'btn-primary' : ''}" ${aulaConcluida ? '' : 'disabled style="opacity:.4;cursor:not-allowed"'} onclick="avancarAulaPlayer()">${ultimaAula ? 'Concluir Curso →' : 'Passar de Aula →'}</button>
-        </div>`}
-      </div>
+      ${modoLivre ? `
+      <div style="flex:1 1 240px;min-width:220px;max-width:320px">
+        <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Aulas do curso</div>
+        ${listaVerticalHtml}
+      </div>` : ''}
     </div>`;
 }
 
