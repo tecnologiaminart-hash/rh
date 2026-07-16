@@ -8416,13 +8416,21 @@ function renderMetricasCursoModal(idCurso) {
 // em renderMetricasCursoModal) — PDF em paisagem (6 colunas não cabem bem em
 // retrato) e XLSX reaproveitando o mesmo helper de planilha com bordas
 // (construirPlanilhaComTitulos) usado no Relatório e Impressão.
-window.baixarMetricasCursoPdf = function() {
+window.baixarMetricasCursoPdf = async function() {
   const estado = window._metricasCursoAtual;
   if (!window.jspdf || !estado) { showToast('Abra as métricas do curso antes de gerar o PDF.'); return; }
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'landscape' });
   const margemEsq = 14;
   let y = 18;
+
+  try {
+    const logoBase64 = await obterLogoBase64();
+    doc.addImage(logoBase64, 'PNG', margemEsq, y, 45, 10.85);
+    y += 16;
+  } catch (e) {
+    console.warn('Não foi possível incluir a logo no PDF:', e);
+  }
 
   doc.setFontSize(15);
   doc.setFont(undefined, 'bold');
@@ -8477,7 +8485,10 @@ window.baixarMetricasCursoPdf = function() {
     y += 7;
   });
 
-  const nomeArquivo = `metricas-curso-${(estado.curso?.nome || 'curso').trim().replace(/\s+/g, '-').toLowerCase()}.pdf`;
+  const hoje = new Date();
+  const dataStr = `${String(hoje.getDate()).padStart(2, '0')}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${hoje.getFullYear()}`;
+  const nomeCursoSlug = (estado.curso?.nome || 'curso').trim().replace(/\s+/g, '-').toLowerCase();
+  const nomeArquivo = `${dataStr}-metricas-curso-${nomeCursoSlug}-minart.pdf`;
   doc.save(nomeArquivo);
 };
 
@@ -11078,6 +11089,14 @@ function pageRelatorioColaborador() {
           <option value="">— Selecione um colaborador —</option>
         </select>
       </div>
+      <div class="ms-dropdown" style="flex:1;min-width:240px">
+        <label class="form-label">Selecionar Vários Colaboradores</label>
+        <button type="button" class="ms-dropdown-btn" style="width:100%" onclick="relToggleDropdownColaboradores()">
+          <span id="rel-ms-label-colaboradores">Nenhum selecionado</span><span>▾</span>
+        </button>
+        <div class="ms-dropdown-panel" id="rel-ms-panel-colaboradores" style="width:100%"></div>
+      </div>
+      <button class="btn" onclick="gerarRelatorioSelecionados()">📑 Gerar Relatório dos Selecionados</button>
       <div style="min-width:240px">
         <label class="form-label">Status a Imprimir (Todos os Colaboradores)</label>
         <select class="form-select" id="rel-status-todos">
@@ -11090,6 +11109,120 @@ function pageRelatorioColaborador() {
   </div>
   <div id="relatorio-colaborador-view"></div>`;
 }
+
+// ------------------------------------------------------------
+// Selecionar Vários Colaboradores — dropdown com checkbox (mesmo padrão
+// .ms-dropdown usado em Contratos & Alinhamentos/Ocorrências), pra gerar um
+// relatório com um subconjunto escolhido a dedo, sem precisar ser um único
+// colaborador nem "Todos".
+// ------------------------------------------------------------
+window.relToggleDropdownColaboradores = function() {
+  const panel = document.getElementById('rel-ms-panel-colaboradores');
+  if (!panel) return;
+  const estaAberto = panel.classList.contains('open');
+  document.querySelectorAll('.ms-dropdown-panel.open').forEach(p => p.classList.remove('open'));
+  if (!estaAberto) {
+    relRenderPainelColaboradores();
+    panel.classList.add('open');
+  }
+};
+
+function relRenderPainelColaboradores() {
+  const panel = document.getElementById('rel-ms-panel-colaboradores');
+  if (!panel) return;
+  const selecionados = window._relColaboradoresSelecionados || [];
+  const lista = [...(_colaboradoresSupabase || [])].sort((a, b) => (a.nome_colaborador || '').localeCompare(b.nome_colaborador || ''));
+  panel.innerHTML = (lista.length === 0
+    ? '<div style="padding:8px;color:var(--text3);font-size:12px">Nenhum colaborador cadastrado.</div>'
+    : lista.map(c => `
+        <label class="ms-option">
+          <input type="checkbox" value="${c.id_colaborador}" ${selecionados.includes(String(c.id_colaborador)) ? 'checked' : ''} onchange="relToggleColaboradorSelecionado('${c.id_colaborador}', this.checked)">
+          <span>${c.nome_colaborador}</span>
+        </label>`).join('')) + `
+    <div class="ms-actions">
+      <button type="button" class="btn btn-sm" onclick="relSelecionarTodosColaboradores()">Selecionar todos</button>
+      <button type="button" class="btn btn-sm" onclick="relLimparColaboradoresSelecionados()">Limpar</button>
+    </div>`;
+  relAtualizarLabelColaboradoresSelecionados();
+}
+
+function relAtualizarLabelColaboradoresSelecionados() {
+  const label = document.getElementById('rel-ms-label-colaboradores');
+  if (!label) return;
+  const selecionados = window._relColaboradoresSelecionados || [];
+  if (selecionados.length === 0) {
+    label.textContent = 'Nenhum selecionado';
+  } else if (selecionados.length === 1) {
+    const c = (_colaboradoresSupabase || []).find(x => String(x.id_colaborador) === selecionados[0]);
+    label.textContent = c ? c.nome_colaborador : '1 selecionado';
+  } else {
+    label.textContent = `${selecionados.length} selecionados`;
+  }
+}
+
+window.relToggleColaboradorSelecionado = function(idColaborador, marcado) {
+  const set = new Set(window._relColaboradoresSelecionados || []);
+  if (marcado) set.add(String(idColaborador)); else set.delete(String(idColaborador));
+  window._relColaboradoresSelecionados = [...set];
+  relAtualizarLabelColaboradoresSelecionados();
+};
+
+window.relSelecionarTodosColaboradores = function() {
+  window._relColaboradoresSelecionados = (_colaboradoresSupabase || []).map(c => String(c.id_colaborador));
+  relRenderPainelColaboradores();
+};
+
+window.relLimparColaboradoresSelecionados = function() {
+  window._relColaboradoresSelecionados = [];
+  relRenderPainelColaboradores();
+};
+
+// Gera o relatório só dos colaboradores marcados no dropdown acima — mesmo
+// formato visual/estrutural do relatório de "Todos" (uma seção por
+// colaborador, várias guias no XLSX), só que com o subconjunto escolhido.
+window.gerarRelatorioSelecionados = function() {
+  const view = document.getElementById('relatorio-colaborador-view');
+  if (!view) return;
+
+  const ids = window._relColaboradoresSelecionados || [];
+  if (ids.length === 0) {
+    showToast('Selecione ao menos um colaborador.');
+    return;
+  }
+
+  const secoes = secoesRelatorioSelecionadas();
+  const sel = document.getElementById('rel-colaborador');
+  if (sel) sel.value = '';
+
+  const colaboradoresDados = ids
+    .map(id => montarDadosRelatorioColaborador(id))
+    .filter(Boolean)
+    .sort((a, b) => (a.colab.nome_colaborador || '').localeCompare(b.colab.nome_colaborador || ''));
+  if (colaboradoresDados.length === 0) {
+    view.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-title">Nenhum dos colaboradores selecionados foi encontrado</div></div>`;
+    return;
+  }
+  window._relatorioAtual = { tipo: 'selecionados', colaboradores: colaboradoresDados, secoes };
+
+  view.innerHTML = `
+  ${cabecalhoRelatorioHtml()}
+  <div class="table-card" style="margin-bottom:16px">
+    <div class="table-header">
+      <span class="table-title">Relatório Completo — Colaboradores Selecionados (${colaboradoresDados.length})</span>
+      <div class="table-actions">
+        <button class="btn btn-primary" onclick="baixarRelatorioPdf()">⬇ Baixar PDF</button>
+        <button class="btn" onclick="baixarRelatorioXlsx()">⬇ Baixar XLSX</button>
+      </div>
+    </div>
+  </div>
+  ${colaboradoresDados.map(d => `
+    <div class="table-card" style="margin-bottom:16px">
+      <div class="table-header"><span class="table-title">${d.colab.nome_colaborador}</span></div>
+      <div style="padding:24px">
+        ${construirHtmlSecoesColaborador(d, secoes)}
+      </div>
+    </div>`).join('')}`;
+};
 
 function secoesRelatorioSelecionadas() {
   const checks = document.querySelectorAll('.rel-secao-check:checked');
@@ -11158,6 +11291,10 @@ function atualizarRelatorioAposMudarSecoes() {
   if (!window._relatorioAtual) return;
   if (window._relatorioAtual.tipo === 'todos') {
     window.gerarRelatorioTodos();
+    return;
+  }
+  if (window._relatorioAtual.tipo === 'selecionados') {
+    window.gerarRelatorioSelecionados();
     return;
   }
   const sel = document.getElementById('rel-colaborador');
@@ -11329,7 +11466,10 @@ function construirHtmlSecoesColaborador(dadosColab, secoes) {
       <div style="font-size:12px;font-weight:700;color:var(--text2);margin:8px 0 4px">Cursos em Andamento</div>
       ${t.emAndamento.length === 0 ? '<div style="font-size:13px;color:var(--text3);padding:4px 0 8px">Nenhum curso em andamento.</div>' : t.emAndamento.map(item => `
         <div style="display:flex;padding:6px 0;border-bottom:1px solid var(--bg2);font-size:13px">
-          <div style="flex:1">${item.curso.nome}</div>
+          <div style="flex:1">
+            ${item.curso.nome}
+            ${item.progresso && item.progresso.iniciado_em ? `<div style="font-size:11px;color:var(--text3);margin-top:2px">Iniciado em ${new Date(item.progresso.iniciado_em).toLocaleDateString('pt-BR')}</div>` : ''}
+          </div>
           <div style="color:var(--text3)">${item.progresso ? 'Em andamento' : 'Não iniciado'}</div>
         </div>`).join('')}
       <div style="font-size:12px;font-weight:700;color:var(--text2);margin:16px 0 4px">Cursos Concluídos</div>
@@ -11576,7 +11716,9 @@ function escreverColaboradorNoPdf(doc, state, dadosColab, secoes, margemEsq) {
       campo('Treinamentos', 'Nenhum curso liberado ou com progresso registrado.');
     } else {
       t.emAndamento.forEach(item => {
-        campo(item.curso.nome, item.progresso ? 'Em andamento' : 'Não iniciado');
+        const statusTexto = item.progresso ? 'Em andamento' : 'Não iniciado';
+        const inicio = item.progresso && item.progresso.iniciado_em ? ` | Período Início: ${new Date(item.progresso.iniciado_em).toLocaleDateString('pt-BR')}` : '';
+        campo(item.curso.nome, `${statusTexto}${inicio}`);
       });
       t.concluidos.forEach(item => {
         const periodo = `${item.progresso.iniciado_em ? new Date(item.progresso.iniciado_em).toLocaleDateString('pt-BR') : '—'} – ${item.progresso.concluido_em ? new Date(item.progresso.concluido_em).toLocaleDateString('pt-BR') : '—'}`;
@@ -11612,6 +11754,8 @@ function nomeBaseArquivoRelatorio(tipo, colaboradores) {
   const dataStr = `${String(hoje.getDate()).padStart(2, '0')}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${hoje.getFullYear()}`;
   const alvo = tipo === 'todos'
     ? 'todos'
+    : tipo === 'selecionados'
+    ? 'colaboradores-selecionados'
     : (colaboradores[0].colab.nome_colaborador || 'colaborador').trim().replace(/\s+/g, '-').toLowerCase();
   return `${dataStr}-relatorio-${alvo}-minart`;
 }
@@ -11856,9 +12000,9 @@ window.baixarRelatorioXlsx = function() {
   const blocos = construirBlocosSecoesRelatorio(colaboradores);
   const wb = XLSX.utils.book_new();
 
-  if (tipo === 'todos') {
+  if (tipo === 'todos' || tipo === 'selecionados') {
     // Guia consolidada primeiro, seguida de uma guia por seção (como já era).
-    XLSX.utils.book_append_sheet(wb, construirPlanilhaComTitulos(montarLinhasConsolidadas(secoes, blocos), { autoWidth: false }), 'Todos - Completo');
+    XLSX.utils.book_append_sheet(wb, construirPlanilhaComTitulos(montarLinhasConsolidadas(secoes, blocos), { autoWidth: false }), tipo === 'todos' ? 'Todos - Completo' : 'Selecionados - Completo');
     secoes.forEach(chave => {
       const bloco = blocos[chave];
       if (bloco) XLSX.utils.book_append_sheet(wb, construirPlanilhaComTitulos(bloco.linhas), NOME_ABA_SECAO_RELATORIO[chave] || chave);
