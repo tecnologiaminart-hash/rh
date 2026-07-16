@@ -10695,6 +10695,10 @@ window.clicarLinhaAcompanhamento = async function(idColaborador) {
 // seção "Treinamentos" de Relatórios e Impressão) pra não duplicar a lógica
 // de unir curso_liberacoes (só Interno) com curso_progresso (Interno e
 // Externo) por colaborador.
+// Botões do topo "Colaboradores com Cursos em Andamento"/"...Concluídos" —
+// não é mais uma listinha simples, e sim uma tabela completa (1 linha por
+// colaborador+curso) com busca, filtro de Status do Colaborador e Ordenar,
+// no mesmo padrão das páginas principais do site.
 window.abrirListaAcompanhamentoCategoriaModal = async function(categoria) {
   await Promise.all([
     (!_colaboradoresSupabase || _colaboradoresSupabase.length === 0) ? loadColaboradoresFromSupabase() : Promise.resolve(),
@@ -10703,46 +10707,149 @@ window.abrirListaAcompanhamentoCategoriaModal = async function(categoria) {
     (!window._cursos || window._cursos.length === 0) ? loadCursosForApp() : Promise.resolve(),
   ]);
 
-  const linhas = (_colaboradoresSupabase || [])
-    .map(colab => {
-      const t = montarTreinamentosRelatorioColaborador(colab.id_colaborador);
-      return { colab, itens: categoria === 'concluidos' ? t.concluidos : t.emAndamento };
-    })
-    .filter(x => x.itens.length > 0)
-    .sort((a, b) => (a.colab.nome_colaborador || '').localeCompare(b.colab.nome_colaborador || ''));
-
-  const titulo = categoria === 'concluidos' ? 'Colaboradores com Cursos Concluídos' : 'Colaboradores com Cursos em Andamento';
+  window._acompCategoriaAtual = categoria;
+  if (!window._acompCategoriaFiltros) window._acompCategoriaFiltros = { status: 'ativos_pendentes' };
+  if (!window._acompCategoriaOrdem) window._acompCategoriaOrdem = 'nome';
 
   if (!document.getElementById('acomp-lista-categoria-modal')) {
     const modal = document.createElement('div');
     modal.id = 'acomp-lista-categoria-modal';
     modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;';
     modal.innerHTML = `
-      <div style="background:#fff;border-radius:6px;width:640px;max-width:95vw;max-height:85vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.2)">
-        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div style="background:#fff;border-radius:6px;width:1000px;max-width:96vw;max-height:88vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
           <div style="font-size:15px;font-weight:700" id="acomp-lista-categoria-modal-title">Colaboradores</div>
-          <button type="button" class="btn btn-sm" onclick="document.getElementById('acomp-lista-categoria-modal').style.display='none'">✕ Fechar</button>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <input class="search-input" id="acomp-lista-categoria-busca" placeholder="Buscar colaborador ou curso..." oninput="renderAcompCategoriaModal()">
+            <button type="button" class="btn btn-sm" onclick="document.getElementById('acomp-lista-categoria-modal').style.display='none'">✕ Fechar</button>
+          </div>
         </div>
-        <div style="padding:24px" id="acomp-lista-categoria-body"></div>
+        <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:var(--bg2)">
+          <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase">Status do Colaborador:</span>
+          <select class="form-select" style="width:auto" id="acomp-lista-categoria-status" onchange="filtrarStatusAcompCategoria(this.value)">
+            <option value="ativos_pendentes">Ativos e Pendente Documentação</option>
+            <option value="">Todos os status</option>
+            <option value="Ativo">Ativo</option>
+            <option value="Inativo">Inativo</option>
+            <option value="Férias">Férias</option>
+            <option value="Afastado">Afastado</option>
+            <option value="Pendente Documentação">Pendente Documentação</option>
+          </select>
+          <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-left:12px">Ordenar:</span>
+          <select class="form-select" style="width:auto" id="acomp-lista-categoria-ordem" onchange="ordenarAcompCategoria(this.value)">
+            <option value="nome">Colaborador (A-Z)</option>
+            <option value="cargo">Cargo (A-Z)</option>
+            <option value="curso">Curso (A-Z)</option>
+            <option value="data-desc">Data (mais recente)</option>
+            <option value="data-asc">Data (mais antiga)</option>
+          </select>
+        </div>
+        <div style="overflow-x:auto">
+        <table>
+          <thead id="acomp-lista-categoria-thead"></thead>
+          <tbody id="acomp-lista-categoria-tbody"></tbody>
+        </table>
+        </div>
       </div>`;
     document.body.appendChild(modal);
   }
 
-  document.getElementById('acomp-lista-categoria-modal-title').textContent = `${titulo} (${linhas.length})`;
-  const body = document.getElementById('acomp-lista-categoria-body');
-  body.innerHTML = linhas.length === 0
-    ? `<div style="text-align:center;padding:24px;color:var(--text3)">Nenhum colaborador ${categoria === 'concluidos' ? 'com curso concluído' : 'com curso em andamento'} no momento.</div>`
-    : linhas.map(({ colab, itens }) => `
-        <div style="padding:12px 0;border-bottom:1px solid var(--bg2);cursor:pointer" onclick="document.getElementById('acomp-lista-categoria-modal').style.display='none'; abrirAcompanhamentoCursosModal(${colab.id_colaborador})" title="Ver acompanhamento completo deste colaborador">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
-            <div style="font-size:13px;font-weight:600">${colab.nome_colaborador}</div>
-            <span class="badge ${categoria === 'concluidos' ? 'badge-active' : 'badge-pending'}">${itens.length} curso${itens.length !== 1 ? 's' : ''}</span>
-          </div>
-          <div style="font-size:11px;color:var(--text3);margin-top:4px">${itens.map(i => i.curso.nome).join(', ')}</div>
-        </div>`).join('');
-
+  document.getElementById('acomp-lista-categoria-busca').value = '';
+  document.getElementById('acomp-lista-categoria-status').value = window._acompCategoriaFiltros.status;
+  document.getElementById('acomp-lista-categoria-ordem').value = window._acompCategoriaOrdem;
+  renderAcompCategoriaModal();
   document.getElementById('acomp-lista-categoria-modal').style.display = 'flex';
 };
+
+window.filtrarStatusAcompCategoria = function(valor) {
+  if (!window._acompCategoriaFiltros) window._acompCategoriaFiltros = { status: 'ativos_pendentes' };
+  window._acompCategoriaFiltros.status = valor;
+  renderAcompCategoriaModal();
+};
+
+window.ordenarAcompCategoria = function(valor) {
+  window._acompCategoriaOrdem = valor;
+  renderAcompCategoriaModal();
+};
+
+function renderAcompCategoriaModal() {
+  const thead = document.getElementById('acomp-lista-categoria-thead');
+  const tbody = document.getElementById('acomp-lista-categoria-tbody');
+  if (!thead || !tbody) return;
+  const categoria = window._acompCategoriaAtual;
+  const concluidos = categoria === 'concluidos';
+  const busca = document.getElementById('acomp-lista-categoria-busca');
+  const q = busca ? busca.value.trim().toLowerCase() : '';
+  const statusFiltro = (window._acompCategoriaFiltros && window._acompCategoriaFiltros.status) || 'ativos_pendentes';
+
+  thead.innerHTML = concluidos
+    ? '<tr><th>Colaborador</th><th>Cargo</th><th>Status</th><th>Curso</th><th>Período Início</th><th>Período Fim</th><th>Avaliação</th></tr>'
+    : '<tr><th>Colaborador</th><th>Cargo</th><th>Status</th><th>Curso</th><th>Status do Curso</th><th>Início</th><th>% Concluído</th></tr>';
+
+  let linhas = (_colaboradoresSupabase || [])
+    .filter(colab => {
+      if (statusFiltro === 'ativos_pendentes') return colab.status_colaborador === 'Ativo' || colab.status_colaborador === 'Pendente Documentação';
+      if (statusFiltro) return colab.status_colaborador === statusFiltro;
+      return true;
+    })
+    .flatMap(colab => {
+      const t = montarTreinamentosRelatorioColaborador(colab.id_colaborador);
+      return (concluidos ? t.concluidos : t.emAndamento).map(item => ({ colab, curso: item.curso, progresso: item.progresso }));
+    })
+    .filter(({ colab, curso }) => !q || (colab.nome_colaborador || '').toLowerCase().includes(q) || (curso.nome || '').toLowerCase().includes(q));
+
+  linhas.sort((a, b) => {
+    const ordem = window._acompCategoriaOrdem || 'nome';
+    if (ordem === 'cargo') return (a.colab.cargos ? a.colab.cargos.nome_cargo : '').localeCompare(b.colab.cargos ? b.colab.cargos.nome_cargo : '');
+    if (ordem === 'curso') return (a.curso.nome || '').localeCompare(b.curso.nome || '');
+    if (ordem === 'data-desc' || ordem === 'data-asc') {
+      const campo = concluidos ? 'concluido_em' : 'iniciado_em';
+      const da = a.progresso && a.progresso[campo] ? new Date(a.progresso[campo]).getTime() : 0;
+      const db = b.progresso && b.progresso[campo] ? new Date(b.progresso[campo]).getTime() : 0;
+      return ordem === 'data-desc' ? db - da : da - db;
+    }
+    return (a.colab.nome_colaborador || '').localeCompare(b.colab.nome_colaborador || '');
+  });
+
+  const titulo = concluidos ? 'Colaboradores com Cursos Concluídos' : 'Colaboradores com Cursos em Andamento';
+  document.getElementById('acomp-lista-categoria-modal-title').textContent = `${titulo} (${linhas.length})`;
+
+  tbody.innerHTML = linhas.length === 0
+    ? `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhum registro encontrado.</td></tr>`
+    : linhas.map(({ colab, curso, progresso }) => {
+        const cargoNome = colab.cargos ? colab.cargos.nome_cargo : '—';
+        const statusBadgeClass = colab.status_colaborador === 'Ativo' ? 'badge-active'
+          : colab.status_colaborador === 'Pendente Documentação' ? 'badge-inactive'
+          : colab.status_colaborador === 'Inativo' ? 'badge-gray'
+          : 'badge-inactive';
+        const abrirDetalhe = `onclick="document.getElementById('acomp-lista-categoria-modal').style.display='none'; abrirAcompanhamentoCursosModal(${colab.id_colaborador})"`;
+        if (concluidos) {
+          const avaliacao = progresso && progresso.resultado_avaliacao
+            ? `${progresso.resultado_avaliacao}${progresso.percentual_acerto !== null && progresso.percentual_acerto !== undefined ? ` (${progresso.percentual_acerto}%)` : ''}`
+            : '—';
+          return `
+          <tr style="cursor:pointer" ${abrirDetalhe} title="Ver acompanhamento completo deste colaborador">
+            <td><strong>${colab.nome_colaborador}</strong></td>
+            <td>${cargoNome}</td>
+            <td><span class="badge ${statusBadgeClass}">${colab.status_colaborador || '—'}</span></td>
+            <td>${curso.nome}</td>
+            <td>${progresso && progresso.iniciado_em ? new Date(progresso.iniciado_em).toLocaleDateString('pt-BR') : '—'}</td>
+            <td>${progresso && progresso.concluido_em ? new Date(progresso.concluido_em).toLocaleDateString('pt-BR') : '—'}</td>
+            <td>${avaliacao}</td>
+          </tr>`;
+        }
+        return `
+        <tr style="cursor:pointer" ${abrirDetalhe} title="Ver acompanhamento completo deste colaborador">
+          <td><strong>${colab.nome_colaborador}</strong></td>
+          <td>${cargoNome}</td>
+          <td><span class="badge ${statusBadgeClass}">${colab.status_colaborador || '—'}</span></td>
+          <td>${curso.nome}</td>
+          <td>${progresso ? '<span class="badge badge-pending">Em andamento</span>' : '<span class="badge badge-gray">Não iniciado</span>'}</td>
+          <td>${progresso && progresso.iniciado_em ? new Date(progresso.iniciado_em).toLocaleDateString('pt-BR') : '—'}</td>
+          <td>${percentualConcluidoCurso(curso.id, progresso)}%</td>
+        </tr>`;
+      }).join('');
+}
 
 // Progresso (curso_progresso) de UM colaborador específico — separado de
 // window._cursoProgresso (usado em "Meus Cursos" para o colaborador logado)
@@ -11176,7 +11283,7 @@ function pageRelatorioColaborador() {
       </div>
       <div style="min-width:240px">
         <label class="form-label">Status a Imprimir</label>
-        <select class="form-select" id="rel-status-todos">
+        <select class="form-select" id="rel-status-todos" onchange="relFiltrarStatusColaboradoresRelatorio()">
           <option value="ativos_pendentes" selected>Ativos e Pendente Documentação</option>
           <option value="todos">Todos (incluir Inativos)</option>
         </select>
@@ -11237,12 +11344,22 @@ function relRenderPainelColaboradores() {
 
 // Redesenha só a lista de checkboxes (filtrada pela busca) — chamado a cada
 // tecla digitada e depois de qualquer mudança de seleção.
+// Colaboradores que aparecem no dropdown de seleção — respeita o "Status a
+// Imprimir" (mesmo filtro usado por gerarRelatorioTodos), senão o dropdown
+// deixava marcar gente que o filtro deveria excluir.
+function relColaboradoresVisiveisPorStatus() {
+  const statusSel = document.getElementById('rel-status-todos');
+  const modoStatus = statusSel ? statusSel.value : 'ativos_pendentes';
+  return (_colaboradoresSupabase || []).filter(c =>
+    modoStatus === 'ativos_pendentes' ? (c.status_colaborador === 'Ativo' || c.status_colaborador === 'Pendente Documentação') : true);
+}
+
 window.relRenderListaColaboradores = function(query) {
   const container = document.getElementById('rel-ms-lista-colaboradores');
   if (!container) return;
   const q = String(query || '').trim().toLowerCase();
   const selecionados = window._relColaboradoresSelecionados || [];
-  const lista = [...(_colaboradoresSupabase || [])]
+  const lista = relColaboradoresVisiveisPorStatus()
     .filter(c => !q || (c.nome_colaborador || '').toLowerCase().includes(q))
     .sort((a, b) => (a.nome_colaborador || '').localeCompare(b.nome_colaborador || ''));
   container.innerHTML = lista.length === 0
@@ -11253,6 +11370,13 @@ window.relRenderListaColaboradores = function(query) {
           <span>${c.nome_colaborador}</span>
         </label>`).join('');
   relAtualizarLabelColaboradoresSelecionados();
+};
+
+// Reflete no dropdown assim que o "Status a Imprimir" muda (caso o painel já
+// esteja aberto quando a pessoa troca o filtro).
+window.relFiltrarStatusColaboradoresRelatorio = function() {
+  const busca = document.getElementById('rel-ms-busca-colaboradores');
+  relRenderListaColaboradores(busca ? busca.value : '');
 };
 
 function relAtualizarLabelColaboradoresSelecionados() {
@@ -11282,7 +11406,7 @@ window.relToggleColaboradorSelecionado = function(idColaborador, marcado) {
 window.relSelecionarTodosColaboradores = function() {
   const busca = document.getElementById('rel-ms-busca-colaboradores');
   const q = busca ? busca.value.trim().toLowerCase() : '';
-  const visiveis = (_colaboradoresSupabase || [])
+  const visiveis = relColaboradoresVisiveisPorStatus()
     .filter(c => !q || (c.nome_colaborador || '').toLowerCase().includes(q))
     .map(c => String(c.id_colaborador));
   const set = new Set(window._relColaboradoresSelecionados || []);
