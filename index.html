@@ -77,6 +77,15 @@
     width: 240px; min-width: 240px; background: var(--sidebar-bg); display: flex;
     flex-direction: column; height: 100vh; overflow-y: auto; overflow-x: hidden;
   }
+  /* 100dvh (viewport realmente visível) por cima do 100vh acima — no
+     Safari/Chrome mobile, 100vh é calculado pela altura MÁXIMA da tela
+     (sem a barra de endereço), maior que a área visível de fato. Isso
+     empurra o rodapé da sidebar (botão "Sair do sistema") pra fora da
+     tela em navegadores que não suportam dvh, então o 100vh acima fica
+     como fallback — nesses, dá pra rolar a sidebar pra alcançar o rodapé. */
+  @supports (height: 100dvh) {
+    .sidebar { height: 100dvh; }
+  }
   .sidebar-header {
     padding: 20px 16px 16px; border-bottom: 1px solid #222;
   }
@@ -338,6 +347,9 @@
       position: fixed; left: 0; top: 0; z-index: 200; height: 100vh;
       transform: translateX(-100%); transition: transform .2s ease;
       box-shadow: 0 0 30px rgba(0,0,0,.3);
+    }
+    @supports (height: 100dvh) {
+      .sidebar { height: 100dvh; }
     }
     .sidebar.mobile-open { transform: translateX(0); }
     .content { padding: 14px; }
