@@ -10560,7 +10560,9 @@ function temUsuarioTreinamento(idColaborador) {
 }
 
 function pageTreinAcompanhamento() {
-  document.getElementById('topbar-actions').innerHTML = '';
+  document.getElementById('topbar-actions').innerHTML = `
+    <button class="btn" onclick="abrirListaAcompanhamentoCategoriaModal('andamento')">🟡 Colaboradores com Cursos em Andamento</button>
+    <button class="btn" onclick="abrirListaAcompanhamentoCategoriaModal('concluidos')">🟢 Colaboradores com Cursos Concluídos</button>`;
 
   if (!window._acompFiltros) window._acompFiltros = { status: 'ativos_pendentes' };
   if (!window._acompOrdem) window._acompOrdem = 'nome';
@@ -10686,6 +10688,62 @@ window.clicarLinhaAcompanhamento = async function(idColaborador) {
   abrirAcompanhamentoCursosModal(idColaborador);
 };
 
+// Botões do topo "Colaboradores com Cursos em Andamento"/"...Concluídos" —
+// lista geral (todos os colaboradores, sem respeitar o filtro de status da
+// tabela principal) de quem tem pelo menos 1 curso em cada categoria.
+// Reaproveita montarTreinamentosRelatorioColaborador (mesma função usada na
+// seção "Treinamentos" de Relatórios e Impressão) pra não duplicar a lógica
+// de unir curso_liberacoes (só Interno) com curso_progresso (Interno e
+// Externo) por colaborador.
+window.abrirListaAcompanhamentoCategoriaModal = async function(categoria) {
+  await Promise.all([
+    (!_colaboradoresSupabase || _colaboradoresSupabase.length === 0) ? loadColaboradoresFromSupabase() : Promise.resolve(),
+    loadCursoLiberacoesForApp(),
+    loadCursoProgressoTodosForApp(),
+    (!window._cursos || window._cursos.length === 0) ? loadCursosForApp() : Promise.resolve(),
+  ]);
+
+  const linhas = (_colaboradoresSupabase || [])
+    .map(colab => {
+      const t = montarTreinamentosRelatorioColaborador(colab.id_colaborador);
+      return { colab, itens: categoria === 'concluidos' ? t.concluidos : t.emAndamento };
+    })
+    .filter(x => x.itens.length > 0)
+    .sort((a, b) => (a.colab.nome_colaborador || '').localeCompare(b.colab.nome_colaborador || ''));
+
+  const titulo = categoria === 'concluidos' ? 'Colaboradores com Cursos Concluídos' : 'Colaboradores com Cursos em Andamento';
+
+  if (!document.getElementById('acomp-lista-categoria-modal')) {
+    const modal = document.createElement('div');
+    modal.id = 'acomp-lista-categoria-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:6px;width:640px;max-width:95vw;max-height:85vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:15px;font-weight:700" id="acomp-lista-categoria-modal-title">Colaboradores</div>
+          <button type="button" class="btn btn-sm" onclick="document.getElementById('acomp-lista-categoria-modal').style.display='none'">✕ Fechar</button>
+        </div>
+        <div style="padding:24px" id="acomp-lista-categoria-body"></div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  document.getElementById('acomp-lista-categoria-modal-title').textContent = `${titulo} (${linhas.length})`;
+  const body = document.getElementById('acomp-lista-categoria-body');
+  body.innerHTML = linhas.length === 0
+    ? `<div style="text-align:center;padding:24px;color:var(--text3)">Nenhum colaborador ${categoria === 'concluidos' ? 'com curso concluído' : 'com curso em andamento'} no momento.</div>`
+    : linhas.map(({ colab, itens }) => `
+        <div style="padding:12px 0;border-bottom:1px solid var(--bg2);cursor:pointer" onclick="document.getElementById('acomp-lista-categoria-modal').style.display='none'; abrirAcompanhamentoCursosModal(${colab.id_colaborador})" title="Ver acompanhamento completo deste colaborador">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <div style="font-size:13px;font-weight:600">${colab.nome_colaborador}</div>
+            <span class="badge ${categoria === 'concluidos' ? 'badge-active' : 'badge-pending'}">${itens.length} curso${itens.length !== 1 ? 's' : ''}</span>
+          </div>
+          <div style="font-size:11px;color:var(--text3);margin-top:4px">${itens.map(i => i.curso.nome).join(', ')}</div>
+        </div>`).join('');
+
+  document.getElementById('acomp-lista-categoria-modal').style.display = 'flex';
+};
+
 // Progresso (curso_progresso) de UM colaborador específico — separado de
 // window._cursoProgresso (usado em "Meus Cursos" para o colaborador logado)
 // pra não colidir cache quando RH/Admin navega entre colaboradores diferentes.
@@ -10737,7 +10795,7 @@ window.abrirAcompanhamentoCursosModal = async function(idColaborador) {
         <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
           <div style="font-size:15px;font-weight:700" id="acomp-cursos-modal-title">Acompanhamento de Cursos</div>
           <div style="display:flex;gap:8px">
-            <button type="button" class="btn btn-sm btn-primary" onclick="abrirRegistrarCursoConcluidoModal()">+ Registrar Curso Concluído</button>
+            <button type="button" class="btn btn-sm btn-primary" onclick="abrirRegistrarCursoConcluidoModal()">+ Registrar Curso Externo</button>
             <button type="button" class="btn btn-sm" onclick="document.getElementById('acomp-cursos-modal').style.display='none'">✕ Fechar</button>
           </div>
         </div>
