@@ -11083,11 +11083,24 @@ function pageRelatorioColaborador() {
           <option value="todos">Todos (incluir Inativos)</option>
         </select>
       </div>
-      <button class="btn" onclick="gerarRelatorioTodos()">👥 Gerar Relatório de Todos os Colaboradores</button>
+      <button class="btn btn-primary" onclick="gerarRelatorioUnificado()">👥 Gerar Relatório</button>
     </div>
   </div>
   <div id="relatorio-colaborador-view"></div>`;
 }
+
+// Botão único de geração: se tiver colaborador(es) marcado(s) no dropdown ao
+// lado, gera só desses (ignora o filtro de status); senão, cai no
+// comportamento de sempre — gera pra todos os colaboradores que baterem com o
+// "Status a Imprimir" selecionado.
+window.gerarRelatorioUnificado = function() {
+  const ids = window._relColaboradoresSelecionados || [];
+  if (ids.length > 0) {
+    window.gerarRelatorioSelecionados();
+  } else {
+    window.gerarRelatorioTodos();
+  }
+};
 
 // ------------------------------------------------------------
 // Selecionar Colaborador(es) — um único dropdown que reúne busca, seleção de
@@ -11120,9 +11133,6 @@ function relRenderPainelColaboradores() {
     <div class="ms-actions">
       <button type="button" class="btn btn-sm" onclick="relSelecionarTodosColaboradores()">Selecionar todos</button>
       <button type="button" class="btn btn-sm" onclick="relLimparColaboradoresSelecionados()">Limpar</button>
-    </div>
-    <div style="padding-top:8px;margin-top:6px;border-top:1px solid var(--border)">
-      <button type="button" class="btn btn-primary btn-sm" style="width:100%" onclick="gerarRelatorioSelecionados()">📑 Gerar Relatório</button>
     </div>`;
   relRenderListaColaboradores('');
 }
