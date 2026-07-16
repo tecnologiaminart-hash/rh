@@ -8809,9 +8809,30 @@ window.abrirPlayerCurso = async function(idCurso) {
     (!window._cursoAvaliacaoPerguntas) ? loadCursoAvaliacaoPerguntasForApp() : Promise.resolve(),
   ]);
 
-  const progresso = (window._cursoProgresso || []).find(p => p.id_curso === idCurso);
+  // Ao iniciar o curso pela 1ª vez, já cria a linha de progresso com status
+  // "em_andamento" — não espera a 1ª aula ser concluída pra registrar isso.
+  let progresso = (window._cursoProgresso || []).find(p => p.id_curso === idCurso);
+  if (!progresso) {
+    try {
+      const { data, error } = await supaClient.from('curso_progresso').insert([{
+        id_curso: idCurso,
+        id_colaborador: currentUser?.colaboradorId,
+        aulas_concluidas: [],
+        status: 'em_andamento',
+      }]).select();
+      if (error) throw error;
+      progresso = data[0];
+      if (!window._cursoProgresso) window._cursoProgresso = [];
+      window._cursoProgresso.push(progresso);
+    } catch (e) {
+      console.error('Erro ao iniciar progresso do curso:', e);
+      showToast('Erro ao iniciar o curso: ' + (e.message || e), 'danger');
+      return;
+    }
+  }
+
   const aulas = (window._cursoAulas || []).filter(a => a.id_curso === idCurso).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
-  const concluidas = (progresso && progresso.aulas_concluidas) || [];
+  const concluidas = progresso.aulas_concluidas || [];
   const indicePrimeiraPendente = aulas.findIndex(a => !concluidas.includes(a.id));
 
   window._playerCursoId = idCurso;
@@ -8884,9 +8905,15 @@ function embedVideoAulaHtml(aula) {
   }
   const youtubeId = extrairYoutubeId(aula.url_video);
   if (youtubeId) {
-    return `<iframe src="https://www.youtube.com/embed/${youtubeId}" style="position:absolute;inset:0;width:100%;height:100%;border:none" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+    // modestbranding+rel=0 reduzem a marca do YouTube e sugestões de outros
+    // vídeos ao final — não dá pra remover o link "Assistir no YouTube" por
+    // completo (exigência do próprio YouTube pra embeds).
+    return `<iframe src="https://www.youtube.com/embed/${youtubeId}?modestbranding=1&rel=0" style="position:absolute;inset:0;width:100%;height:100%;border:none" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
   }
-  return `<video src="${aula.url_video}" controls style="position:absolute;inset:0;width:100%;height:100%"></video>`;
+  // Link direto de arquivo de vídeo: sem interface do Google, então dá pra
+  // tirar o menu de botão direito (que tem "Abrir vídeo em nova guia") e
+  // esconder download/Picture-in-Picture dos controles nativos.
+  return `<video src="${aula.url_video}" controls controlsList="nodownload noremoteplayback" disablePictureInPicture oncontextmenu="return false" style="position:absolute;inset:0;width:100%;height:100%"></video>`;
 }
 
 function extrairYoutubeId(url) {
@@ -8898,44 +8925,38 @@ window.marcarAulaConcluida = async function(idAula) {
   if (!confirm('Confirma que já assistiu essa aula e quer marcar como concluída? Só dá pra passar de aula depois disso.')) return;
 
   const idCurso = window._playerCursoId;
-  const idColaborador = currentUser?.colaboradorId;
+  const aulas = (window._cursoAulas || []).filter(a => a.id_curso === idCurso).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+  const progresso = (window._cursoProgresso || []).find(p => p.id_curso === idCurso);
+  if (!progresso) return; // não deveria acontecer — abrirPlayerCurso já garante essa linha antes de liberar o player
 
   try {
-    const progresso = (window._cursoProgresso || []).find(p => p.id_curso === idCurso);
-    const concluidasAtuais = (progresso && progresso.aulas_concluidas) || [];
+    const concluidasAtuais = progresso.aulas_concluidas || [];
     const novasConcluidas = concluidasAtuais.includes(idAula) ? concluidasAtuais : [...concluidasAtuais, idAula];
-
-    if (progresso) {
-      const { error } = await supaClient.from('curso_progresso').update({ aulas_concluidas: novasConcluidas }).eq('id', progresso.id);
-      if (error) throw error;
-      progresso.aulas_concluidas = novasConcluidas;
-    } else {
-      const { data, error } = await supaClient.from('curso_progresso').insert([{
-        id_curso: idCurso,
-        id_colaborador: idColaborador,
-        aulas_concluidas: novasConcluidas,
-        status: 'em_andamento',
-      }]).select();
-      if (error) throw error;
-      if (!window._cursoProgresso) window._cursoProgresso = [];
-      window._cursoProgresso.push(data[0]);
-    }
+    const { error } = await supaClient.from('curso_progresso').update({ aulas_concluidas: novasConcluidas }).eq('id', progresso.id);
+    if (error) throw error;
+    progresso.aulas_concluidas = novasConcluidas;
 
     showToast('Aula marcada como concluída!');
-    navigate('meus-cursos', 'Cursos');
+
+    // Era a última aula: já cai direto na avaliação final (ou conclui o
+    // curso, se não tiver avaliação cadastrada) — sem precisar de outro clique.
+    if (window._playerAulaIndex >= aulas.length - 1) {
+      avancarOuFinalizarCurso();
+    } else {
+      navigate('meus-cursos', 'Cursos');
+    }
   } catch (e) {
     console.error('Erro ao marcar aula como concluída:', e);
     showToast('Erro ao marcar aula como concluída: ' + (e.message || e), 'danger');
   }
 };
 
-window.avancarAulaPlayer = function() {
+// Avança pra próxima aula ou, se já era a última, pra avaliação final (ou
+// conclui direto, sem avaliação cadastrada) — reaproveitado tanto pelo botão
+// "Passar de Aula"/"Concluir Curso" quanto pelo avanço automático acima.
+function avancarOuFinalizarCurso() {
   const idCurso = window._playerCursoId;
   const aulas = (window._cursoAulas || []).filter(a => a.id_curso === idCurso).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
-  const progresso = (window._cursoProgresso || []).find(p => p.id_curso === idCurso);
-  const concluidas = (progresso && progresso.aulas_concluidas) || [];
-  const aulaAtual = aulas[window._playerAulaIndex];
-  if (!aulaAtual || !concluidas.includes(aulaAtual.id)) return; // trava de segurança — botão já vem desabilitado
 
   if (window._playerAulaIndex < aulas.length - 1) {
     window._playerAulaIndex += 1;
@@ -8951,6 +8972,16 @@ window.avancarAulaPlayer = function() {
     window._respostasAvaliacaoAluno = {};
     navigate('meus-cursos', 'Cursos');
   }
+}
+
+window.avancarAulaPlayer = function() {
+  const idCurso = window._playerCursoId;
+  const aulas = (window._cursoAulas || []).filter(a => a.id_curso === idCurso).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+  const progresso = (window._cursoProgresso || []).find(p => p.id_curso === idCurso);
+  const concluidas = (progresso && progresso.aulas_concluidas) || [];
+  const aulaAtual = aulas[window._playerAulaIndex];
+  if (!aulaAtual || !concluidas.includes(aulaAtual.id)) return; // trava de segurança — botão já vem desabilitado
+  avancarOuFinalizarCurso();
 };
 
 // Curso sem nenhuma pergunta de avaliação final cadastrada: conclui direto
@@ -8960,27 +8991,16 @@ async function finalizarCursoSemAvaliacao() {
   const idCurso = window._playerCursoId;
   try {
     const progresso = (window._cursoProgresso || []).find(p => p.id_curso === idCurso);
+    if (!progresso) return; // não deveria acontecer — abrirPlayerCurso já garante essa linha
     const payload = {
       status: 'concluido',
       resultado_avaliacao: null,
       percentual_acerto: null,
       concluido_em: new Date().toISOString(),
     };
-    if (progresso) {
-      const { error } = await supaClient.from('curso_progresso').update(payload).eq('id', progresso.id);
-      if (error) throw error;
-      Object.assign(progresso, payload);
-    } else {
-      const { data, error } = await supaClient.from('curso_progresso').insert([{
-        id_curso: idCurso,
-        id_colaborador: currentUser?.colaboradorId,
-        aulas_concluidas: [],
-        ...payload,
-      }]).select();
-      if (error) throw error;
-      if (!window._cursoProgresso) window._cursoProgresso = [];
-      window._cursoProgresso.push(data[0]);
-    }
+    const { error } = await supaClient.from('curso_progresso').update(payload).eq('id', progresso.id);
+    if (error) throw error;
+    Object.assign(progresso, payload);
 
     window._meusCursosAba = 'concluidos';
     showToast('Curso concluído!');
@@ -9041,27 +9061,18 @@ window.enviarAvaliacaoAluno = async function() {
 
   try {
     const progresso = (window._cursoProgresso || []).find(p => p.id_curso === idCurso);
+    if (!progresso) return; // não deveria acontecer — abrirPlayerCurso já garante essa linha
     const payload = {
-      status: 'concluido',
+      // Só vira "concluido" se for aprovado (>= NOTA_MINIMA_APROVACAO_CURSO);
+      // reprovado continua "em_andamento", pra poder refazer a avaliação.
+      status: aprovado ? 'concluido' : 'em_andamento',
       resultado_avaliacao: aprovado ? 'Aprovado' : 'Reprovado',
       percentual_acerto: percentual,
-      concluido_em: new Date().toISOString(),
+      concluido_em: aprovado ? new Date().toISOString() : null,
     };
-    if (progresso) {
-      const { error } = await supaClient.from('curso_progresso').update(payload).eq('id', progresso.id);
-      if (error) throw error;
-      Object.assign(progresso, payload);
-    } else {
-      const { data, error } = await supaClient.from('curso_progresso').insert([{
-        id_curso: idCurso,
-        id_colaborador: currentUser?.colaboradorId,
-        aulas_concluidas: [],
-        ...payload,
-      }]).select();
-      if (error) throw error;
-      if (!window._cursoProgresso) window._cursoProgresso = [];
-      window._cursoProgresso.push(data[0]);
-    }
+    const { error } = await supaClient.from('curso_progresso').update(payload).eq('id', progresso.id);
+    if (error) throw error;
+    Object.assign(progresso, payload);
 
     window._resultadoAvaliacaoAluno = { acertos, total: perguntas.length, percentual, aprovado };
     window._playerModo = 'resultado';
@@ -9079,13 +9090,15 @@ function renderResultadoAvaliacaoHtml() {
   <div class="table-card" style="padding:40px;text-align:center">
     <div style="font-size:40px;margin-bottom:16px">${r.aprovado ? '✅' : '❌'}</div>
     <div style="font-size:18px;font-weight:700;margin-bottom:8px">${r.aprovado ? 'Aprovado!' : 'Reprovado'}</div>
-    <div style="font-size:14px;color:var(--text3);margin-bottom:24px">Você acertou ${r.acertos} de ${r.total} perguntas (${r.percentual}%).</div>
+    <div style="font-size:14px;color:var(--text3);margin-bottom:8px">Você acertou ${r.acertos} de ${r.total} perguntas (${r.percentual}%).</div>
+    ${!r.aprovado ? `<div style="font-size:13px;color:var(--text3);margin-bottom:24px">É preciso ${NOTA_MINIMA_APROVACAO_CURSO}% de acerto para ser aprovado. O curso continua em "Em Andamento" — você pode refazer a avaliação quando quiser.</div>` : '<div style="margin-bottom:24px"></div>'}
     <button class="btn btn-primary" onclick="finalizarVisualizacaoResultado()">Voltar aos Cursos</button>
   </div>`;
 }
 
 window.finalizarVisualizacaoResultado = function() {
-  window._meusCursosAba = 'concluidos';
+  const r = window._resultadoAvaliacaoAluno;
+  window._meusCursosAba = (r && r.aprovado) ? 'concluidos' : 'andamento';
   window.sairDoPlayerCurso();
 };
 
