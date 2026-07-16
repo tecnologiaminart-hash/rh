@@ -986,6 +986,7 @@ const NAV = [
     subs: [
       { id: 'trein-cursos', label: 'Cursos' },
       { id: 'trein-cadastro-usuario', label: 'Cadastro de Usuário e Liberação' },
+      { id: 'trein-acompanhamento', label: 'Acompanhamento e Registros' },
     ]
   },
   {
@@ -4481,6 +4482,7 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
     'ficha-mapeamento': pageMapeamentoPerfil,
     'trein-cursos':    pageCursos,
     'trein-cadastro-usuario': pageCadastroUsuarioTreinamento,
+    'trein-acompanhamento': pageTreinAcompanhamento,
     'permissoes-acesso': pagePermissoesAcesso,
     'relatorios-impressao': pageRelatorioColaborador,
     'bon-regras':      pageBonRegras,
@@ -9536,7 +9538,12 @@ window.abrirCursosLiberadosColaboradorModal = async function(idColaborador) {
             return `
             <tr>
               <td style="padding:8px 0;font-size:13px">${curso ? curso.nome : '—'}</td>
-              <td style="padding:8px 0"><span class="badge ${l.status === 'Liberado' ? 'badge-active' : 'badge-inactive'}">${l.status}</span></td>
+              <td style="padding:8px 0">
+                <select class="form-select" style="width:auto;${corSelectLiberacao(l.status)}" onchange="aplicarCorLiberacao(this); alterarStatusLiberacao(${l.id}, this.value)">
+                  <option value="Liberado" ${l.status === 'Liberado' ? 'selected' : ''}>Liberado</option>
+                  <option value="Bloqueado" ${l.status === 'Bloqueado' ? 'selected' : ''}>Bloqueado</option>
+                </select>
+              </td>
             </tr>`;
           }).join('')}
         </tbody>
@@ -9918,6 +9925,367 @@ window.salvarNovaLiberacao = async function() {
     showToast('Erro ao liberar curso: ' + (e.message || e), 'danger');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Liberar'; }
+  }
+};
+
+// ------------------------------------------------------------
+// TREINAMENTOS > ACOMPANHAMENTO E REGISTROS — lista todos os colaboradores
+// com o status de criação de usuário de Treinamento e, ao clicar na linha,
+// mostra o progresso de cursos (liberados + registrados manualmente) desse
+// colaborador. Ver sql/criar-curso-progresso-treinamento.sql e
+// sql/criar-curso-liberacoes.sql.
+// ------------------------------------------------------------
+function temUsuarioTreinamento(idColaborador) {
+  return (window._usuariosCadastrados || []).some(u => u.perfil_id === 3 && String(u.colaborador_id) === String(idColaborador));
+}
+
+function pageTreinAcompanhamento() {
+  document.getElementById('topbar-actions').innerHTML = '';
+
+  if (!window._acompFiltros) window._acompFiltros = { status: 'ativos_pendentes' };
+  if (!window._acompOrdem) window._acompOrdem = 'nome';
+
+  const renderTabela = () => {
+    const tbody = document.getElementById('trein-acompanhamento-tbody');
+    if (!tbody) return;
+
+    let lista = [...(_colaboradoresSupabase || [])].filter(c => {
+      if (window._acompFiltros.status === 'ativos_pendentes') return c.status_colaborador === 'Ativo' || c.status_colaborador === 'Pendente Documentação';
+      if (window._acompFiltros.status) return c.status_colaborador === window._acompFiltros.status;
+      return true;
+    });
+
+    lista.sort((a, b) => {
+      if (window._acompOrdem === 'cargo') {
+        return (a.cargos ? a.cargos.nome_cargo : '').localeCompare(b.cargos ? b.cargos.nome_cargo : '');
+      }
+      if (window._acompOrdem === 'status-usuario') {
+        const temA = temUsuarioTreinamento(a.id_colaborador) ? 1 : 0;
+        const temB = temUsuarioTreinamento(b.id_colaborador) ? 1 : 0;
+        return temB - temA;
+      }
+      return (a.nome_colaborador || '').localeCompare(b.nome_colaborador || '');
+    });
+
+    tbody.innerHTML = lista.length === 0
+      ? '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">Nenhum colaborador encontrado.</td></tr>'
+      : lista.map(c => {
+          const cargoNome = c.cargos ? c.cargos.nome_cargo : '—';
+          const statusBadgeClass = c.status_colaborador === 'Ativo' ? 'badge-active'
+            : c.status_colaborador === 'Pendente Documentação' ? 'badge-inactive'
+            : c.status_colaborador === 'Inativo' ? 'badge-gray'
+            : 'badge-inactive';
+          const temUsuario = temUsuarioTreinamento(c.id_colaborador);
+          return `
+          <tr style="cursor:pointer" onclick="clicarLinhaAcompanhamento(${c.id_colaborador})" title="Ver acompanhamento de cursos">
+            <td><strong>${c.nome_colaborador || '—'}</strong></td>
+            <td>${cargoNome}</td>
+            <td><span class="badge ${statusBadgeClass}">${c.status_colaborador || '—'}</span></td>
+            <td><span class="badge ${temUsuario ? 'badge-active' : 'badge-gray'}">${temUsuario ? 'Criado' : 'Não criado'}</span></td>
+          </tr>`;
+        }).join('');
+  };
+
+  window._renderTreinAcompanhamento = renderTabela;
+  Promise.all([
+    (!_colaboradoresSupabase || _colaboradoresSupabase.length === 0) ? loadColaboradoresFromSupabase() : Promise.resolve(),
+    (!window._usuariosCadastrados) ? loadUsuariosCadastrados() : Promise.resolve(),
+    loadCursoLiberacoesForApp(),
+    (!window._cursos || window._cursos.length === 0) ? loadCursosForApp() : Promise.resolve(),
+  ]).then(renderTabela);
+
+  return `
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">Acompanhamento e Registros</span>
+      <input class="search-input" placeholder="Buscar colaborador..." oninput="filtrarTabelaGenerica('trein-acompanhamento-tbody', this.value)" style="margin-left:12px">
+    </div>
+    <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:var(--bg2)">
+      <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase">Status do Colaborador:</span>
+      <select class="form-select" style="width:auto" onchange="filtrarStatusAcompanhamento(this.value)">
+        <option value="ativos_pendentes" ${window._acompFiltros.status === 'ativos_pendentes' ? 'selected' : ''}>Ativos e Pendente Documentação</option>
+        <option value="" ${window._acompFiltros.status === '' ? 'selected' : ''}>Todos os status</option>
+        <option value="Ativo" ${window._acompFiltros.status === 'Ativo' ? 'selected' : ''}>Ativo</option>
+        <option value="Inativo" ${window._acompFiltros.status === 'Inativo' ? 'selected' : ''}>Inativo</option>
+        <option value="Férias" ${window._acompFiltros.status === 'Férias' ? 'selected' : ''}>Férias</option>
+        <option value="Afastado" ${window._acompFiltros.status === 'Afastado' ? 'selected' : ''}>Afastado</option>
+        <option value="Pendente Documentação" ${window._acompFiltros.status === 'Pendente Documentação' ? 'selected' : ''}>Pendente Documentação</option>
+      </select>
+      <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-left:12px">Ordenar:</span>
+      <select class="form-select" style="width:auto" onchange="ordenarAcompanhamento(this.value)">
+        <option value="nome" ${window._acompOrdem === 'nome' ? 'selected' : ''}>Nome (A-Z)</option>
+        <option value="cargo" ${window._acompOrdem === 'cargo' ? 'selected' : ''}>Cargo (A-Z)</option>
+        <option value="status-usuario" ${window._acompOrdem === 'status-usuario' ? 'selected' : ''}>Status do Usuário</option>
+      </select>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Colaborador</th>
+          <th>Cargo</th>
+          <th>Status</th>
+          <th>Usuário de Treinamento</th>
+        </tr>
+      </thead>
+      <tbody id="trein-acompanhamento-tbody">
+        <tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>`;
+}
+
+window.filtrarStatusAcompanhamento = function(valor) {
+  if (!window._acompFiltros) window._acompFiltros = { status: 'ativos_pendentes' };
+  window._acompFiltros.status = valor;
+  if (window._renderTreinAcompanhamento) window._renderTreinAcompanhamento();
+};
+
+window.ordenarAcompanhamento = function(valor) {
+  window._acompOrdem = valor;
+  if (window._renderTreinAcompanhamento) window._renderTreinAcompanhamento();
+};
+
+// Ao clicar na linha: sem usuário criado ou sem nenhum curso liberado, só
+// avisa (não faz sentido abrir a tela de acompanhamento vazia); com usuário
+// e ao menos uma liberação, abre o modal de acompanhamento de cursos.
+window.clicarLinhaAcompanhamento = async function(idColaborador) {
+  await Promise.all([
+    (!window._usuariosCadastrados) ? loadUsuariosCadastrados() : Promise.resolve(),
+    loadCursoLiberacoesForApp(),
+  ]);
+
+  if (!temUsuarioTreinamento(idColaborador)) {
+    showToast(`${nomeColaboradorPorId(idColaborador)} ainda não tem usuário de Treinamento cadastrado.`, 4000);
+    return;
+  }
+
+  const liberacoes = (window._cursoLiberacoes || []).filter(l => l.id_colaborador === idColaborador);
+  if (liberacoes.length === 0) {
+    showToast(`${nomeColaboradorPorId(idColaborador)} já tem usuário criado, mas nenhum curso foi liberado ainda.`, 4000);
+    return;
+  }
+
+  abrirAcompanhamentoCursosModal(idColaborador);
+};
+
+// Progresso (curso_progresso) de UM colaborador específico — separado de
+// window._cursoProgresso (usado em "Meus Cursos" para o colaborador logado)
+// pra não colidir cache quando RH/Admin navega entre colaboradores diferentes.
+async function loadCursoProgressoColabAcomp(idColaborador) {
+  if (!supaClient) {
+    console.error('Supabase client não inicializado para curso_progresso.');
+    window._acompCursoProgresso = [];
+    return;
+  }
+  const { data, error } = await supaClient.from('curso_progresso').select('*').eq('id_colaborador', idColaborador);
+  if (error) {
+    console.error('Erro ao carregar progresso de cursos (acompanhamento):', error.message);
+    window._acompCursoProgresso = [];
+  } else {
+    window._acompCursoProgresso = data;
+  }
+}
+
+// Percentual concluído do curso a partir de aulas_concluidas — cursos Interno
+// usam a proporção de aulas marcadas; cursos Externo (sem aulas cadastradas)
+// não têm como medir aula a aula, então mostram 100% quando já registrados
+// como concluídos.
+function percentualConcluidoCurso(idCurso, progresso) {
+  const totalAulas = (window._cursoAulas || []).filter(a => a.id_curso === idCurso).length;
+  if (totalAulas > 0) {
+    const concluidas = (progresso && progresso.aulas_concluidas) || [];
+    return Math.round((concluidas.length / totalAulas) * 100);
+  }
+  return progresso && progresso.status === 'concluido' ? 100 : 0;
+}
+
+window.abrirAcompanhamentoCursosModal = async function(idColaborador) {
+  await Promise.all([
+    (!window._cursos || window._cursos.length === 0) ? loadCursosForApp() : Promise.resolve(),
+    (!window._cursoAulas) ? loadCursoAulasForApp() : Promise.resolve(),
+    loadCursoLiberacoesForApp(),
+    loadCursoProgressoColabAcomp(idColaborador),
+  ]);
+
+  window._acompColaboradorId = idColaborador;
+  if (!window._acompCursosAba) window._acompCursosAba = 'andamento';
+
+  if (!document.getElementById('acomp-cursos-modal')) {
+    const modal = document.createElement('div');
+    modal.id = 'acomp-cursos-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:6px;width:720px;max-width:95vw;max-height:85vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:15px;font-weight:700" id="acomp-cursos-modal-title">Acompanhamento de Cursos</div>
+          <div style="display:flex;gap:8px">
+            <button type="button" class="btn btn-sm btn-primary" onclick="abrirRegistrarCursoConcluidoModal()">+ Registrar curso concluído</button>
+            <button type="button" class="btn btn-sm" onclick="document.getElementById('acomp-cursos-modal').style.display='none'">✕ Fechar</button>
+          </div>
+        </div>
+        <div style="padding:16px 24px 0;display:flex;gap:8px">
+          <button class="btn btn-sm" id="acomp-tab-andamento" onclick="mudarAbaAcompanhamento('andamento')">Cursos em Andamento</button>
+          <button class="btn btn-sm" id="acomp-tab-concluidos" onclick="mudarAbaAcompanhamento('concluidos')">Cursos Concluídos</button>
+        </div>
+        <div style="padding:20px 24px" id="acomp-cursos-body"></div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  document.getElementById('acomp-cursos-modal-title').textContent = `Acompanhamento de Cursos — ${nomeColaboradorPorId(idColaborador)}`;
+  window._renderAcompCursosModal = renderAcompCursosModal;
+  renderAcompCursosModal();
+  document.getElementById('acomp-cursos-modal').style.display = 'flex';
+};
+
+window.mudarAbaAcompanhamento = function(aba) {
+  window._acompCursosAba = aba;
+  renderAcompCursosModal();
+};
+
+function renderAcompCursosModal() {
+  const body = document.getElementById('acomp-cursos-body');
+  if (!body) return;
+  const idColaborador = window._acompColaboradorId;
+
+  const btnAndamento = document.getElementById('acomp-tab-andamento');
+  const btnConcluidos = document.getElementById('acomp-tab-concluidos');
+  if (btnAndamento) btnAndamento.className = `btn btn-sm ${window._acompCursosAba === 'andamento' ? 'btn-primary' : ''}`;
+  if (btnConcluidos) btnConcluidos.className = `btn btn-sm ${window._acompCursosAba === 'concluidos' ? 'btn-primary' : ''}`;
+
+  const progressos = (window._acompCursoProgresso || []).filter(p => p.id_colaborador === idColaborador);
+
+  if (window._acompCursosAba === 'concluidos') {
+    const concluidos = progressos.filter(p => p.status === 'concluido');
+    body.innerHTML = concluidos.length === 0
+      ? '<div style="text-align:center;padding:24px;color:var(--text3)">Nenhum curso concluído ainda.</div>'
+      : `<table style="width:100%">
+          <thead><tr>
+            <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Curso</th>
+            <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">% Concluído</th>
+            <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Período Início</th>
+            <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Período Fim</th>
+            <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">% de Acerto</th>
+          </tr></thead>
+          <tbody>
+            ${concluidos.map(p => {
+              const curso = (window._cursos || []).find(c => c.id === p.id_curso);
+              return `
+              <tr>
+                <td style="padding:8px 0;font-size:13px">${curso ? curso.nome : '—'}</td>
+                <td style="padding:8px 0;font-size:13px">${percentualConcluidoCurso(p.id_curso, p)}%</td>
+                <td style="padding:8px 0;font-size:13px">${p.iniciado_em ? new Date(p.iniciado_em).toLocaleDateString('pt-BR') : '—'}</td>
+                <td style="padding:8px 0;font-size:13px">${p.concluido_em ? new Date(p.concluido_em).toLocaleDateString('pt-BR') : '—'}</td>
+                <td style="padding:8px 0;font-size:13px">${p.percentual_acerto !== null && p.percentual_acerto !== undefined ? p.percentual_acerto + '%' : '—'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>`;
+    return;
+  }
+
+  // Em andamento: cursos Interno liberados que ainda não foram concluídos —
+  // "Não iniciado" quando ainda não existe linha de progresso, "Em andamento"
+  // quando já existe mas o status ainda não virou "concluido".
+  const liberacoes = (window._cursoLiberacoes || []).filter(l => l.id_colaborador === idColaborador && l.status === 'Liberado');
+  const itens = liberacoes
+    .map(l => ({ curso: (window._cursos || []).find(c => c.id === l.id_curso), progresso: progressos.find(p => p.id_curso === l.id_curso) }))
+    .filter(item => item.curso && (!item.progresso || item.progresso.status !== 'concluido'));
+
+  body.innerHTML = itens.length === 0
+    ? '<div style="text-align:center;padding:24px;color:var(--text3)">Nenhum curso em andamento.</div>'
+    : itens.map(({ curso, progresso }) => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border)">
+          <div style="font-size:13px;font-weight:600">${curso.nome}</div>
+          ${progresso ? '<span class="badge badge-pending">Em andamento</span>' : '<span class="badge badge-gray">Não iniciado</span>'}
+        </div>`).join('');
+}
+
+// Registro manual de conclusão — só faz sentido pra cursos Externo (Interno
+// é concluído pelo próprio colaborador jogando o player até o fim, ver
+// finalizarCursoSemAvaliacao/enviarAvaliacaoAluno). Usa upsert porque
+// curso_progresso tem unique(id_curso, id_colaborador): se já existir uma
+// linha (ex.: corrigindo as datas de um registro anterior), atualiza em vez
+// de tentar duplicar.
+window.abrirRegistrarCursoConcluidoModal = function() {
+  if (!document.getElementById('registrar-curso-concluido-modal')) {
+    const modal = document.createElement('div');
+    modal.id = 'registrar-curso-concluido-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1100;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:6px;width:440px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:15px;font-weight:700">Registrar Curso Concluído</div>
+          <button type="button" class="btn btn-sm" onclick="document.getElementById('registrar-curso-concluido-modal').style.display='none'">✕</button>
+        </div>
+        <div style="padding:24px">
+          <div class="form-group" style="margin-bottom:16px">
+            <label class="form-label">Curso (Externo)</label>
+            <select class="form-select" id="rcc-curso"><option value="">— Selecione —</option></select>
+          </div>
+          <div class="form-group" style="margin-bottom:16px">
+            <label class="form-label">Período Início</label>
+            <input class="form-input" type="date" id="rcc-inicio">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Período Fim</label>
+            <input class="form-input" type="date" id="rcc-fim">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn" onclick="document.getElementById('registrar-curso-concluido-modal').style.display='none'">Cancelar</button>
+          <button type="button" class="btn btn-primary" id="rcc-btn-salvar" onclick="salvarRegistroCursoConcluido()">Registrar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  const cursosExternos = (window._cursos || []).filter(c => c.tipo === 'Externo');
+  const sel = document.getElementById('rcc-curso');
+  sel.innerHTML = '<option value="">— Selecione —</option>' + cursosExternos.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+  document.getElementById('rcc-inicio').value = '';
+  document.getElementById('rcc-fim').value = '';
+
+  document.getElementById('registrar-curso-concluido-modal').style.display = 'flex';
+};
+
+window.salvarRegistroCursoConcluido = async function() {
+  const idCurso = document.getElementById('rcc-curso').value;
+  const inicio = document.getElementById('rcc-inicio').value;
+  const fim = document.getElementById('rcc-fim').value;
+  const idColaborador = window._acompColaboradorId;
+  if (!idCurso) return showToast('Selecione o curso.');
+  if (!inicio) return showToast('Informe o período de início.');
+  if (!fim) return showToast('Informe o período de fim.');
+  if (!idColaborador) return showToast('Colaborador não identificado.');
+
+  const btn = document.getElementById('rcc-btn-salvar');
+  if (btn) { btn.disabled = true; btn.textContent = 'Registrando...'; }
+
+  try {
+    const payload = {
+      id_curso: idCurso,
+      id_colaborador: idColaborador,
+      status: 'concluido',
+      aulas_concluidas: [],
+      resultado_avaliacao: null,
+      percentual_acerto: null,
+      iniciado_em: inicio,
+      concluido_em: fim,
+    };
+    const { error } = await supaClient.from('curso_progresso').upsert(payload, { onConflict: 'id_curso,id_colaborador' });
+    if (error) throw error;
+
+    await loadCursoProgressoColabAcomp(idColaborador);
+    window._acompCursosAba = 'concluidos';
+    if (window._renderAcompCursosModal) window._renderAcompCursosModal();
+    document.getElementById('registrar-curso-concluido-modal').style.display = 'none';
+    showToast('Curso concluído registrado!');
+  } catch (e) {
+    console.error('Erro ao registrar curso concluído:', e);
+    showToast('Erro ao registrar curso concluído: ' + (e.message || e), 4000);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Registrar'; }
   }
 };
 
