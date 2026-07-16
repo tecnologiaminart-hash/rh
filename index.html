@@ -360,6 +360,22 @@
     .content { padding: 10px; }
   }
   .hidden { display: none !important; }
+
+  /* Plyr fica dentro de um container nosso que já define o aspect-ratio
+     16:9 (ver renderPlayerCursoHtml/abrirPreviewAulaAdmin) — sem isso, o
+     wrapper que o Plyr cria por baixo dos panos usa a proporção real do
+     vídeo (só conhecida depois que os metadados carregam), sobrando um
+     vão preto embaixo dos controles até o primeiro play/pause forçar um
+     recálculo de layout. */
+  .plyr,
+  .plyr__video-wrapper {
+    width: 100%;
+    height: 100%;
+  }
+  .plyr__video-wrapper video {
+    height: 100%;
+    object-fit: contain;
+  }
 </style>
 </head>
 <body>
