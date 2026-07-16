@@ -9657,7 +9657,7 @@ function renderPlayerCursoHtml() {
   const curso = (window._cursos || []).find(c => c.id === idCurso);
 
   const cabecalho = `
-    <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px">
+    <div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin-bottom:16px">
       <button class="btn btn-sm" onclick="sairDoPlayerCurso()">← Voltar aos Cursos</button>
       <div style="font-size:15px;font-weight:700">${curso ? curso.nome : ''}${window._playerReview ? ' <span class="badge badge-gray" style="font-weight:400">Revisão</span>' : ''}</div>
     </div>`;
@@ -9681,6 +9681,12 @@ function renderPlayerCursoHtml() {
   // precisando marcar cada aula como concluída pra passar pra próxima.
   const modoLivre = window._playerReview || ehUsuarioConvidado();
 
+  // Caixa de busca por nome da aula — filtra a lista abaixo sem re-renderizar
+  // a página (senão perderia o foco/cursor a cada letra digitada — ver
+  // filtrarListaAulasPlayer). Só aparece no modo livre.
+  const buscaAulaHtml = `
+    <input class="form-input" id="player-busca-aula" placeholder="Buscar aula pelo nome..." style="margin-bottom:10px" oninput="filtrarListaAulasPlayer(this.value)" autocomplete="off">`;
+
   // Lista vertical de aulas, clicáveis — reaproveitada nos dois estados do
   // modo livre: sozinha (tela "Selecione uma aula", _playerAulaIndex ainda
   // null) e ao lado do player, depois que uma aula é escolhida.
@@ -9690,7 +9696,7 @@ function renderPlayerCursoHtml() {
         const concluidaNaLista = concluidas.includes(a.id);
         const ativa = i === window._playerAulaIndex;
         return `
-        <div class="table-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;cursor:pointer;${ativa ? 'border:2px solid var(--accent)' : ''}" onclick="irParaAulaIndex(${i})">
+        <div class="table-card player-aula-item" data-titulo="${a.titulo.replace(/"/g, '&quot;').toLowerCase()}" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;cursor:pointer;${ativa ? 'border:2px solid var(--accent)' : ''}" onclick="irParaAulaIndex(${i})">
           <div style="display:flex;align-items:center;gap:8px;min-width:0">
             <span style="font-size:12px;color:var(--text3);flex-shrink:0">${i + 1}.</span>
             <span style="font-size:13px;font-weight:${ativa ? '700' : '500'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.titulo}</span>
@@ -9706,6 +9712,7 @@ function renderPlayerCursoHtml() {
     return cabecalho + `
       <div class="table-card" style="padding:20px">
         <div style="font-size:14px;font-weight:700;margin-bottom:14px">Selecione uma aula</div>
+        ${buscaAulaHtml}
         ${listaVerticalHtml}
       </div>`;
   }
@@ -9753,6 +9760,7 @@ function renderPlayerCursoHtml() {
       ${modoLivre ? `
       <div style="flex:1 1 240px;min-width:220px;max-width:320px">
         <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Aulas do curso</div>
+        ${buscaAulaHtml}
         ${listaVerticalHtml}
       </div>` : ''}
     </div>`;
@@ -9765,6 +9773,18 @@ function renderPlayerCursoHtml() {
 window.irParaAulaIndex = function(index) {
   window._playerAulaIndex = index;
   navigate('meus-cursos', 'Cursos');
+};
+
+// Filtra a lista de aulas (ver .player-aula-item/data-titulo em
+// renderPlayerCursoHtml) mostrando/escondendo os cartões direto no DOM —
+// evita re-renderizar a página a cada letra digitada, o que perderia o
+// foco/cursor da caixa de busca.
+window.filtrarListaAulasPlayer = function(termo) {
+  const alvo = (termo || '').trim().toLowerCase();
+  document.querySelectorAll('.player-aula-item').forEach(el => {
+    const titulo = el.dataset.titulo || '';
+    el.style.display = !alvo || titulo.includes(alvo) ? '' : 'none';
+  });
 };
 
 window.irParaAvaliacaoRevisao = function() {
