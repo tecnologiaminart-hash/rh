@@ -485,7 +485,7 @@ let currentUser = null;
 // copie a "Production URL" do node Webhook e cole abaixo.
 const N8N_WEBHOOK_URL = 'https://automatiza.minart.com.br/webhook/upload-documento-drive';
 // Mesmo valor configurado no node "Token válido?" (campo rightValue) dos workflows do n8n.
-const N8N_WEBHOOK_TOKEN = '1222314';
+const N8N_WEBHOOK_TOKEN = 'f14c27d64edccb96bd6b3825ef11b0429800d584ac6106925fe80bed31cf71eb';
 // Webhook do n8n que verifica se um arquivo ainda existe no Drive (usado para
 // remover da lista de documentos que foram apagados direto no Drive).
 // Após importar n8n/check-documento-drive.workflow.json e ativar o workflow,
@@ -10357,6 +10357,21 @@ window.abrirEditarEmailUsuarioModal = function(usuarioId, authUserId, emailAtual
   document.getElementById('editar-email-usuario-modal').style.display = 'flex';
 };
 
+// O webhook de criar/editar usuário no n8n agora valida a sessão de quem
+// está chamando (precisa ser Administrador/RH) em vez de um token fixo no
+// código — mesmo padrão de obterUrlStreamAula() com a Edge Function
+// get-video-token. Sem sessão válida de Admin/RH, o n8n rejeita a chamada.
+async function _headersAutenticacaoN8N() {
+  if (!supaClient) throw new Error('Supabase não inicializado.');
+  const { data: { session } } = await supaClient.auth.getSession();
+  if (!session) throw new Error('Sessão expirada. Atualize a página e faça login novamente.');
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${session.access_token}`,
+    'apikey': SUPA_KEY,
+  };
+}
+
 window.salvarEdicaoEmailUsuario = async function() {
   const novoEmail = document.getElementById('eeu-email').value.trim();
   if (!novoEmail) return showToast('Informe o novo e-mail.');
@@ -10370,9 +10385,8 @@ window.salvarEdicaoEmailUsuario = async function() {
   try {
     const res = await fetch(N8N_CRIAR_USUARIO_WEBHOOK_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await _headersAutenticacaoN8N(),
       body: JSON.stringify({
-        token: N8N_WEBHOOK_TOKEN,
         acao: 'editar_email',
         usuario_id: window._eeuUsuarioId,
         auth_user_id: window._eeuAuthUserId,
@@ -10483,9 +10497,8 @@ window.salvarCadastroUsuario = async function() {
   try {
     const res = await fetch(N8N_CRIAR_USUARIO_WEBHOOK_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await _headersAutenticacaoN8N(),
       body: JSON.stringify({
-        token: N8N_WEBHOOK_TOKEN,
         acao: 'criar',
         email,
         senha,
@@ -10582,9 +10595,8 @@ window.salvarCadastroConvidado = async function() {
   try {
     const res = await fetch(N8N_CRIAR_USUARIO_WEBHOOK_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await _headersAutenticacaoN8N(),
       body: JSON.stringify({
-        token: N8N_WEBHOOK_TOKEN,
         acao: 'criar',
         email,
         senha,
