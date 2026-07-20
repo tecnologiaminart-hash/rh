@@ -2880,16 +2880,14 @@ function renderContratoAlinhamentoModalHTML() {
       <div style="flex:1;overflow-y:auto;padding:24px">
         <div style="display:grid;grid-template-columns:repeat(4,minmax(220px,1fr));gap:20px;align-items:start">
 
-          <!-- Coluna 1: Avaliação de Experiência -->
+          <!-- Coluna 1: Avaliação -->
           <div style="border:1px solid var(--border);border-radius:6px;padding:16px">
-            <div style="font-size:13px;font-weight:700;text-transform:uppercase;margin-bottom:14px;color:var(--text2)">Avaliação de Experiência</div>
+            <div style="font-size:13px;font-weight:700;text-transform:uppercase;margin-bottom:14px;color:var(--text2)">Avaliação</div>
             <div class="form-group" style="margin-bottom:12px">
               <label class="form-label">Tipo de Contrato</label>
-              <select class="form-select" id="ca-tipo-contrato" onchange="caAtualizarBlocoExperiencia()">
-                <option value="Experiência">Experiência</option>
-                <option value="Efetivo">Efetivo</option>
-              </select>
+              <div class="form-input" id="ca-tipo-contrato-display" style="background:var(--bg2);color:var(--text2)">—</div>
             </div>
+            <button type="button" class="btn btn-sm" id="ca-aval-add-btn" style="width:100%;margin-bottom:12px;display:none" onclick="caExibirBlocoAvaliacao()">+ Adicionar Registro</button>
             <div id="ca-exp-bloco">
               <div style="font-size:12px;font-weight:700;margin:14px 0 8px;color:var(--text3);text-transform:uppercase">Avaliação 1</div>
               <div class="form-group" style="margin-bottom:8px">
@@ -2942,7 +2940,7 @@ function renderContratoAlinhamentoModalHTML() {
                 <textarea class="form-input" id="ca-finalizacao-obs" rows="2"></textarea>
               </div>
             </div>
-            <button type="button" class="btn btn-primary" style="width:100%;margin-top:10px" onclick="salvarAvaliacaoExperiencia()">Salvar Avaliação de Experiência</button>
+            <button type="button" class="btn btn-primary" style="width:100%;margin-top:10px" onclick="salvarAvaliacaoExperiencia()">Salvar Avaliação</button>
           </div>
 
           <!-- Coluna 2: Contrato de Expectativa -->
@@ -3309,8 +3307,7 @@ window.abrirContratoAlinhamentoModal = function(colabId) {
 
   const ca = (_contratosAlinhamentos || []).find(x => String(x.id_colaborador) === String(colabId)) || null;
 
-  const tipoInicial = (ca && ca.tipo_contrato_avaliacao) || (colab.tipo_de_contrato === 'Experiência' ? 'Experiência' : 'Efetivo');
-  document.getElementById('ca-tipo-contrato').value = tipoInicial;
+  document.getElementById('ca-tipo-contrato-display').textContent = colab.tipo_de_contrato || '—';
   document.getElementById('ca-aval1-status').value = (ca && ca.aval1_status) || '';
   document.getElementById('ca-aval1-data').value = (ca && ca.aval1_data) || '';
   document.getElementById('ca-aval1-obs').value = (ca && ca.aval1_observacoes) || '';
@@ -3341,18 +3338,37 @@ window.fecharContratoAlinhamentoModal = function() {
   document.getElementById('ca-modal').style.display = 'none';
 };
 
+window.caExibirBlocoAvaliacao = function() {
+  document.getElementById('ca-exp-bloco').style.display = '';
+  document.getElementById('ca-aval-add-btn').style.display = 'none';
+};
+
+// Para Experiência a avaliação é obrigatória e sempre aparece direto. Para
+// Efetivo é opcional: só mostra o formulário se já existir registro salvo,
+// senão mostra o botão "+ Adicionar Registro" para revelar o formulário.
 window.caAtualizarBlocoExperiencia = function() {
-  const tipo = document.getElementById('ca-tipo-contrato').value;
-  document.getElementById('ca-exp-bloco').style.display = tipo === 'Experiência' ? '' : 'none';
+  const colab = (_colaboradoresSupabase || []).find(c => String(c.id_colaborador) === String(_caModalColabId));
+  const tipo = colab ? colab.tipo_de_contrato : null;
+  const ca = (_contratosAlinhamentos || []).find(x => String(x.id_colaborador) === String(_caModalColabId));
+  const temAvaliacaoSalva = !!(ca && (ca.aval1_status || ca.aval2_status || ca.status_finalizacao_experiencia || ca.aval_link || ca.aval1_observacoes || ca.aval2_observacoes || ca.finalizacao_observacoes));
+
+  if (tipo === 'Experiência' || temAvaliacaoSalva) {
+    window.caExibirBlocoAvaliacao();
+  } else {
+    document.getElementById('ca-exp-bloco').style.display = 'none';
+    document.getElementById('ca-aval-add-btn').style.display = '';
+  }
 };
 
 window.salvarAvaliacaoExperiencia = async function() {
   if (!_caModalColabId) return;
   if (!supaClient) return showToast('Supabase não está configurado.', 'danger');
 
+  const colab = (_colaboradoresSupabase || []).find(c => String(c.id_colaborador) === String(_caModalColabId));
+
   const payload = {
     id_colaborador: _caModalColabId,
-    tipo_contrato_avaliacao: document.getElementById('ca-tipo-contrato').value,
+    tipo_contrato_avaliacao: colab ? colab.tipo_de_contrato : null,
     aval1_status: document.getElementById('ca-aval1-status').value || null,
     aval1_data: document.getElementById('ca-aval1-data').value || null,
     aval1_observacoes: document.getElementById('ca-aval1-obs').value.trim() || null,
@@ -3370,14 +3386,15 @@ window.salvarAvaliacaoExperiencia = async function() {
     .upsert(payload, { onConflict: 'id_colaborador' });
 
   if (error) {
-    console.error('Erro ao salvar avaliação de experiência:', error.message);
-    return showToast('Erro ao salvar avaliação de experiência.', 'danger');
+    console.error('Erro ao salvar avaliação:', error.message);
+    return showToast('Erro ao salvar avaliação.', 'danger');
   }
 
-  showToast('Avaliação de Experiência salva com sucesso!');
+  showToast('Avaliação salva com sucesso!');
   await loadContratosAlinhamentosFromSupabase();
   if (window._renderContratosAlinhamentos) window._renderContratosAlinhamentos();
   document.getElementById('ca-aval-link-view').innerHTML = renderVerLink(payload.aval_link, 'Ver avaliação');
+  window.caAtualizarBlocoExperiencia();
 };
 
 // Envia (ou mantém) os anexos de Contrato de Experiência e Contrato Efetivo de
