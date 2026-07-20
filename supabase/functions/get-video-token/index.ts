@@ -20,50 +20,51 @@ const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 // maior é baixo.
 const TOKEN_TTL_SECONDS = 3 * 60 * 60;
 
-function jsonError(message: string, status: number) {
+function jsonError(origin: string | null, message: string, status: number) {
   return new Response(JSON.stringify({ error: message }), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
   });
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
-  if (req.method !== 'POST') return jsonError('Método não permitido.', 405);
+  const origin = req.headers.get('Origin');
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders(origin) });
+  if (req.method !== 'POST') return jsonError(origin, 'Método não permitido.', 405);
 
   const jwt = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
-  if (!jwt) return jsonError('Não autenticado.', 401);
+  if (!jwt) return jsonError(origin, 'Não autenticado.', 401);
 
   let aulaId: number | string | undefined;
   try {
     ({ aula_id: aulaId } = await req.json());
   } catch {
-    return jsonError('Corpo da requisição inválido.', 400);
+    return jsonError(origin, 'Corpo da requisição inválido.', 400);
   }
-  if (!aulaId) return jsonError('aula_id é obrigatório.', 400);
+  if (!aulaId) return jsonError(origin, 'aula_id é obrigatório.', 400);
 
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
   const { data: userData, error: userError } = await supabase.auth.getUser(jwt);
-  if (userError || !userData?.user) return jsonError('Sessão inválida ou expirada.', 401);
+  if (userError || !userData?.user) return jsonError(origin, 'Sessão inválida ou expirada.', 401);
 
   const { data: usuario, error: usuarioError } = await supabase
     .from('usuarios')
     .select('id, colaborador_id, ativo, perfis(nome)')
     .eq('auth_user_id', userData.user.id)
     .maybeSingle();
-  if (usuarioError || !usuario || !usuario.ativo || !usuario.perfis) return jsonError('Usuário sem acesso ao sistema.', 403);
+  if (usuarioError || !usuario || !usuario.ativo || !usuario.perfis) return jsonError(origin, 'Usuário sem acesso ao sistema.', 403);
 
   const { data: aula, error: aulaError } = await supabase
     .from('curso_aulas')
     .select('id, id_curso, tipo_video, url_video')
     .eq('id', aulaId)
     .single();
-  if (aulaError || !aula) return jsonError('Aula não encontrada.', 404);
-  if (aula.tipo_video !== 'upload') return jsonError('Esta aula não usa vídeo do Drive.', 400);
+  if (aulaError || !aula) return jsonError(origin, 'Aula não encontrada.', 404);
+  if (aula.tipo_video !== 'upload') return jsonError(origin, 'Esta aula não usa vídeo do Drive.', 400);
 
   const driveFileId = extrairDriveFileId(aula.url_video);
-  if (!driveFileId) return jsonError('Vídeo desta aula está com o link do Drive mal configurado.', 500);
+  if (!driveFileId) return jsonError(origin, 'Vídeo desta aula está com o link do Drive mal configurado.', 500);
 
   const acessoTotal = usuario.perfis.nome === 'Administrador' || usuario.perfis.nome === 'RH';
 
@@ -77,7 +78,7 @@ Deno.serve(async (req) => {
       .eq(filtroColuna, filtroValor)
       .maybeSingle();
     if (!liberacao || liberacao.status !== 'Liberado') {
-      return jsonError('Você não tem acesso a este curso.', 403);
+      return jsonError(origin, 'Você não tem acesso a este curso.', 403);
     }
   }
 
@@ -87,6 +88,6 @@ Deno.serve(async (req) => {
   });
 
   return new Response(JSON.stringify({ token, expires_in: TOKEN_TTL_SECONDS }), {
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders(origin), 'Content-Type': 'application/json' },
   });
 });
