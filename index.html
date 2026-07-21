@@ -4502,36 +4502,43 @@ window.enviarArquivoAulaParaDrive = async function(file, { driveFolderId }) {
   }
 
   // 2) Manda o arquivo direto pro Google Drive, sem passar pelo servidor.
-  const putRes = await fetch(iniciarResult.upload_url, {
-    method: 'PUT',
-    headers: { 'Content-Type': file.type || 'application/octet-stream' },
-    body: file,
-  });
-  if (!putRes.ok) {
-    throw new Error(`Envio direto ao Drive falhou (status ${putRes.status}).`);
-  }
-  const arquivoDrive = await putRes.json();
-  if (!arquivoDrive.id) {
-    throw new Error('Upload concluído, mas o Drive não retornou o ID do arquivo.');
+  // O endpoint de upload do Drive não devolve os headers de CORS liberados,
+  // então o navegador SEMPRE recusa ler essa resposta (mesmo quando o envio
+  // deu certo do lado do Google — foi confirmado manualmente que o arquivo
+  // chega lá). Por isso ignoramos esse erro específico aqui e confirmamos o
+  // resultado de verdade no passo 3, que roda no servidor (sem restrição de
+  // CORS) e localiza o arquivo recém-criado pelo nome + pasta.
+  try {
+    await fetch(iniciarResult.upload_url, {
+      method: 'PUT',
+      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      body: file,
+    });
+  } catch (e) {
+    console.warn('PUT direto ao Drive: erro de CORS esperado (confirmando pelo servidor a seguir).', e);
   }
 
-  // 3) Pede pro n8n tornar o arquivo público (permissão de leitura), usando
-  // as credenciais do Drive que ficam só no servidor.
+  // 3) Pede pro n8n localizar o arquivo recém-enviado (pelo nome + pasta) e
+  // tornar público, usando as credenciais do Drive que ficam só no servidor.
   const finalizarRes = await fetch(N8N_AULA_WEBHOOK_URL, {
     method: 'POST',
     headers: await _headersAutenticacaoN8N(),
-    body: JSON.stringify({ acao: 'finalizar_upload_arquivo', file_id: arquivoDrive.id }),
+    body: JSON.stringify({
+      acao: 'finalizar_upload_arquivo',
+      nome_arquivo: file.name,
+      drive_folder_id: driveFolderId,
+    }),
   });
   if (!finalizarRes.ok) {
     throw new Error(`Webhook respondeu com status ${finalizarRes.status} ao finalizar o upload.`);
   }
   let finalizarResult = {};
   try { finalizarResult = await finalizarRes.json(); } catch (e) { /* resposta sem corpo JSON */ }
-  if (finalizarResult.success === false) {
-    throw new Error(finalizarResult.error || 'Falha ao tornar o arquivo público no Drive.');
+  if (finalizarResult.success === false || !finalizarResult.id) {
+    throw new Error(finalizarResult.error || 'Não foi possível confirmar o upload no Drive.');
   }
 
-  return arquivoDrive.webViewLink || `https://drive.google.com/file/d/${arquivoDrive.id}/view`;
+  return finalizarResult.webViewLink || `https://drive.google.com/file/d/${finalizarResult.id}/view`;
 };
 
 // Gera um arquivo .docx (Word) a partir de uma lista de perguntas e respostas,
