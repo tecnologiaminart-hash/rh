@@ -4464,7 +4464,14 @@ window.criarPastaCursoNoDrive = async function(nomeCurso) {
 };
 
 // Envia o vídeo (quando a aula usa upload) ou o material em PDF de uma aula de
-// curso Interno direto para a pasta do curso já mapeada no Drive.
+// curso Interno para a pasta do curso já mapeada no Drive.
+//
+// O arquivo NÃO passa mais pelo servidor do n8n: o n8n só abre uma sessão de
+// upload resumível no Drive (usando as credenciais do Google que ficam só lá)
+// e devolve a URL dessa sessão; o navegador manda o arquivo direto pro
+// Google com essa URL. Isso evita o "duplo salto" (navegador → VPS → Drive),
+// que deixava uploads grandes/lentos MUITO mais demorados do que mandar
+// direto pro Drive.
 window.enviarArquivoAulaParaDrive = async function(file, { driveFolderId }) {
   if (!N8N_AULA_WEBHOOK_URL || N8N_AULA_WEBHOOK_URL.startsWith('COLE_AQUI')) {
     throw new Error('Webhook de upload de aula não configurado: defina N8N_AULA_WEBHOOK_URL no index.html.');
@@ -4473,29 +4480,58 @@ window.enviarArquivoAulaParaDrive = async function(file, { driveFolderId }) {
     throw new Error('Pasta do curso no Drive ainda não foi criada.');
   }
 
-  const formData = new FormData();
-  formData.append('file', file, file.name);
-  formData.append('nome_arquivo', file.name);
-  formData.append('drive_folder_id', driveFolderId);
-
-  const res = await fetch(N8N_AULA_WEBHOOK_URL, {
+  // 1) Pede pro n8n abrir a sessão de upload resumível (rápido, só JSON).
+  const iniciarRes = await fetch(N8N_AULA_WEBHOOK_URL, {
     method: 'POST',
-    headers: await _headersAutenticacaoN8NFormData(),
-    body: formData
+    headers: await _headersAutenticacaoN8N(),
+    body: JSON.stringify({
+      acao: 'iniciar_upload_arquivo',
+      nome_arquivo: file.name,
+      mime_type: file.type || 'application/octet-stream',
+      tamanho_bytes: file.size,
+      drive_folder_id: driveFolderId,
+    }),
   });
-
-  if (!res.ok) {
-    throw new Error(`Webhook respondeu com status ${res.status}`);
+  if (!iniciarRes.ok) {
+    throw new Error(`Webhook respondeu com status ${iniciarRes.status} ao iniciar o upload.`);
+  }
+  let iniciarResult = {};
+  try { iniciarResult = await iniciarRes.json(); } catch (e) { /* resposta sem corpo JSON */ }
+  if (iniciarResult.success === false || !iniciarResult.upload_url) {
+    throw new Error(iniciarResult.error || 'Não foi possível iniciar o upload no Drive.');
   }
 
-  let result = {};
-  try { result = await res.json(); } catch (e) { /* resposta sem corpo JSON */ }
-
-  if (result.success === false) {
-    throw new Error(result.error || 'Falha reportada pelo webhook do n8n.');
+  // 2) Manda o arquivo direto pro Google Drive, sem passar pelo servidor.
+  const putRes = await fetch(iniciarResult.upload_url, {
+    method: 'PUT',
+    headers: { 'Content-Type': file.type || 'application/octet-stream' },
+    body: file,
+  });
+  if (!putRes.ok) {
+    throw new Error(`Envio direto ao Drive falhou (status ${putRes.status}).`);
+  }
+  const arquivoDrive = await putRes.json();
+  if (!arquivoDrive.id) {
+    throw new Error('Upload concluído, mas o Drive não retornou o ID do arquivo.');
   }
 
-  return result.url || result.webViewLink || result.link || null;
+  // 3) Pede pro n8n tornar o arquivo público (permissão de leitura), usando
+  // as credenciais do Drive que ficam só no servidor.
+  const finalizarRes = await fetch(N8N_AULA_WEBHOOK_URL, {
+    method: 'POST',
+    headers: await _headersAutenticacaoN8N(),
+    body: JSON.stringify({ acao: 'finalizar_upload_arquivo', file_id: arquivoDrive.id }),
+  });
+  if (!finalizarRes.ok) {
+    throw new Error(`Webhook respondeu com status ${finalizarRes.status} ao finalizar o upload.`);
+  }
+  let finalizarResult = {};
+  try { finalizarResult = await finalizarRes.json(); } catch (e) { /* resposta sem corpo JSON */ }
+  if (finalizarResult.success === false) {
+    throw new Error(finalizarResult.error || 'Falha ao tornar o arquivo público no Drive.');
+  }
+
+  return arquivoDrive.webViewLink || `https://drive.google.com/file/d/${arquivoDrive.id}/view`;
 };
 
 // Gera um arquivo .docx (Word) a partir de uma lista de perguntas e respostas,
