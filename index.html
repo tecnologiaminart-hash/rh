@@ -8167,6 +8167,7 @@ function pageCursos() {
             ` : ''}
             <button class="action-btn" title="Métricas do Curso" onclick="abrirMetricasCursoModal(${c.id})">Métricas 📈</button>
             <button class="action-btn" title="Editar" onclick="abrirCursoModal(${c.id})">✎</button>
+            <button class="action-btn" title="Excluir" onclick="excluirCurso(${c.id})">🗑</button>
           </td>
         </tr>`;
         }).join('');
@@ -8177,6 +8178,7 @@ function pageCursos() {
     loadCursosForApp(),
     loadCursoAulasForApp(),
     loadCursoLiberacoesForApp(),
+    loadCursoAvaliacaoPerguntasForApp(),
     (!window._cargos || window._cargos.length === 0) ? loadCargosForApp() : Promise.resolve(),
   ]).then(renderTabela);
 
@@ -8711,6 +8713,42 @@ window.salvarCurso = async function() {
   } catch (e) {
     console.error('Erro ao salvar curso:', e);
     showToast('Erro ao salvar curso: ' + (e.message || e), 'danger');
+  }
+};
+
+// Só permite excluir o curso se ele estiver "vazio" (sem aulas e sem
+// perguntas de avaliação final cadastradas) — caso contrário mostra um aviso
+// com o que ainda existe, em vez de deletar (e deixar curso_aulas/
+// curso_avaliacao_perguntas órfãos, ou pior, arrastar histórico de progresso).
+window.excluirCurso = async function(id) {
+  await Promise.all([
+    (!window._cursoAulas) ? loadCursoAulasForApp() : Promise.resolve(),
+    (!window._cursoAvaliacaoPerguntas) ? loadCursoAvaliacaoPerguntasForApp() : Promise.resolve(),
+  ]);
+
+  const curso = (window._cursos || []).find(c => c.id === id);
+  const qtdAulas = (window._cursoAulas || []).filter(a => a.id_curso === id).length;
+  const qtdPerguntas = (window._cursoAvaliacaoPerguntas || []).filter(p => p.id_curso === id).length;
+
+  if (qtdAulas > 0 || qtdPerguntas > 0) {
+    const partes = [];
+    if (qtdAulas > 0) partes.push(`${qtdAulas} aula${qtdAulas > 1 ? 's' : ''}`);
+    if (qtdPerguntas > 0) partes.push(`${qtdPerguntas} pergunta${qtdPerguntas > 1 ? 's' : ''} de avaliação final`);
+    alert(`Não é possível excluir o curso "${curso ? curso.nome : ''}": ele ainda tem ${partes.join(' e ')} cadastradas. Remova esse conteúdo antes de excluir o curso.`);
+    return;
+  }
+
+  if (!confirm(`Excluir o curso "${curso ? curso.nome : ''}"? Esta ação não pode ser desfeita.`)) return;
+
+  try {
+    const { error } = await supaClient.from('cursos').delete().eq('id', id);
+    if (error) throw error;
+    await loadCursosForApp();
+    if (window._renderCursos) window._renderCursos();
+    showToast('Curso excluído!');
+  } catch (e) {
+    console.error('Erro ao excluir curso:', e);
+    showToast('Erro ao excluir curso: ' + (e.message || e), 'danger');
   }
 };
 
@@ -9555,6 +9593,7 @@ function pageMeusCursos() {
     loadCursosForApp(),
     loadCursoLiberacoesForApp(),
     loadCursoProgressoForApp(idColaborador, idUsuario),
+    loadCursoAulasForApp(),
   ]).then(renderMeusCursosLista);
 
   return `
@@ -9599,14 +9638,21 @@ function renderMeusCursosLista() {
   }
 
   container.innerHTML = filtrados.map(({ curso, progresso }) => {
-    const badge = progresso && progresso.status === 'concluido'
+    const concluido = progresso && progresso.status === 'concluido';
+    const badge = concluido
       ? `<span class="badge ${progresso.resultado_avaliacao === 'Reprovado' ? 'badge-inactive' : 'badge-active'}">${progresso.resultado_avaliacao || 'Concluído'}</span>`
       : (progresso ? '<span class="badge badge-pending">Em andamento</span>' : '<span class="badge badge-gray">Não iniciado</span>');
+    // Contador de aulas só aparece pro usuário convidado (sem colaborador
+    // vinculado) e pra quem já concluiu o curso — colaborador ainda cursando
+    // não vê a quantidade de aulas antes de terminar.
+    const mostrarContadorAulas = ehUsuarioConvidado() || concluido;
+    const qtdAulas = (window._cursoAulas || []).filter(a => a.id_curso === curso.id).length;
     return `
     <div class="table-card" style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;margin-bottom:10px;cursor:pointer" onclick="abrirPlayerCurso(${curso.id})">
       <div>
         <div style="font-weight:700;font-size:14px">${curso.nome}</div>
         <div style="font-size:12px;color:var(--text3);margin-top:2px">${curso.descricao || ''}</div>
+        ${mostrarContadorAulas ? `<div style="font-size:11px;color:var(--text3);margin-top:4px">${qtdAulas} aula${qtdAulas !== 1 ? 's' : ''}</div>` : ''}
       </div>
       ${badge}
     </div>`;
