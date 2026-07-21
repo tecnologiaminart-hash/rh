@@ -8105,7 +8105,11 @@ async function recalcularCargaHorariaCurso(idCurso) {
     .reduce((acc, a) => acc + (parseInt(a.duracao_segundos, 10) || 0), 0);
   const cargaHoraria = +(totalSegundos / 3600).toFixed(2);
   const { error } = await supaClient.from('cursos').update({ carga_horaria: cargaHoraria }).eq('id', idCurso);
-  if (error) { console.error('Erro ao atualizar carga horária do curso:', error.message); return; }
+  if (error) {
+    console.error('Erro ao atualizar carga horária do curso:', error.message);
+    showToast('Não foi possível salvar a carga horária do curso: ' + error.message, 'danger');
+    return;
+  }
   const curso = (window._cursos || []).find(c => c.id === idCurso);
   if (curso) curso.carga_horaria = cargaHoraria;
 }
