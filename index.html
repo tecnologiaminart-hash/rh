@@ -1078,8 +1078,7 @@ const NAV = [
   {
     id: 'bonificacao', label: 'Bonificação', icon: '◇',
     subs: [
-      { id: 'bon-regras', label: 'Regras de Bonificação' },
-      { id: 'bon-historico', label: 'Histórico de Pagamentos' },
+      { id: 'bon-pendente', label: 'Pendente' },
     ]
   },
   {
@@ -4666,8 +4665,7 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
     'trein-acompanhamento': pageTreinAcompanhamento,
     'permissoes-acesso': pagePermissoesAcesso,
     'relatorios-impressao': pageRelatorioColaborador,
-    'bon-regras':      pageBonRegras,
-    'bon-historico':   pageBonHistorico,
+    'bon-pendente':    pageBonPendente,
     'int-cultura':     pageCultura,
     'int-regulamento': pageRegulamento,
     'int-convencao':   pageConvencao,
@@ -9744,11 +9742,20 @@ window.sairDoPlayerCurso = function() {
 function renderPlayerCursoHtml() {
   const idCurso = window._playerCursoId;
   const curso = (window._cursos || []).find(c => c.id === idCurso);
+  const progresso = (window._cursoProgresso || []).find(p => p.id_curso === idCurso);
+
+  // Contador de aulas (mesma regra do card em "Meus Cursos": só convidado ou
+  // quem já concluiu o curso) — aparece no cabeçalho em qualquer modo do
+  // player (aula, avaliação, resultado etc.).
+  const concluido = progresso && progresso.status === 'concluido';
+  const mostrarContadorAulas = ehUsuarioConvidado() || concluido;
+  const qtdAulasTotal = (window._cursoAulas || []).filter(a => a.id_curso === idCurso).length;
 
   const cabecalho = `
     <div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin-bottom:16px">
       <button class="btn btn-sm" onclick="sairDoPlayerCurso()">← Voltar aos Cursos</button>
       <div style="font-size:15px;font-weight:700">${curso ? curso.nome : ''}${window._playerReview ? ' <span class="badge badge-gray" style="font-weight:400">Revisão</span>' : ''}</div>
+      ${mostrarContadorAulas ? `<div style="font-size:12px;color:var(--text3)">${qtdAulasTotal} aula${qtdAulasTotal !== 1 ? 's' : ''}</div>` : ''}
     </div>`;
 
   if (window._playerModo === 'avaliacao') return cabecalho + renderAvaliacaoAlunoHtml(idCurso);
@@ -9760,7 +9767,6 @@ function renderPlayerCursoHtml() {
   const aulas = (window._cursoAulas || []).filter(a => a.id_curso === idCurso).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
   if (aulas.length === 0) return cabecalho + `<div class="empty-state"><div class="empty-state-title">Este curso ainda não tem aulas cadastradas.</div></div>`;
 
-  const progresso = (window._cursoProgresso || []).find(p => p.id_curso === idCurso);
   const concluidas = (progresso && progresso.aulas_concluidas) || [];
 
   // Convidado (login de teste/sem colaborador) navega livre entre as aulas
@@ -12581,45 +12587,12 @@ window.baixarRelatorioXlsx = function() {
 // ------------------------------------------------------------
 // BONIFICAÇÃO
 // ------------------------------------------------------------
-function pageBonRegras() {
+function pageBonPendente() {
   return `
-  <div class="form-card" style="margin-bottom:16px">
-    <div class="form-section-title">Regras de Bonificação</div>
-    <form>
-      <div class="form-grid">
-        <div class="form-group"><label class="form-label">Nome da Regra</label><input class="form-input" placeholder="Ex: Bônus de Resultado Q2"></div>
-        <div class="form-group"><label class="form-label">Vigência</label><input class="form-input" type="month"></div>
-        <div class="form-group"><label class="form-label">Tipo</label><select class="form-select"><option>% sobre Salário</option><option>Valor Fixo</option><option>Comissão</option></select></div>
-        <div class="form-group"><label class="form-label">Valor/Percentual</label><input class="form-input" type="number" placeholder="0"></div>
-        <div class="form-group form-full"><label class="form-label">Critérios / Metas</label><textarea class="form-textarea" placeholder="Descreva os critérios de elegibilidade..."></textarea></div>
-      </div>
-      <div class="form-footer"><button type="submit" class="btn btn-primary">Salvar Regra</button></div>
-    </form>
-  </div>
-  <div class="table-card">
-    <div class="table-header"><span class="table-title">Regras Cadastradas</span></div>
-    <table>
-      <thead><tr><th>Regra</th><th>Tipo</th><th>Valor</th><th>Vigência</th><th>Status</th></tr></thead>
-      <tbody>
-        ${[['Bônus Semestral','% Salário','10%','Jan–Jun/2024','Ativa'],['Comissão Comercial','Comissão','R$ 200/venda','Mensal','Ativa'],['PLR 2023','Valor Fixo','R$ 1.500','Dez/2023','Encerrada']].map(([r,t,v,vi,st])=>`
-          <tr><td>${r}</td><td>${t}</td><td style="font-weight:600">${v}</td><td>${vi}</td>
-          <td><span class="badge ${st==='Ativa'?'badge-active':'badge-inactive'}">${st}</span></td></tr>`).join('')}
-      </tbody>
-    </table>
-  </div>`;
-}
-
-function pageBonHistorico() {
-  return `
-  <div class="table-card">
-    <div class="table-header"><span class="table-title">Histórico de Pagamentos de Bonificação</span></div>
-    <table>
-      <thead><tr><th>Colaborador</th><th>Regra</th><th>Valor Pago</th><th>Competência</th><th>Data Pgto</th></tr></thead>
-      <tbody>
-        ${[['Carlos Souza','Bônus Semestral','R$ 480','Jun/2024','30/06/2024'],['Ana Lima','Bônus Semestral','R$ 750','Jun/2024','30/06/2024'],['João Pereira','PLR 2023','R$ 1.500','Dez/2023','20/12/2023']].map(([c,r,v,comp,dt])=>`
-          <tr><td>${c}</td><td>${r}</td><td style="font-weight:600;color:var(--success)">${v}</td><td>${comp}</td><td>${dt}</td></tr>`).join('')}
-      </tbody>
-    </table>
+  <div class="empty-state">
+    <div class="empty-state-icon">◇</div>
+    <div class="empty-state-title">Bonificação ainda não está disponível</div>
+    <div class="empty-state-desc">As definições de regras e pagamentos de Bonificação ainda estão sendo elaboradas. Em breve esta seção estará disponível.</div>
   </div>`;
 }
 
