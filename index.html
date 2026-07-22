@@ -8231,20 +8231,17 @@ function pageCursos() {
       : lista.map(c => {
           const qtdLiberados = (window._cursoLiberacoes || []).filter(l => l.id_curso === c.id && l.status === 'Liberado').length;
           return `
-        <tr>
-          <td><strong style="cursor:pointer" onclick="abrirCursoModal(${c.id})">${c.nome}</strong></td>
+        <tr style="cursor:pointer" onclick="abrirDashboardCursoModal(${c.id})">
+          <td><strong>${c.nome}</strong></td>
           <td><span class="badge ${c.tipo === 'Interno' ? 'badge-info' : 'badge-gray'}">${c.tipo}</span></td>
           <td>${c.carga_horaria !== null && c.carga_horaria !== undefined && c.carga_horaria !== '' ? (c.tipo === 'Interno' ? formatarHorasMinutos(Math.round(c.carga_horaria * 3600)) : `${c.carga_horaria}h`) : '—'}</td>
           <td>${nomeCargoPorId(c.id_cargos) || '—'}</td>
           <td style="white-space:normal;max-width:320px">${c.descricao || '—'}</td>
-          <td>
+          <td onclick="event.stopPropagation()">
             <span class="badge badge-info">${qtdLiberados}</span>
             <button class="action-btn" title="Ver lista de usuários liberados" onclick="abrirUsuariosLiberadosCursoModal(${c.id})">👥</button>
           </td>
-          <td style="white-space:nowrap">
-            ${c.tipo === 'Interno' ? `
-              <button class="action-btn" title="Dashboard" onclick="abrirDashboardCursoModal(${c.id})">Dashboard 📊</button>
-            ` : ''}
+          <td style="white-space:nowrap" onclick="event.stopPropagation()">
             <button class="action-btn" title="Métricas do Curso" onclick="abrirMetricasCursoModal(${c.id})">Métricas 📈</button>
             <button class="action-btn" title="Editar" onclick="abrirCursoModal(${c.id})">✎</button>
             <button class="action-btn" title="Excluir" onclick="excluirCurso(${c.id})">🗑</button>
