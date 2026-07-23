@@ -7142,6 +7142,16 @@ window.openCargoModal = async function(id=null){
 };
 window.editCargo=function(id){openCargoModal(id);};
 window.deleteCargo=async function(id){
+  // Não deixa excluir um cargo com colaborador vinculado (colaboradores.id_cargos)
+  // — teria que desvincular/mudar o cargo de cada um antes, senão o histórico e
+  // as telas que resolvem nome do cargo por id ficariam com referência quebrada.
+  if(!_colaboradoresSupabase || _colaboradoresSupabase.length===0) await loadColaboradoresFromSupabase();
+  const qtdColaboradores = (_colaboradoresSupabase||[]).filter(c => String(c.id_cargos) === String(id)).length;
+  if (qtdColaboradores > 0) {
+    showToast(`Não é possível excluir: ${qtdColaboradores} colaborador${qtdColaboradores > 1 ? 'es' : ''} ainda vinculado${qtdColaboradores > 1 ? 's' : ''} a este cargo.`, 'danger');
+    return;
+  }
+
   if(!confirm('Excluir este cargo?')) return;
   // deleta no Supabase
   try{
@@ -8305,6 +8315,33 @@ function cursoLiberadoParaAluno(curso, { idColaborador, idUsuario, idCargoColabo
   return true;
 }
 
+// Painel explicativo (colapsável) sobre tipos de curso/usuário e as opções
+// "Curso obrigatório"/"Bloquear para colaborador" — reaproveitado em
+// Treinamentos > Cursos e em Treinamentos > Cadastro de Usuário e Liberação,
+// as duas telas onde essas regras afetam o que o admin está configurando.
+function explicacaoTiposCursoUsuarioHtml() {
+  return `
+  <details class="table-card" open style="padding:16px 20px;margin-bottom:14px">
+    <summary style="cursor:pointer;font-weight:700;font-size:13px">ℹ️ Como funcionam os tipos de curso e de usuário</summary>
+    <div style="margin-top:12px;display:flex;flex-direction:column;gap:10px;font-size:13px;color:var(--text2)">
+      <div><strong>Tipos de curso</strong><br>
+        <span style="color:var(--text3)"><strong>Interno</strong>: curso com aulas (vídeo/material) dentro do próprio sistema, com player e avaliação final — é o único tipo que pode ser liberado/obrigatório/bloqueado por aqui.<br>
+        <strong>Externo</strong>: curso feito fora do sistema; a conclusão é registrada manualmente em Treinamentos › Acompanhamento e Registros, sem liberação nem player.</span>
+      </div>
+      <div><strong>Tipos de usuário</strong><br>
+        <span style="color:var(--text3)"><strong>Colaborador</strong>: login vinculado a um colaborador do RH (criado em Ficha e EPIs › Dados Pessoais) — recebe automaticamente os cursos obrigatórios do seu cargo, além do que for liberado manualmente.<br>
+        <strong>Convidado</strong>: login sem colaborador vinculado (teste, fornecedor etc.) — nunca recebe curso automaticamente; todo acesso depende de liberação manual, para qualquer curso.</span>
+      </div>
+      <div><strong>Bloquear para colaborador</strong> (opção no cadastro do curso)<br>
+        <span style="color:var(--text3)">Impede qualquer colaborador de fazer esse curso — nem automático, nem liberação manual. Só usuários Convidado podem ser liberados.</span>
+      </div>
+      <div><strong>Curso obrigatório</strong> (opção no cadastro do curso)<br>
+        <span style="color:var(--text3)">Libera automaticamente para todo colaborador do cargo vinculado ao curso (ou para todos os colaboradores, se nenhum cargo for definido) — sem precisar liberar manualmente. Liberação manual continua existindo normalmente para os cursos que não são obrigatórios.</span>
+      </div>
+    </div>
+  </details>`;
+}
+
 function pageCursos() {
   document.getElementById('topbar-actions').innerHTML =
     `<button class="btn btn-primary" onclick="abrirCursoModal()">+ Novo Curso</button>`;
@@ -8372,6 +8409,7 @@ function pageCursos() {
   ]);
 
   return `
+  ${explicacaoTiposCursoUsuarioHtml()}
   <div class="table-card">
     <div class="table-header">
       <span class="table-title">Cursos</span>
@@ -10558,25 +10596,7 @@ function pageCadastroUsuarioTreinamento() {
   ]).then(renderTabela);
 
   return `
-  <details class="table-card" open style="padding:16px 20px;margin-bottom:14px">
-    <summary style="cursor:pointer;font-weight:700;font-size:13px">ℹ️ Como funcionam os tipos de curso e de usuário</summary>
-    <div style="margin-top:12px;display:flex;flex-direction:column;gap:10px;font-size:13px;color:var(--text2)">
-      <div><strong>Tipos de curso</strong><br>
-        <span style="color:var(--text3)"><strong>Interno</strong>: curso com aulas (vídeo/material) dentro do próprio sistema, com player e avaliação final — é o único tipo que pode ser liberado/obrigatório/bloqueado por aqui.<br>
-        <strong>Externo</strong>: curso feito fora do sistema; a conclusão é registrada manualmente em Treinamentos › Acompanhamento e Registros, sem liberação nem player.</span>
-      </div>
-      <div><strong>Tipos de usuário</strong><br>
-        <span style="color:var(--text3)"><strong>Colaborador</strong>: login vinculado a um colaborador do RH (criado em Ficha e EPIs › Dados Pessoais) — recebe automaticamente os cursos obrigatórios do seu cargo, além do que for liberado manualmente.<br>
-        <strong>Convidado</strong>: login sem colaborador vinculado (teste, fornecedor etc.) — nunca recebe curso automaticamente; todo acesso depende de liberação manual aqui, para qualquer curso.</span>
-      </div>
-      <div><strong>Bloquear para colaborador</strong> (opção no cadastro do curso)<br>
-        <span style="color:var(--text3)">Impede qualquer colaborador de fazer esse curso — nem automático, nem liberação manual. Só usuários Convidado podem ser liberados.</span>
-      </div>
-      <div><strong>Curso obrigatório</strong> (opção no cadastro do curso)<br>
-        <span style="color:var(--text3)">Libera automaticamente para todo colaborador do cargo vinculado ao curso (ou para todos os colaboradores, se nenhum cargo for definido) — sem precisar liberar manualmente. Liberação manual continua existindo normalmente para os cursos que não são obrigatórios.</span>
-      </div>
-    </div>
-  </details>
+  ${explicacaoTiposCursoUsuarioHtml()}
   <div class="table-card">
     <div class="table-header">
       <span class="table-title">Cadastro de Usuário e Liberação</span>
@@ -11616,12 +11636,45 @@ function percentualConcluidoCurso(idCurso, progresso) {
   return progresso && progresso.status === 'concluido' ? 100 : 0;
 }
 
+// Último acesso (auth.users.last_sign_in_at) dos usuários de Treinamento —
+// não dá pra ler auth.users direto com a chave do client, então passa pela
+// RPC listar_ultimo_acesso_usuarios (SECURITY DEFINER, só devolve linha se
+// quem chamou for Administrador/RH — ver sql/criar-rpc-ultimo-acesso-usuarios.sql).
+async function loadUltimoAcessoUsuariosForApp() {
+  if (!supaClient) {
+    console.error('Supabase client não inicializado para último acesso.');
+    window._ultimoAcessoUsuarios = [];
+    return;
+  }
+  const { data, error } = await supaClient.rpc('listar_ultimo_acesso_usuarios');
+  if (error) {
+    console.error('Erro ao carregar último acesso dos usuários:', error.message);
+    window._ultimoAcessoUsuarios = [];
+  } else {
+    window._ultimoAcessoUsuarios = data || [];
+  }
+}
+
+// Resolve e formata o último login do usuário de Treinamento vinculado a um
+// colaborador (window._ultimoAcessoUsuarios, carregado em
+// abrirAcompanhamentoCursosModal). '—' = colaborador sem usuário;
+// 'Nunca acessou' = usuário criado mas nunca logou.
+function formatarUltimoAcessoTreinamento(idColaborador) {
+  const usuario = (window._usuariosCadastrados || []).find(u => u.perfil_id === 3 && String(u.colaborador_id) === String(idColaborador));
+  if (!usuario) return '—';
+  const registro = (window._ultimoAcessoUsuarios || []).find(a => String(a.usuario_id) === String(usuario.id));
+  if (!registro || !registro.last_sign_in_at) return 'Nunca acessou';
+  return new Date(registro.last_sign_in_at).toLocaleString('pt-BR');
+}
+
 window.abrirAcompanhamentoCursosModal = async function(idColaborador) {
   await Promise.all([
     (!window._cursos || window._cursos.length === 0) ? loadCursosForApp() : Promise.resolve(),
     (!window._cursoAulas) ? loadCursoAulasForApp() : Promise.resolve(),
     loadCursoLiberacoesForApp(),
     loadCursoProgressoColabAcomp(idColaborador),
+    (!window._usuariosCadastrados) ? loadUsuariosCadastrados() : Promise.resolve(),
+    loadUltimoAcessoUsuariosForApp(),
   ]);
 
   window._acompColaboradorId = idColaborador;
@@ -11633,8 +11686,11 @@ window.abrirAcompanhamentoCursosModal = async function(idColaborador) {
     modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;';
     modal.innerHTML = `
       <div style="background:#fff;border-radius:6px;width:720px;max-width:95vw;max-height:85vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.2)">
-        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-          <div style="font-size:15px;font-weight:700" id="acomp-cursos-modal-title">Acompanhamento de Cursos</div>
+        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+          <div>
+            <div style="font-size:15px;font-weight:700" id="acomp-cursos-modal-title">Acompanhamento de Cursos</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:2px" id="acomp-cursos-modal-ultimo-acesso"></div>
+          </div>
           <div style="display:flex;gap:8px">
             <button type="button" class="btn btn-sm btn-primary" onclick="abrirRegistrarCursoConcluidoModal()">+ Registrar Curso Externo</button>
             <button type="button" class="btn btn-sm" onclick="document.getElementById('acomp-cursos-modal').style.display='none'">✕ Fechar</button>
@@ -11650,6 +11706,7 @@ window.abrirAcompanhamentoCursosModal = async function(idColaborador) {
   }
 
   document.getElementById('acomp-cursos-modal-title').textContent = `Acompanhamento de Cursos — ${nomeColaboradorPorId(idColaborador)}`;
+  document.getElementById('acomp-cursos-modal-ultimo-acesso').textContent = `Último acesso ao Treinamento: ${formatarUltimoAcessoTreinamento(idColaborador)}`;
   window._renderAcompCursosModal = renderAcompCursosModal;
   renderAcompCursosModal();
   document.getElementById('acomp-cursos-modal').style.display = 'flex';
