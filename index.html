@@ -7638,6 +7638,9 @@ window.openDadosPessoaisModal = async function(id = null) {
   if (!_colaboradoresSupabase || _colaboradoresSupabase.length === 0) {
     await loadColaboradoresFromSupabase();
   }
+  if (!window._usuariosCadastrados) {
+    await loadUsuariosCadastrados();
+  }
 
   if (!document.getElementById('dados-pessoais-modal')) {
     const modal = document.createElement('div');
@@ -7662,13 +7665,19 @@ window.openDadosPessoaisModal = async function(id = null) {
           <div class="form-grid">
             <div class="form-group form-full">
               <label class="form-label">Nome Colaborador</label>
-              <select class="form-select" id="dp-colaborador" onchange="preencherSalarioDadosPessoais(this.value);atualizarFotoGrandeDadosPessoais(this.value)"><option value="">— Selecione —</option></select>
+              <select class="form-select" id="dp-colaborador" onchange="preencherSalarioDadosPessoais(this.value);atualizarFotoGrandeDadosPessoais(this.value);atualizarCriarUsuarioDadosPessoais()"><option value="">— Selecione —</option></select>
             </div>
             <div class="form-group"><label class="form-label">CPF</label><input class="form-input" id="dp-cpf" placeholder="000.000.000-00"></div>
             <div class="form-group"><label class="form-label">RG</label><input class="form-input" id="dp-rg"></div>
             <div class="form-group"><label class="form-label">Data de Nascimento</label><input class="form-input" type="date" id="dp-nascimento"></div>
             <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" id="dp-telefone" placeholder="(00) 00000-0000"></div>
-            <div class="form-group"><label class="form-label">E-mail</label><input class="form-input" type="email" id="dp-email"></div>
+            <div class="form-group"><label class="form-label">E-mail</label><input class="form-input" type="email" id="dp-email" oninput="atualizarCriarUsuarioDadosPessoais()"></div>
+            <div class="form-group form-full" id="dp-criar-usuario-wrap" style="display:none;background:var(--bg2);padding:10px 12px;border-radius:6px">
+              <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;cursor:pointer">
+                <input type="checkbox" id="dp-criar-usuario" style="margin-top:2px">
+                <span><strong>Criar usuário de Treinamento com este e-mail</strong> (senha inicial 12345678)<br><span id="dp-criar-usuario-nota" style="color:var(--text3);font-size:12px"></span></span>
+              </label>
+            </div>
             <div class="form-group form-full"><label class="form-label">Endereço</label><input class="form-input" id="dp-endereco"></div>
             <div class="form-group"><label class="form-label">Telefone Emergência (Nome/Fone)</label><input class="form-input" id="dp-tel-emergencia" placeholder="Ex: Maria - (00) 00000-0000"></div>
             <div class="form-group"><label class="form-label">Estado Civil</label>
@@ -7749,7 +7758,35 @@ window.openDadosPessoaisModal = async function(id = null) {
     atualizarFotoGrandeDadosPessoais('');
   }
 
+  document.getElementById('dp-criar-usuario').checked = false;
+  atualizarCriarUsuarioDadosPessoais();
+
   document.getElementById('dados-pessoais-modal').style.display = 'flex';
+};
+
+// Mostra/esconde a caixa "Criar usuário" conforme o colaborador selecionado
+// já tem usuário de Treinamento (usuarios.colaborador_id) ou não — só faz
+// sentido oferecer a criação pra quem ainda não tem. A caixa fica visível já
+// com o colaborador selecionado (mesmo sem e-mail ainda) para deixar claro
+// que vai ser cobrada ao salvar; ver bloqueio em salvarDadosPessoaisEpi().
+window.atualizarCriarUsuarioDadosPessoais = function() {
+  const idColaborador = document.getElementById('dp-colaborador')?.value;
+  const email = document.getElementById('dp-email')?.value.trim();
+  const wrap = document.getElementById('dp-criar-usuario-wrap');
+  const checkbox = document.getElementById('dp-criar-usuario');
+  const nota = document.getElementById('dp-criar-usuario-nota');
+  if (!wrap || !checkbox || !nota) return;
+
+  const semUsuario = !!idColaborador && !(window._usuariosCadastrados || []).some(u => String(u.colaborador_id) === String(idColaborador));
+  if (!semUsuario) {
+    wrap.style.display = 'none';
+    checkbox.checked = false;
+    return;
+  }
+  wrap.style.display = '';
+  nota.textContent = email
+    ? 'Obrigatório marcar para salvar — este colaborador ainda não tem usuário de Treinamento.'
+    : 'Preencha o e-mail acima para poder criar o usuário.';
 };
 
 // Ao selecionar/trocar o colaborador no modal, busca o salario_base dele na tabela
@@ -7770,6 +7807,17 @@ window.salvarDadosPessoaisEpi = async function() {
   const idColaborador = document.getElementById('dp-colaborador').value;
   if (!idColaborador) return showToast('Selecione o colaborador.');
 
+  const email = document.getElementById('dp-email').value.trim();
+  // Colaborador sem usuário de Treinamento + e-mail preenchido: obriga marcar
+  // "Criar usuário" antes de salvar, pra não deixar passar batido um e-mail
+  // cadastrado sem o acesso correspondente ser criado (ver
+  // atualizarCriarUsuarioDadosPessoais()).
+  const semUsuario = !(window._usuariosCadastrados || []).some(u => String(u.colaborador_id) === String(idColaborador));
+  const criarUsuarioMarcado = document.getElementById('dp-criar-usuario').checked;
+  if (email && semUsuario && !criarUsuarioMarcado) {
+    return showToast('Marque "Criar usuário" (ou deixe o e-mail em branco) para salvar.', 'danger');
+  }
+
   // Salário não é mais gravado aqui: o campo é somente leitura e reflete sempre
   // colaboradores.salario_base (única fonte de verdade, editável em Informações Contratuais).
   const payload = {
@@ -7778,7 +7826,7 @@ window.salvarDadosPessoaisEpi = async function() {
     rg: document.getElementById('dp-rg').value || null,
     data_nascimento: document.getElementById('dp-nascimento').value || null,
     telefone: document.getElementById('dp-telefone').value || null,
-    email: document.getElementById('dp-email').value || null,
+    email: email || null,
     endereco: document.getElementById('dp-endereco').value || null,
     telefone_emergencia: document.getElementById('dp-tel-emergencia').value || null,
     estado_civil: document.getElementById('dp-estado-civil').value || null,
@@ -7803,12 +7851,53 @@ window.salvarDadosPessoaisEpi = async function() {
     await loadDadosPessoaisEpiForApp();
     if (window._renderDadosPessoaisEpi) window._renderDadosPessoaisEpi();
     document.getElementById('dados-pessoais-modal').style.display = 'none';
-    showToast(id ? 'Registro atualizado!' : 'Registro criado!');
+
+    if (email && semUsuario && criarUsuarioMarcado) {
+      await criarUsuarioTreinamentoDeDadosPessoais(idColaborador, email);
+    } else {
+      showToast(id ? 'Registro atualizado!' : 'Registro criado!');
+    }
   } catch (e) {
     console.error('Erro ao salvar dados pessoais/EPIs:', e);
     showToast('Erro ao salvar registro: ' + (e.message || e));
   }
 };
+
+// Cria o usuário de Treinamento (mesmo fluxo/webhook de salvarCadastroUsuario,
+// em Treinamentos > Cadastro de Usuário) direto a partir do checkbox "Criar
+// usuário" em Dados Pessoais — ver salvarDadosPessoaisEpi(). Os Dados
+// Pessoais já foram salvos nesse ponto; um erro aqui não desfaz isso, só
+// avisa que o usuário ainda precisa ser criado manualmente depois.
+async function criarUsuarioTreinamentoDeDadosPessoais(idColaborador, email) {
+  if (!N8N_CRIAR_USUARIO_WEBHOOK_URL || N8N_CRIAR_USUARIO_WEBHOOK_URL.startsWith('COLE_AQUI')) {
+    showToast('Registro salvo, mas o webhook de criação de usuário não está configurado.', 'danger');
+    return;
+  }
+  try {
+    const res = await fetch(N8N_CRIAR_USUARIO_WEBHOOK_URL, {
+      method: 'POST',
+      headers: await _headersAutenticacaoN8N(),
+      body: JSON.stringify({
+        acao: 'criar',
+        email,
+        senha: '12345678',
+        colaborador_id: idColaborador,
+        perfil_id: 3, // Treinamento
+      }),
+    });
+    let result = {};
+    try { result = await res.json(); } catch (e) { /* resposta sem corpo JSON */ }
+    if (!res.ok || result.success === false) {
+      throw new Error(result.error || `Falha ao criar usuário (status ${res.status}).`);
+    }
+    await loadUsuariosCadastrados();
+    if (window._renderCadastroUsuario) window._renderCadastroUsuario();
+    showToast('Registro salvo! Usuário criado na Academia Minart — senha inicial: 12345678');
+  } catch (e) {
+    console.error('Erro ao criar usuário de Treinamento a partir de Dados Pessoais:', e);
+    showToast('Dados salvos, mas falhou ao criar o usuário: ' + (e.message || e), 'danger');
+  }
+}
 
 window.alterarStatusDadosPessoais = async function(id, novoStatus) {
   try {
@@ -8199,6 +8288,23 @@ function nomeCargoPorId(idCargo) {
   return cargo ? (cargo.nome_cargo || cargo.nome || cargo.cargo || idCargo) : null;
 }
 
+// Um curso Interno obrigatório libera automaticamente para colaboradores (não
+// convidados) cujo cargo bate com cursos.id_cargos, ou para todo mundo se
+// id_cargos for nulo — SEM gravar linha em curso_liberacoes (ver
+// sql/adicionar-curso-obrigatorio-bloqueio.sql). Uma liberação/bloqueio
+// explícito em curso_liberacoes sempre tem prioridade sobre essa regra —
+// usado tanto em "Meus Cursos" quanto para montar as linhas automáticas de
+// "Liberação de Cursos para Usuário".
+function cursoLiberadoParaAluno(curso, { idColaborador, idUsuario, idCargoColaborador }) {
+  const explicita = (window._cursoLiberacoes || []).find(l => l.id_curso === curso.id &&
+    (idColaborador ? l.id_colaborador === idColaborador : l.id_usuario === idUsuario));
+  if (explicita) return explicita.status === 'Liberado';
+  if (!idColaborador) return false; // convidado sempre depende de liberação explícita
+  if (curso.tipo !== 'Interno' || !curso.obrigatorio || curso.bloqueado_colaborador) return false;
+  if (curso.id_cargos && String(curso.id_cargos) !== String(idCargoColaborador)) return false;
+  return true;
+}
+
 function pageCursos() {
   document.getElementById('topbar-actions').innerHTML =
     `<button class="btn btn-primary" onclick="abrirCursoModal()">+ Novo Curso</button>`;
@@ -8235,7 +8341,7 @@ function pageCursos() {
           <td><strong>${c.nome}</strong></td>
           <td><span class="badge ${c.tipo === 'Interno' ? 'badge-info' : 'badge-gray'}">${c.tipo}</span></td>
           <td>${c.carga_horaria !== null && c.carga_horaria !== undefined && c.carga_horaria !== '' ? (c.tipo === 'Interno' ? formatarHorasMinutos(Math.round(c.carga_horaria * 3600)) : `${c.carga_horaria}h`) : '—'}</td>
-          <td>${nomeCargoPorId(c.id_cargos) || '—'}</td>
+          <td>${nomeCargoPorId(c.id_cargos) || '—'}${c.obrigatorio ? ' <span class="badge badge-info" style="margin-left:4px">Obrigatório</span>' : ''}${c.bloqueado_colaborador ? ' <span class="badge badge-gray" style="margin-left:4px">Bloq. colaborador</span>' : ''}</td>
           <td style="white-space:normal;max-width:320px">${c.descricao || '—'}</td>
           <td onclick="event.stopPropagation()">
             <span class="badge badge-info">${qtdLiberados}</span>
@@ -8704,6 +8810,16 @@ window.abrirCursoModal = async function(id = null) {
               <label class="form-label">Cargo (opcional)</label>
               <select class="form-select" id="cur-cargo"><option value="">— Nenhum —</option></select>
             </div>
+            <div class="form-group form-full" style="display:flex;flex-direction:column;gap:10px;background:var(--bg2);padding:12px;border-radius:6px">
+              <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;cursor:pointer">
+                <input type="checkbox" id="cur-obrigatorio" onchange="toggleObrigatorioBloqueioCursoModal('obrigatorio')" style="margin-top:2px">
+                <span><strong>Curso obrigatório</strong><br><span style="color:var(--text3);font-size:12px">Libera automaticamente para colaboradores (do cargo vinculado acima, ou todos se nenhum cargo for selecionado) — sem precisar liberar manualmente.</span></span>
+              </label>
+              <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;cursor:pointer">
+                <input type="checkbox" id="cur-bloqueado-colaborador" onchange="toggleObrigatorioBloqueioCursoModal('bloqueado')" style="margin-top:2px">
+                <span><strong>Bloquear para colaborador</strong><br><span style="color:var(--text3);font-size:12px">Só usuários Convidado podem ser liberados neste curso — colaboradores nunca terão acesso.</span></span>
+              </label>
+            </div>
           </div>
         </div>
         <div class="modal-footer">
@@ -8730,6 +8846,8 @@ window.abrirCursoModal = async function(id = null) {
     document.getElementById('cur-carga-horaria').value = (curso && curso.carga_horaria !== null && curso.carga_horaria !== undefined) ? curso.carga_horaria : '';
     document.getElementById('cur-descricao').value = curso?.descricao || '';
     selectCargo.value = (curso && curso.id_cargos !== null && curso.id_cargos !== undefined) ? curso.id_cargos : '';
+    document.getElementById('cur-obrigatorio').checked = !!curso?.obrigatorio;
+    document.getElementById('cur-bloqueado-colaborador').checked = !!curso?.bloqueado_colaborador;
   } else {
     document.getElementById('curso-modal-title').textContent = 'Novo Curso';
     document.getElementById('cur-nome').value = '';
@@ -8737,10 +8855,28 @@ window.abrirCursoModal = async function(id = null) {
     document.getElementById('cur-carga-horaria').value = '';
     document.getElementById('cur-descricao').value = '';
     selectCargo.value = '';
+    document.getElementById('cur-obrigatorio').checked = false;
+    document.getElementById('cur-bloqueado-colaborador').checked = false;
   }
   toggleTipoCursoModal(document.getElementById('cur-tipo').value);
+  toggleObrigatorioBloqueioCursoModal();
 
   document.getElementById('curso-modal').style.display = 'flex';
+};
+
+// "Obrigatório" e "Bloquear para colaborador" são mutuamente exclusivos (ver
+// constraint cursos_obrigatorio_bloqueio_exclusivos em
+// sql/adicionar-curso-obrigatorio-bloqueio.sql) — marcar um desmarca e
+// desabilita o outro. Chamado tanto pelo onchange dos checkboxes quanto ao
+// abrir o modal, pra já refletir o estado salvo.
+window.toggleObrigatorioBloqueioCursoModal = function(origem) {
+  const obrigatorioEl = document.getElementById('cur-obrigatorio');
+  const bloqueadoEl = document.getElementById('cur-bloqueado-colaborador');
+  if (!obrigatorioEl || !bloqueadoEl) return;
+  if (origem === 'obrigatorio' && obrigatorioEl.checked) bloqueadoEl.checked = false;
+  if (origem === 'bloqueado' && bloqueadoEl.checked) obrigatorioEl.checked = false;
+  obrigatorioEl.disabled = bloqueadoEl.checked;
+  bloqueadoEl.disabled = obrigatorioEl.checked;
 };
 
 // Curso Interno: Carga Horária vira somente exibição (soma das durações das
@@ -8769,9 +8905,11 @@ window.salvarCurso = async function() {
   const tipo = document.getElementById('cur-tipo').value;
   const descricao = document.getElementById('cur-descricao').value.trim();
   const cargoSelecionado = document.getElementById('cur-cargo').value;
+  const obrigatorio = document.getElementById('cur-obrigatorio').checked;
+  const bloqueadoColaborador = document.getElementById('cur-bloqueado-colaborador').checked;
   if (!nome) return showToast('Informe o nome do curso.');
 
-  const payload = { nome, tipo, descricao: descricao || null, id_cargos: cargoSelecionado || null };
+  const payload = { nome, tipo, descricao: descricao || null, id_cargos: cargoSelecionado || null, obrigatorio, bloqueado_colaborador: bloqueadoColaborador };
   if (tipo === 'Externo') {
     // Externo não tem aulas: carga horária continua um número digitado à mão.
     const cargaRaw = document.getElementById('cur-carga-horaria').value;
@@ -9704,6 +9842,7 @@ function pageMeusCursos() {
     loadCursoLiberacoesForApp(),
     loadCursoProgressoForApp(idColaborador, idUsuario),
     loadCursoAulasForApp(),
+    (!_colaboradoresSupabase || _colaboradoresSupabase.length === 0) ? loadColaboradoresFromSupabase() : Promise.resolve(),
   ]).then(renderMeusCursosLista);
 
   return `
@@ -9728,14 +9867,18 @@ function renderMeusCursosLista() {
   if (!container) return;
   const { idColaborador, idUsuario } = identidadeAlunoAtual();
 
-  const liberados = (window._cursoLiberacoes || []).filter(l =>
-    l.status === 'Liberado' && (idColaborador ? l.id_colaborador === idColaborador : l.id_usuario === idUsuario));
-  const itens = liberados
-    .map(l => ({
-      curso: (window._cursos || []).find(c => c.id === l.id_curso),
-      progresso: (window._cursoProgresso || []).find(p => p.id_curso === l.id_curso),
-    }))
-    .filter(item => item.curso);
+  // Cursos liberados manualmente (curso_liberacoes) + cursos obrigatórios do
+  // cargo do colaborador (ou sem cargo vinculado) liberados automaticamente
+  // — ver cursoLiberadoParaAluno().
+  const colaborador = idColaborador
+    ? (_colaboradoresSupabase || []).find(c => String(c.id_colaborador) === String(idColaborador))
+    : null;
+  const itens = (window._cursos || [])
+    .filter(curso => cursoLiberadoParaAluno(curso, { idColaborador, idUsuario, idCargoColaborador: colaborador?.id_cargos }))
+    .map(curso => ({
+      curso,
+      progresso: (window._cursoProgresso || []).find(p => p.id_curso === curso.id),
+    }));
 
   const filtrados = itens.filter(({ progresso }) => {
     const concluido = progresso && progresso.status === 'concluido';
@@ -10352,11 +10495,24 @@ async function loadUsuariosCadastrados() {
   }
 }
 
+// "+ Criar para Colaborador" não abre mais o modal de criação direta
+// (abrirCadastroUsuarioModal, mantido no código por compatibilidade) — em vez
+// disso leva para Ficha e EPIs > Dados Pessoais, onde o e-mail e a criação do
+// usuário viraram uma coisa só (ver checkbox "Criar usuário" em
+// openDadosPessoaisModal/salvarDadosPessoaisEpi).
+window.irCriarUsuarioColaboradorViaDadosPessoais = function() {
+  activeId = 'ficha-dados';
+  openMenus['ficha'] = true;
+  navigate('ficha-dados', 'Dados Pessoais', 'Ficha e EPIs');
+  buildSidebar();
+  showToast('Selecione o colaborador e preencha o e-mail para criar o acesso.');
+};
+
 function pageCadastroUsuarioTreinamento() {
   document.getElementById('topbar-actions').innerHTML =
     `<button class="btn" onclick="abrirLiberacoesCursosModal()">🔓 Liberação de Cursos para Usuário</button>
      <button class="btn" onclick="abrirCadastroConvidadoModal()">+ Criar para Teste/Convidado</button>
-     <button class="btn btn-primary" onclick="abrirCadastroUsuarioModal()">+ Criar para Colaborador</button>`;
+     <button class="btn btn-primary" onclick="irCriarUsuarioColaboradorViaDadosPessoais()">+ Criar para Colaborador</button>`;
 
   const renderTabela = () => {
     const tbody = document.getElementById('cadastro-usuario-tbody');
@@ -10402,6 +10558,25 @@ function pageCadastroUsuarioTreinamento() {
   ]).then(renderTabela);
 
   return `
+  <details class="table-card" open style="padding:16px 20px;margin-bottom:14px">
+    <summary style="cursor:pointer;font-weight:700;font-size:13px">ℹ️ Como funcionam os tipos de curso e de usuário</summary>
+    <div style="margin-top:12px;display:flex;flex-direction:column;gap:10px;font-size:13px;color:var(--text2)">
+      <div><strong>Tipos de curso</strong><br>
+        <span style="color:var(--text3)"><strong>Interno</strong>: curso com aulas (vídeo/material) dentro do próprio sistema, com player e avaliação final — é o único tipo que pode ser liberado/obrigatório/bloqueado por aqui.<br>
+        <strong>Externo</strong>: curso feito fora do sistema; a conclusão é registrada manualmente em Treinamentos › Acompanhamento e Registros, sem liberação nem player.</span>
+      </div>
+      <div><strong>Tipos de usuário</strong><br>
+        <span style="color:var(--text3)"><strong>Colaborador</strong>: login vinculado a um colaborador do RH (criado em Ficha e EPIs › Dados Pessoais) — recebe automaticamente os cursos obrigatórios do seu cargo, além do que for liberado manualmente.<br>
+        <strong>Convidado</strong>: login sem colaborador vinculado (teste, fornecedor etc.) — nunca recebe curso automaticamente; todo acesso depende de liberação manual aqui, para qualquer curso.</span>
+      </div>
+      <div><strong>Bloquear para colaborador</strong> (opção no cadastro do curso)<br>
+        <span style="color:var(--text3)">Impede qualquer colaborador de fazer esse curso — nem automático, nem liberação manual. Só usuários Convidado podem ser liberados.</span>
+      </div>
+      <div><strong>Curso obrigatório</strong> (opção no cadastro do curso)<br>
+        <span style="color:var(--text3)">Libera automaticamente para todo colaborador do cargo vinculado ao curso (ou para todos os colaboradores, se nenhum cargo for definido) — sem precisar liberar manualmente. Liberação manual continua existindo normalmente para os cursos que não são obrigatórios.</span>
+      </div>
+    </div>
+  </details>
   <div class="table-card">
     <div class="table-header">
       <span class="table-title">Cadastro de Usuário e Liberação</span>
@@ -10840,6 +11015,7 @@ window.abrirLiberacoesCursosModal = async function() {
     loadCursoLiberacoesForApp(),
     (!window._cursos || window._cursos.length === 0) ? loadCursosForApp() : Promise.resolve(),
     (!window._usuariosCadastrados) ? loadUsuariosCadastrados() : Promise.resolve(),
+    (!_colaboradoresSupabase || _colaboradoresSupabase.length === 0) ? loadColaboradoresFromSupabase() : Promise.resolve(),
   ]);
 
   if (!document.getElementById('liberacoes-cursos-modal')) {
@@ -10865,14 +11041,72 @@ window.abrirLiberacoesCursosModal = async function() {
   document.getElementById('liberacoes-cursos-modal').style.display = 'flex';
 };
 
+// Monta as linhas "automáticas": todo usuário de Treinamento com colaborador
+// vinculado × todo curso obrigatório pro qual ele é elegível (cargo bate, ou
+// curso sem cargo vinculado) que ainda não tenha uma linha explícita em
+// curso_liberacoes — mesma regra de cursoLiberadoParaAluno(), só que aqui
+// listamos todo mundo em vez de "só o aluno logado". Servem para o admin
+// enxergar quem tem acesso "a partir dessa mudança" (curso obrigatório) sem
+// precisar de liberação manual, com a opção de bloquear pontualmente alguém.
+function liberacoesAutomaticasObrigatorio() {
+  const usuariosColaboradores = (window._usuariosCadastrados || []).filter(u => u.perfil_id === 3 && u.colaborador_id);
+  const cursosObrigatorios = (window._cursos || []).filter(c => c.tipo === 'Interno' && c.obrigatorio && !c.bloqueado_colaborador);
+  const automaticas = [];
+  usuariosColaboradores.forEach(u => {
+    const colaborador = (_colaboradoresSupabase || []).find(c => String(c.id_colaborador) === String(u.colaborador_id));
+    cursosObrigatorios.forEach(curso => {
+      if (curso.id_cargos && String(curso.id_cargos) !== String(colaborador?.id_cargos)) return;
+      const jaTemLinhaExplicita = (window._cursoLiberacoes || []).some(l => l.id_curso === curso.id && l.id_colaborador === u.colaborador_id);
+      if (jaTemLinhaExplicita) return;
+      automaticas.push({ curso, id_colaborador: u.colaborador_id });
+    });
+  });
+  return automaticas;
+}
+
 function renderLiberacoesCursosModal() {
   const body = document.getElementById('liberacoes-cursos-body');
   if (!body) return;
 
   const lista = [...(window._cursoLiberacoes || [])];
-  body.innerHTML = lista.length === 0
-    ? '<div style="text-align:center;padding:24px;color:var(--text3)">Nenhuma liberação cadastrada ainda.</div>'
-    : `<table style="width:100%">
+  const automaticas = liberacoesAutomaticasObrigatorio();
+  if (lista.length === 0 && automaticas.length === 0) {
+    body.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text3)">Nenhuma liberação cadastrada ainda.</div>';
+    return;
+  }
+
+  const linhasManual = lista.map(l => {
+    const curso = (window._cursos || []).find(c => c.id === l.id_curso);
+    const nomeExibicao = l.id_colaborador
+      ? nomeColaboradorPorId(l.id_colaborador)
+      : (() => { const u = (window._usuariosCadastrados || []).find(x => x.id === l.id_usuario); return u ? (u.usuario_convidado || u.email || '—') : '—'; })();
+    return `
+    <tr>
+      <td style="padding:8px 0;font-size:13px">${nomeExibicao}${!l.id_colaborador ? ' <span class="badge badge-gray">Convidado</span>' : ''}</td>
+      <td style="padding:8px 0;font-size:13px">${curso ? curso.nome : '—'}</td>
+      <td style="padding:8px 0">
+        <select class="form-select" style="width:auto;${corSelectLiberacao(l.status)}" onchange="aplicarCorLiberacao(this); alterarStatusLiberacao(${l.id}, this.value)">
+          <option value="Liberado" ${l.status === 'Liberado' ? 'selected' : ''}>Liberado</option>
+          <option value="Bloqueado" ${l.status === 'Bloqueado' ? 'selected' : ''}>Bloqueado</option>
+        </select>
+      </td>
+      <td style="padding:8px 0">
+        <button class="action-btn" title="Excluir" onclick="excluirLiberacaoCurso(${l.id})" style="color:var(--danger)">✕</button>
+      </td>
+    </tr>`;
+  });
+
+  const linhasAutomaticas = automaticas.map(({ curso, id_colaborador }) => `
+    <tr>
+      <td style="padding:8px 0;font-size:13px">${nomeColaboradorPorId(id_colaborador)}</td>
+      <td style="padding:8px 0;font-size:13px">${curso.nome}</td>
+      <td style="padding:8px 0"><span class="badge badge-info" title="Liberado automaticamente por ser um curso obrigatório, sem linha manual">Automático · Obrigatório</span></td>
+      <td style="padding:8px 0">
+        <button class="action-btn" title="Bloquear o acesso automático para esta pessoa" onclick="bloquearAcessoObrigatorio(${curso.id}, ${id_colaborador})" style="color:var(--danger)">Bloquear</button>
+      </td>
+    </tr>`);
+
+  body.innerHTML = `<table style="width:100%">
         <thead><tr>
           <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Colaborador / Convidado</th>
           <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Curso</th>
@@ -10880,29 +11114,29 @@ function renderLiberacoesCursosModal() {
           <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Ações</th>
         </tr></thead>
         <tbody>
-          ${lista.map(l => {
-            const curso = (window._cursos || []).find(c => c.id === l.id_curso);
-            const nomeExibicao = l.id_colaborador
-              ? nomeColaboradorPorId(l.id_colaborador)
-              : (() => { const u = (window._usuariosCadastrados || []).find(x => x.id === l.id_usuario); return u ? (u.usuario_convidado || u.email || '—') : '—'; })();
-            return `
-            <tr>
-              <td style="padding:8px 0;font-size:13px">${nomeExibicao}${!l.id_colaborador ? ' <span class="badge badge-gray">Convidado</span>' : ''}</td>
-              <td style="padding:8px 0;font-size:13px">${curso ? curso.nome : '—'}</td>
-              <td style="padding:8px 0">
-                <select class="form-select" style="width:auto;${corSelectLiberacao(l.status)}" onchange="aplicarCorLiberacao(this); alterarStatusLiberacao(${l.id}, this.value)">
-                  <option value="Liberado" ${l.status === 'Liberado' ? 'selected' : ''}>Liberado</option>
-                  <option value="Bloqueado" ${l.status === 'Bloqueado' ? 'selected' : ''}>Bloqueado</option>
-                </select>
-              </td>
-              <td style="padding:8px 0">
-                <button class="action-btn" title="Excluir" onclick="excluirLiberacaoCurso(${l.id})" style="color:var(--danger)">✕</button>
-              </td>
-            </tr>`;
-          }).join('')}
+          ${linhasManual.join('')}${linhasAutomaticas.join('')}
         </tbody>
       </table>`;
 }
+
+// Cria uma linha real "Bloqueado" em curso_liberacoes pra sobrepor, pontualmente,
+// o acesso automático de um curso obrigatório pra um colaborador específico
+// (ver liberacoesAutomaticasObrigatorio/cursoLiberadoParaAluno — linha
+// explícita sempre vence a regra automática).
+window.bloquearAcessoObrigatorio = async function(idCurso, idColaborador) {
+  if (!confirm('Bloquear o acesso automático deste curso obrigatório para esta pessoa?')) return;
+  try {
+    const { error } = await supaClient.from('curso_liberacoes')
+      .upsert({ id_curso: idCurso, id_colaborador: idColaborador, id_usuario: null, status: 'Bloqueado' }, { onConflict: 'id_curso,id_colaborador' });
+    if (error) throw error;
+    await loadCursoLiberacoesForApp();
+    if (window._renderLiberacoesCursos) window._renderLiberacoesCursos();
+    showToast('Acesso bloqueado para esta pessoa.');
+  } catch (e) {
+    console.error('Erro ao bloquear acesso automático:', e);
+    showToast('Erro ao bloquear acesso: ' + (e.message || e), 'danger');
+  }
+};
 
 window.alterarStatusLiberacao = async function(id, novoStatus) {
   try {
@@ -10950,11 +11184,11 @@ window.abrirNovaLiberacaoModal = function() {
         <div style="padding:24px">
           <div class="form-group" style="margin-bottom:16px">
             <label class="form-label">Colaborador / Convidado</label>
-            <select class="form-select" id="nl-colaborador"><option value="">— Selecione —</option></select>
+            <select class="form-select" id="nl-colaborador" onchange="atualizarCursosNovaLiberacao()"><option value="">— Selecione —</option></select>
           </div>
           <div class="form-group">
-            <label class="form-label">Curso (Interno)</label>
-            <select class="form-select" id="nl-curso"><option value="">— Selecione —</option></select>
+            <label class="form-label">Curso</label>
+            <select class="form-select" id="nl-curso" disabled><option value="">— Selecione o colaborador/convidado primeiro —</option></select>
           </div>
         </div>
         <div class="modal-footer">
@@ -10973,12 +11207,35 @@ window.abrirNovaLiberacaoModal = function() {
       return `<option value="${u.id}">${nome}</option>`;
     }).join('');
 
-  const cursosInternos = (window._cursos || []).filter(c => c.tipo === 'Interno');
-  const selCurso = document.getElementById('nl-curso');
-  selCurso.innerHTML = '<option value="">— Selecione —</option>' +
-    cursosInternos.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+  atualizarCursosNovaLiberacao();
 
   document.getElementById('nova-liberacao-modal').style.display = 'flex';
+};
+
+// Curso disponível pra liberar manualmente depende de quem foi selecionado:
+// Colaborador só pode receber cursos Interno que não sejam obrigatórios (esses
+// já liberam sozinhos, ver cursoLiberadoParaAluno()) nem bloqueados pra
+// colaborador (esses são exclusivos de Convidado); Convidado mantém acesso a
+// todos os cursos, sem essas restrições — sempre dependeu de liberação
+// manual mesmo.
+window.atualizarCursosNovaLiberacao = function() {
+  const idUsuarioSelecionado = document.getElementById('nl-colaborador').value;
+  const selCurso = document.getElementById('nl-curso');
+  if (!idUsuarioSelecionado) {
+    selCurso.disabled = true;
+    selCurso.innerHTML = '<option value="">— Selecione o colaborador/convidado primeiro —</option>';
+    return;
+  }
+
+  const usuario = (window._usuariosCadastrados || []).find(u => String(u.id) === String(idUsuarioSelecionado));
+  const ehColaborador = !!(usuario && usuario.colaborador_id);
+  const cursosDisponiveis = ehColaborador
+    ? (window._cursos || []).filter(c => c.tipo === 'Interno' && !c.obrigatorio && !c.bloqueado_colaborador)
+    : (window._cursos || []);
+
+  selCurso.disabled = false;
+  selCurso.innerHTML = '<option value="">— Selecione —</option>' +
+    cursosDisponiveis.map(c => `<option value="${c.id}">${c.nome}${c.tipo === 'Externo' ? ' (Externo)' : ''}</option>`).join('');
 };
 
 window.salvarNovaLiberacao = async function() {
@@ -10989,6 +11246,14 @@ window.salvarNovaLiberacao = async function() {
 
   const usuario = (window._usuariosCadastrados || []).find(u => String(u.id) === String(idUsuarioSelecionado));
   if (!usuario) return showToast('Usuário não encontrado.');
+
+  const curso = (window._cursos || []).find(c => String(c.id) === String(idCurso));
+  if (usuario.colaborador_id && curso?.bloqueado_colaborador) {
+    return showToast('Este curso é somente para usuários Convidado.', 'danger');
+  }
+  if (usuario.colaborador_id && curso?.obrigatorio) {
+    return showToast('Este curso é obrigatório e já é liberado automaticamente — não precisa de liberação manual.', 'danger');
+  }
 
   const btn = document.getElementById('nl-btn-salvar');
   if (btn) { btn.disabled = true; btn.textContent = 'Liberando...'; }
