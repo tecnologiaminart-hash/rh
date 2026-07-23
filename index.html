@@ -8786,7 +8786,7 @@ window.abrirCursoModal = async function(id = null) {
     modal.id = 'curso-modal';
     modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;';
     modal.innerHTML = `
-      <div style="background:#fff;border-radius:6px;width:560px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+      <div style="background:#fff;border-radius:6px;width:560px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.18)">
         <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
           <div style="font-size:15px;font-weight:700" id="curso-modal-title">Novo Curso</div>
           <button type="button" class="btn btn-sm" onclick="document.getElementById('curso-modal').style.display='none'">✕</button>
