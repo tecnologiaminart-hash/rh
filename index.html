@@ -1765,7 +1765,7 @@ function pageHistoricoCarreiraDetalhe(idColaborador) {
   }
 
   document.getElementById('topbar-actions').innerHTML =
-    `<button class="btn btn-primary" onclick="openHistoricoModal('${idColaborador}')">+ Adicionar Registro</button>`;
+    `<button class="btn btn-primary" onclick="openHistoricoModal('${idColaborador}')">+ Adicionar Registros Antigos</button>`;
 
   const renderTabela = () => {
     const tbody = document.getElementById('carreira-tbody-detalhe');
@@ -1795,6 +1795,9 @@ function pageHistoricoCarreiraDetalhe(idColaborador) {
   loadColaboradorHistoricoForApp().then(renderTabela);
 
   return `
+  <div class="table-card" style="padding:14px 20px;margin-bottom:14px;background:#e8f4ff;border:1px solid #b8dcff;color:#0b4a8f;font-size:13px;line-height:1.5">
+    ℹ️ A partir de agora, toda mudança de cargo feita em Informações Contratuais gera um registro aqui automaticamente — o período do cargo anterior é encerrado e o novo já entra na lista sozinho. Use <strong>"+ Adicionar Registros Antigos"</strong> só para completar o histórico anterior a essa automação.
+  </div>
   <div class="table-card">
     <div class="table-header">
       <span class="table-title">Histórico de Carreira de ${colaborador.nome_colaborador}</span>
@@ -1875,9 +1878,18 @@ window.verHistoricoCarreiraModal = function(idColaborador) {
   loadColaboradorHistoricoForApp().then(renderLista);
 };
 
-window.openHistoricoModal = async function(idColaborador, idRegistro = null) {
+// `opcoes.modo` reaproveita este mesmo modal de Adicionar/Editar Registro de
+// Carreira em dois passos automáticos disparados por uma troca de cargo em
+// Informações Contratuais (ver iniciarFluxoTrocaCargo, chamada por
+// saveStatusEmployee): 'fechar-cargo-anterior' (trava Cargo/Período Início,
+// exige Período Fim) e 'iniciar-novo-cargo' (trava Cargo/Período Fim, exige
+// Período Início) — nos dois casos com um aviso visual no topo do modal.
+// 'normal' (padrão) é o uso manual de sempre, sem nenhuma trava.
+window.openHistoricoModal = async function(idColaborador, idRegistro = null, opcoes = {}) {
+  const modo = opcoes.modo || 'normal';
   window._editingHistoricoId = idRegistro;
   window._historicoModalColabId = idColaborador;
+  window._historicoModalModo = modo;
 
   if (!window._cargos || window._cargos.length === 0) await loadCargosForApp();
 
@@ -1888,6 +1900,7 @@ window.openHistoricoModal = async function(idColaborador, idRegistro = null) {
     modal.innerHTML = `
       <div style="background:#fff;border-radius:6px;padding:32px;width:560px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
         <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="historico-modal-title">Adicionar Registro de Carreira</div>
+        <div id="historico-modal-aviso" style="display:none;margin-bottom:16px;padding:10px 12px;border-radius:4px;font-size:13px;line-height:1.4"></div>
         <div class="form-grid">
           <div class="form-group">
             <label class="form-label">Período Início</label>
@@ -1911,7 +1924,7 @@ window.openHistoricoModal = async function(idColaborador, idRegistro = null) {
           </div>
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
-          <button class="btn" onclick="document.getElementById('historico-modal').style.display='none'">Cancelar</button>
+          <button class="btn" onclick="cancelarHistoricoModal()">Cancelar</button>
           <button class="btn btn-primary" onclick="salvarHistoricoCarreira()">Salvar</button>
         </div>
       </div>`;
@@ -1926,29 +1939,81 @@ window.openHistoricoModal = async function(idColaborador, idRegistro = null) {
       return `<option value="${cid}">${nome}</option>`;
     }).join('');
 
+  const inicioEl = document.getElementById('historico-inicio');
+  const fimEl = document.getElementById('historico-fim');
+  const salarioEl = document.getElementById('historico-salario');
+  const motivoEl = document.getElementById('historico-motivo');
+  const avisoEl = document.getElementById('historico-modal-aviso');
+
   if (idRegistro) {
     const reg = (window._colaboradorHistorico || []).find(h => h.id_cargos_hist === idRegistro);
     document.getElementById('historico-modal-title').textContent = 'Editar Registro de Carreira';
-    document.getElementById('historico-inicio').value = reg?.periodo_inicio || '';
-    document.getElementById('historico-fim').value = reg?.periodo_fim || '';
+    inicioEl.value = reg?.periodo_inicio || '';
+    fimEl.value = reg?.periodo_fim || '';
     selectCargo.value = reg?.id_cargos || '';
-    document.getElementById('historico-salario').value = (reg && reg.salario_hist !== null && reg.salario_hist !== undefined)
+    salarioEl.value = (reg && reg.salario_hist !== null && reg.salario_hist !== undefined)
       ? new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(reg.salario_hist)
       : '';
-    document.getElementById('historico-motivo').value = reg?.motivo || '';
+    motivoEl.value = reg?.motivo || '';
   } else {
     document.getElementById('historico-modal-title').textContent = 'Adicionar Registro de Carreira';
-    document.getElementById('historico-inicio').value = '';
-    document.getElementById('historico-fim').value = '';
+    inicioEl.value = '';
+    fimEl.value = '';
     selectCargo.value = '';
-    document.getElementById('historico-salario').value = '';
-    document.getElementById('historico-motivo').value = '';
+    salarioEl.value = '';
+    motivoEl.value = '';
+  }
+
+  // Reseta trava/estilo antes de aplicar o modo atual — sem isso, um campo
+  // travado num passo anterior do fluxo continuaria travado no uso normal.
+  [inicioEl, fimEl, selectCargo].forEach(el => { el.disabled = false; el.style.background = ''; el.style.cursor = ''; });
+  avisoEl.style.display = 'none';
+
+  if (modo === 'fechar-cargo-anterior') {
+    document.getElementById('historico-modal-title').textContent = 'Encerrar Registro Anterior';
+    if (!fimEl.value) fimEl.value = new Date().toISOString().slice(0, 10);
+    [inicioEl, selectCargo].forEach(el => { el.disabled = true; el.style.background = 'var(--bg2)'; el.style.cursor = 'not-allowed'; });
+    avisoEl.style.display = 'block';
+    avisoEl.style.background = '#fff4e5';
+    avisoEl.style.color = '#8a5a00';
+    avisoEl.style.border = '1px solid #ffdca8';
+    avisoEl.innerHTML = '⚠️ O cargo deste colaborador está sendo alterado. Confirme o <strong>Período Fim</strong> deste registro (cargo anterior) — é obrigatório pra continuar.';
+  } else if (modo === 'iniciar-novo-cargo') {
+    const pendente = window._trocaCargoPendente || {};
+    document.getElementById('historico-modal-title').textContent = 'Novo Registro de Carreira';
+    if (pendente.cargoNovoId != null) selectCargo.value = String(pendente.cargoNovoId);
+    if (!inicioEl.value) inicioEl.value = pendente.periodoInicioSugerido || new Date().toISOString().slice(0, 10);
+    if (!salarioEl.value && pendente.salarioNovo !== null && pendente.salarioNovo !== undefined) {
+      salarioEl.value = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(pendente.salarioNovo);
+    }
+    fimEl.value = '';
+    [fimEl, selectCargo].forEach(el => { el.disabled = true; el.style.background = 'var(--bg2)'; el.style.cursor = 'not-allowed'; });
+    avisoEl.style.display = 'block';
+    avisoEl.style.background = '#e8f4ff';
+    avisoEl.style.color = '#0b4a8f';
+    avisoEl.style.border = '1px solid #b8dcff';
+    avisoEl.innerHTML = `ℹ️ Cargo anterior encerrado. Confirme o <strong>Período Início</strong> do novo cargo (${nomeCargoPorId(pendente.cargoNovoId) || ''}) para concluir — o colaborador só é atualizado depois de salvar aqui.`;
   }
 
   document.getElementById('historico-modal').style.display = 'flex';
 };
 
+// Cancelar em qualquer passo do fluxo de troca de cargo aborta a troca
+// inteira (nada foi salvo em colaboradores ainda) — não reabre sozinho o
+// modal de Informações Contratuais, então avisa o usuário que precisa editar
+// de novo se quiser tentar.
+window.cancelarHistoricoModal = function() {
+  const modo = window._historicoModalModo || 'normal';
+  document.getElementById('historico-modal').style.display = 'none';
+  if (modo !== 'normal') {
+    window._trocaCargoPendente = null;
+    window._historicoModalModo = 'normal';
+    showToast('Troca de cargo cancelada — nada foi salvo. Abra Editar novamente pra tentar de novo.');
+  }
+};
+
 window.salvarHistoricoCarreira = async function() {
+  const modo = window._historicoModalModo || 'normal';
   const idColaborador = window._historicoModalColabId;
   const periodoInicio = document.getElementById('historico-inicio').value;
   const periodoFim = document.getElementById('historico-fim').value;
@@ -1959,6 +2024,7 @@ window.salvarHistoricoCarreira = async function() {
 
   if (!periodoInicio) return showToast('Informe o Período Início.');
   if (!idCargo) return showToast('Selecione o Cargo.');
+  if (modo === 'fechar-cargo-anterior' && !periodoFim) return showToast('Informe o Período Fim do registro anterior para continuar.');
 
   const payload = {
     id_colaborador: idColaborador,
@@ -1979,11 +2045,46 @@ window.salvarHistoricoCarreira = async function() {
     await loadColaboradorHistoricoForApp();
     if (window._renderHistoricoCarreiraDetalhe) window._renderHistoricoCarreiraDetalhe();
     if (window._renderColaboradoresHistorico) window._renderColaboradoresHistorico();
+
+    // Passo 1 concluído (fechou o cargo anterior) — encadeia automaticamente
+    // pro passo 2 (criar o registro do novo cargo), sem fechar o modal.
+    if (modo === 'fechar-cargo-anterior') {
+      showToast('Cargo anterior encerrado. Agora informe os dados do novo cargo.');
+      window._trocaCargoPendente = {
+        ...(window._trocaCargoPendente || {}),
+        periodoInicioSugerido: adicionarDiasDataISO(periodoFim, 1),
+      };
+      await openHistoricoModal(idColaborador, null, { modo: 'iniciar-novo-cargo' });
+      return;
+    }
+
+    // Passo 2 concluído (novo registro de carreira criado) — só agora
+    // atualiza colaboradores com os dados vindos de Informações Contratuais
+    // (cargo, salário, status etc.), fechando os dois modais.
+    if (modo === 'iniciar-novo-cargo') {
+      const pendente = window._trocaCargoPendente;
+      if (pendente && pendente.novosDadosColaborador) {
+        const { error: erroColab } = await supaClient
+          .from('colaboradores')
+          .update(pendente.novosDadosColaborador)
+          .eq('id_colaborador', pendente.colabId);
+        if (erroColab) throw erroColab;
+        await loadColaboradoresFromSupabase();
+      }
+      window._trocaCargoPendente = null;
+      window._historicoModalModo = 'normal';
+      document.getElementById('historico-modal').style.display = 'none';
+      const statusModal = document.getElementById('status-modal');
+      if (statusModal) statusModal.style.display = 'none';
+      showToast('Cargo atualizado e histórico de carreira registrado com sucesso!');
+      return;
+    }
+
     document.getElementById('historico-modal').style.display = 'none';
     showToast('Registro de carreira salvo!');
   } catch (e) {
     console.error('Erro ao salvar histórico de carreira:', e);
-    showToast('Erro ao salvar registro: ' + (e.message || e));
+    showToast('Erro ao salvar: ' + (e.message || e));
   }
 };
 
@@ -2057,6 +2158,23 @@ function adicionarDiasDataBR(dataStr, dias) {
   const dd = String(d.getDate()).padStart(2, '0');
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   return `${dd}/${mm}/${d.getFullYear()}`;
+}
+
+// Igual adicionarDiasDataBR, mas devolve "YYYY-MM-DD" (formato que o
+// <input type="date"> espera) — usado pra sugerir o Período Início do novo
+// registro de carreira logo após fechar o registro anterior (ver
+// iniciarFluxoTrocaCargo / salvarHistoricoCarreira).
+function adicionarDiasDataISO(dataStr, dias) {
+  if (!dataStr) return null;
+  const m = String(dataStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  const [, ano, mes, dia] = m;
+  const d = new Date(parseInt(ano, 10), parseInt(mes, 10) - 1, parseInt(dia, 10));
+  d.setDate(d.getDate() + dias);
+  const yyyy = d.getFullYear();
+  const mm2 = String(d.getMonth() + 1).padStart(2, '0');
+  const dd2 = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm2}-${dd2}`;
 }
 
 // Filtro de busca genérico reutilizado pelas tabelas simples (sem paginação/contador).
@@ -2387,6 +2505,37 @@ function closeStatusModal() {
   document.getElementById('status-modal').style.display = 'none';
 }
 
+// Dispara o fluxo de 2 passos (fechar registro do cargo anterior → criar
+// registro do novo cargo) reaproveitando o modal de Adicionar/Editar
+// Histórico de Carreira, disparado quando saveStatusEmployee detecta troca
+// de cargo em Informações Contratuais. `novosDadosColaborador` só é gravado
+// em `colaboradores` no final do passo 2 (ver salvarHistoricoCarreira,
+// modo 'iniciar-novo-cargo') — até lá nada foi persistido.
+async function iniciarFluxoTrocaCargo(colabAtual, novosDadosColaborador) {
+  document.getElementById('status-modal').style.display = 'none';
+
+  window._trocaCargoPendente = {
+    colabId: colabAtual.id_colaborador,
+    cargoNovoId: novosDadosColaborador.id_cargos,
+    salarioNovo: novosDadosColaborador.salario_base !== undefined ? novosDadosColaborador.salario_base : null,
+    novosDadosColaborador,
+  };
+
+  if (!window._colaboradorHistorico) await loadColaboradorHistoricoForApp();
+  const registroAberto = (window._colaboradorHistorico || [])
+    .filter(h => String(h.id_colaborador) === String(colabAtual.id_colaborador) && !h.periodo_fim)
+    .sort((a, b) => new Date(b.periodo_inicio || 0) - new Date(a.periodo_inicio || 0))[0];
+
+  if (registroAberto) {
+    showToast(`Cargo alterado para ${nomeCargoPorId(novosDadosColaborador.id_cargos) || ''}. Informe o Período Fim do cargo anterior para continuar.`);
+    await openHistoricoModal(colabAtual.id_colaborador, registroAberto.id_cargos_hist, { modo: 'fechar-cargo-anterior' });
+  } else {
+    window._trocaCargoPendente.periodoInicioSugerido = novosDadosColaborador.desde_efetivo || novosDadosColaborador.desde || new Date().toISOString().slice(0, 10);
+    showToast('Nenhum registro de histórico em aberto encontrado — informe os dados do novo cargo para concluir.');
+    await openHistoricoModal(colabAtual.id_colaborador, null, { modo: 'iniciar-novo-cargo' });
+  }
+}
+
 async function saveStatusEmployee() {
   const smNome = document.getElementById('sm-nome').value.trim();
   const smCargoId = document.getElementById('sm-cargo').value;
@@ -2414,7 +2563,18 @@ async function saveStatusEmployee() {
   if (smSalarioNum !== null && !isNaN(smSalarioNum)) newColabData.salario_base = smSalarioNum;
 
   if (_editingStatusColabId) {
-    // Editar colaborador existente
+    const colabAtual = _colaboradoresSupabase.find(c => String(c.id_colaborador) === String(_editingStatusColabId));
+    const cargoMudou = colabAtual && String(colabAtual.id_cargos) !== String(smCargoId);
+
+    // Mudou de cargo: não salva direto. Obriga passar pelo fluxo de
+    // Histórico de Carreira (fechar o registro do cargo anterior e criar o
+    // do novo) antes de gravar em colaboradores — ver iniciarFluxoTrocaCargo.
+    if (cargoMudou) {
+      await iniciarFluxoTrocaCargo(colabAtual, newColabData);
+      return;
+    }
+
+    // Cargo não mudou: nada pra registrar em Histórico de Carreira, salva direto.
     const { error } = await supaClient
       .from('colaboradores')
       .update(newColabData)
@@ -8549,22 +8709,35 @@ function calcularOnboardingColaborador(colaborador) {
 
   const total = cursosObrigatorios.length;
   if (total === 0) {
-    return { total: 0, concluidos: 0, iniciados: 0, percentual: null, status: 'Sem curso obrigatório' };
+    return { total: 0, concluidos: 0, iniciados: 0, percentual: null, status: 'Sem curso obrigatório', dataInicio: null, dataFim: null };
   }
 
-  let concluidos = 0, iniciados = 0;
+  // dataInicio = mais cedo que o colaborador começou algum obrigatório
+  // (curso_progresso.iniciado_em); dataFim = quando concluiu o ÚLTIMO
+  // obrigatório pendente, ou seja, só existe quando status já é "Concluído"
+  // (senão a data de conclusão de um curso isolado não representa o
+  // onboarding como um todo).
+  let concluidos = 0, iniciados = 0, dataInicio = null, dataFimBruta = null;
   cursosObrigatorios.forEach(curso => {
     const progresso = (window._cursoProgressoTodos || []).find(p =>
       p.id_curso === curso.id && String(p.id_colaborador) === String(colaborador.id_colaborador));
     if (progresso) {
       iniciados++;
-      if (progresso.status === 'concluido') concluidos++;
+      if (progresso.iniciado_em && (!dataInicio || new Date(progresso.iniciado_em) < new Date(dataInicio))) {
+        dataInicio = progresso.iniciado_em;
+      }
+      if (progresso.status === 'concluido') {
+        concluidos++;
+        if (progresso.concluido_em && (!dataFimBruta || new Date(progresso.concluido_em) > new Date(dataFimBruta))) {
+          dataFimBruta = progresso.concluido_em;
+        }
+      }
     }
   });
 
   const percentual = Math.round((concluidos / total) * 100);
   const status = concluidos === total ? 'Concluído' : iniciados > 0 ? 'Em andamento' : 'Não iniciado';
-  return { total, concluidos, iniciados, percentual, status };
+  return { total, concluidos, iniciados, percentual, status, dataInicio, dataFim: status === 'Concluído' ? dataFimBruta : null };
 }
 
 // Painel explicativo (colapsável) sobre tipos de curso/usuário e as opções
@@ -9118,7 +9291,8 @@ window.abrirCursoModal = async function(id = null) {
             <div class="form-group form-full"><label class="form-label">Descrição</label><textarea class="form-input" id="cur-descricao" rows="4" placeholder="Descrição do curso"></textarea></div>
             <div class="form-group form-full">
               <label class="form-label">Cargos (opcional — nenhum marcado = todos os cargos)</label>
-              <div id="cur-cargos-lista" style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;padding:10px"></div>
+              <button type="button" class="btn btn-sm" id="cur-cargos-toggle" onclick="toggleListaCargosCursoModal()">Selecionar cargos</button>
+              <div id="cur-cargos-lista" style="display:none;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;padding:10px;margin-top:8px"></div>
             </div>
             <div class="form-group form-full" style="display:flex;flex-direction:column;gap:10px;background:var(--bg2);padding:12px;border-radius:6px">
               <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;cursor:pointer">
@@ -9144,7 +9318,7 @@ window.abrirCursoModal = async function(id = null) {
   listaCargos.innerHTML = (window._cargos || []).map(cargo => {
     const cid = cargo[window._cargoIdField] || cargo.id_cargo || cargo.id || cargo.id_cargos || '';
     const nome = cargo.nome_cargo || cargo.nome || cargo.cargo || cid;
-    return `<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="cur-cargo-check" value="${cid}"> ${nome}</label>`;
+    return `<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="cur-cargo-check" value="${cid}" onchange="atualizarBotaoCargosCursoModal()"> ${nome}</label>`;
   }).join('') || '<span style="color:var(--text3);font-size:13px">Nenhum cargo cadastrado.</span>';
 
   if (id) {
@@ -9168,10 +9342,35 @@ window.abrirCursoModal = async function(id = null) {
     document.getElementById('cur-obrigatorio').checked = false;
     document.getElementById('cur-bloqueado-colaborador').checked = false;
   }
+  listaCargos.style.display = 'none';
+  atualizarBotaoCargosCursoModal();
   toggleTipoCursoModal(document.getElementById('cur-tipo').value);
   toggleObrigatorioBloqueioCursoModal();
 
   document.getElementById('curso-modal').style.display = 'flex';
+};
+
+// Lista de cargos vem fechada por padrão (ver atualizarBotaoCargosCursoModal
+// logo abaixo, chamada ao abrir o modal) — evita mostrar todos os cargos de
+// cara e polui menos o formulário. Botão alterna mostrar/ocultar.
+window.toggleListaCargosCursoModal = function() {
+  const lista = document.getElementById('cur-cargos-lista');
+  if (!lista) return;
+  const estaAberta = lista.style.display !== 'none';
+  lista.style.display = estaAberta ? 'none' : 'flex';
+  atualizarBotaoCargosCursoModal();
+};
+
+// Texto do botão reflete se a lista está aberta/fechada e quantos cargos já
+// estão marcados, pra dar pra saber o que foi selecionado sem precisar abrir.
+window.atualizarBotaoCargosCursoModal = function() {
+  const btn = document.getElementById('cur-cargos-toggle');
+  const lista = document.getElementById('cur-cargos-lista');
+  if (!btn || !lista) return;
+  const qtd = lista.querySelectorAll('.cur-cargo-check:checked').length;
+  const sufixo = qtd > 0 ? ` (${qtd} selecionado${qtd > 1 ? 's' : ''})` : '';
+  const aberta = lista.style.display !== 'none';
+  btn.textContent = (aberta ? 'Ocultar cargos' : 'Selecionar cargos') + sufixo;
 };
 
 // "Obrigatório" e "Bloquear para colaborador" são mutuamente exclusivos (ver
@@ -11620,7 +11819,7 @@ function pageTreinOnboarding() {
     });
 
     tbody.innerHTML = linhas.length === 0
-      ? '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum colaborador com usuário de Treinamento encontrado.</td></tr>'
+      ? '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhum colaborador com usuário de Treinamento encontrado.</td></tr>'
       : linhas.map(({ colab, onboarding }) => {
           const cargoNome = colab.cargos ? colab.cargos.nome_cargo : '—';
           const statusBadgeClass = onboarding.status === 'Concluído' ? 'badge-active'
@@ -11640,6 +11839,8 @@ function pageTreinOnboarding() {
             <td>${cargoNome}</td>
             <td>${barraHtml}</td>
             <td><span class="badge ${statusBadgeClass}">${onboarding.status}</span></td>
+            <td style="color:var(--text3);font-size:12px">${formatarDataBR(onboarding.dataInicio) || '—'}</td>
+            <td style="color:var(--text3);font-size:12px">${formatarDataBR(onboarding.dataFim) || '—'}</td>
             <td style="color:var(--text3);font-size:12px">${formatarUltimoAcessoTreinamento(colab.id_colaborador)}</td>
           </tr>`;
         }).join('');
@@ -11695,11 +11896,13 @@ function pageTreinOnboarding() {
           <th>Cargo</th>
           <th>Progresso</th>
           <th>Status</th>
+          <th>Data Início</th>
+          <th>Data Finalização</th>
           <th>Último acesso login</th>
         </tr>
       </thead>
       <tbody id="trein-onboarding-tbody">
-        <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
+        <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
       </tbody>
     </table>
   </div>`;
