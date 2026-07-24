@@ -8613,6 +8613,7 @@ window.abrirMetricasCursoModal = async function(idCurso) {
     loadCursoLiberacoesForApp(),
     loadCursoProgressoDoCursoForApp(idCurso),
     (!window._cursoAulas) ? loadCursoAulasForApp() : Promise.resolve(),
+    (!window._cursoAvaliacaoPerguntas) ? loadCursoAvaliacaoPerguntasForApp() : Promise.resolve(),
     (!window._usuariosCadastrados) ? loadUsuariosCadastrados() : Promise.resolve(),
   ]);
 
@@ -11637,6 +11638,8 @@ window.abrirListaAcompanhamentoCategoriaModal = async function(categoria) {
     loadCursoLiberacoesForApp(),
     loadCursoProgressoTodosForApp(),
     (!window._cursos || window._cursos.length === 0) ? loadCursosForApp() : Promise.resolve(),
+    (!window._cursoAulas) ? loadCursoAulasForApp() : Promise.resolve(),
+    (!window._cursoAvaliacaoPerguntas) ? loadCursoAvaliacaoPerguntasForApp() : Promise.resolve(),
   ]);
 
   window._acompCategoriaAtual = categoria;
@@ -11805,13 +11808,26 @@ async function loadCursoProgressoColabAcomp(idColaborador) {
 // usam a proporção de aulas marcadas; cursos Externo (sem aulas cadastradas)
 // não têm como medir aula a aula, então mostram 100% quando já registrados
 // como concluídos.
+// Curso com avaliação final cadastrada: terminar todas as aulas é só 1 etapa
+// — falta a avaliação (aprovado, ver enviarAvaliacaoAluno) pra completar de
+// verdade. Sem essa conta à parte, quem tinha acabado de assistir tudo mas
+// ainda não tinha feito a prova aparecia como 100% concluído mesmo com o
+// curso ainda "Em andamento" (status só vira "concluido" após aprovado).
 function percentualConcluidoCurso(idCurso, progresso) {
   const totalAulas = (window._cursoAulas || []).filter(a => a.id_curso === idCurso).length;
-  if (totalAulas > 0) {
-    const concluidas = (progresso && progresso.aulas_concluidas) || [];
+  if (totalAulas === 0) {
+    return progresso && progresso.status === 'concluido' ? 100 : 0;
+  }
+
+  const concluidas = (progresso && progresso.aulas_concluidas) || [];
+  const temAvaliacao = (window._cursoAvaliacaoPerguntas || []).some(p => p.id_curso === idCurso);
+  if (!temAvaliacao) {
     return Math.round((concluidas.length / totalAulas) * 100);
   }
-  return progresso && progresso.status === 'concluido' ? 100 : 0;
+
+  const totalEtapas = totalAulas + 1; // + a avaliação final
+  const etapasConcluidas = concluidas.length + (progresso && progresso.status === 'concluido' ? 1 : 0);
+  return Math.min(100, Math.round((etapasConcluidas / totalEtapas) * 100));
 }
 
 // Último acesso (auth.users.last_sign_in_at) dos usuários de Treinamento —
@@ -11849,6 +11865,7 @@ window.abrirAcompanhamentoCursosModal = async function(idColaborador) {
   await Promise.all([
     (!window._cursos || window._cursos.length === 0) ? loadCursosForApp() : Promise.resolve(),
     (!window._cursoAulas) ? loadCursoAulasForApp() : Promise.resolve(),
+    (!window._cursoAvaliacaoPerguntas) ? loadCursoAvaliacaoPerguntasForApp() : Promise.resolve(),
     loadCursoLiberacoesForApp(),
     loadCursoProgressoColabAcomp(idColaborador),
     (!window._usuariosCadastrados) ? loadUsuariosCadastrados() : Promise.resolve(),
