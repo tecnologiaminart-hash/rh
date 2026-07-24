@@ -1177,6 +1177,16 @@ async function carregarUsuarioLogado(authUser) {
   }
   if (!usuario || !usuario.ativo || !usuario.perfis) return null;
 
+  // Marca "último acesso" (usuarios.ultimo_acesso) toda vez que a sessão é
+  // validada — login novo OU sessão restaurada ao abrir/atualizar a página
+  // (carregarUsuarioLogado roda nos dois casos). Diferente de
+  // auth.users.last_sign_in_at, que só muda num login novo de verdade — ver
+  // sql/adicionar-ultimo-acesso-usuarios.sql. Fogo-e-esquece: não trava nem
+  // derruba o login se falhar.
+  supaClient.rpc('registrar_acesso_usuario').then(({ error: erroAcesso }) => {
+    if (erroAcesso) console.error('Erro ao registrar último acesso:', erroAcesso.message);
+  });
+
   const { data: permissoes, error: errorPermissoes } = await supaClient
     .from('permissoes')
     .select('pagina_id')
@@ -11459,7 +11469,7 @@ function pageTreinOnboarding() {
           <th>Cargo</th>
           <th>Progresso</th>
           <th>Status</th>
-          <th>Último acesso</th>
+          <th>Último acesso login</th>
         </tr>
       </thead>
       <tbody id="trein-onboarding-tbody">
@@ -11901,7 +11911,7 @@ window.abrirAcompanhamentoCursosModal = async function(idColaborador) {
   }
 
   document.getElementById('acomp-cursos-modal-title').textContent = `Acompanhamento de Cursos — ${nomeColaboradorPorId(idColaborador)}`;
-  document.getElementById('acomp-cursos-modal-ultimo-acesso').textContent = `Último acesso a Plataforma de Treinamentos: ${formatarUltimoAcessoTreinamento(idColaborador)}`;
+  document.getElementById('acomp-cursos-modal-ultimo-acesso').textContent = `Último acesso login a Plataforma de Treinamentos: ${formatarUltimoAcessoTreinamento(idColaborador)}`;
   window._renderAcompCursosModal = renderAcompCursosModal;
   renderAcompCursosModal();
   document.getElementById('acomp-cursos-modal').style.display = 'flex';
@@ -12695,7 +12705,7 @@ function construirHtmlSecoesColaborador(dadosColab, secoes) {
       <div class="form-section-title" style="margin-top:24px">Onboarding</div>
       ${linha('Progresso nos Cursos Obrigatórios', o.percentual === null ? '—' : `${o.percentual}% (${o.concluidos}/${o.total})`)}
       ${linha('Status', o.status)}
-      ${linha('Último Acesso ao Treinamento', formatarUltimoAcessoTreinamento(colab.id_colaborador))}`;
+      ${linha('Último Acesso Login ao Treinamento', formatarUltimoAcessoTreinamento(colab.id_colaborador))}`;
   }
 
   return html;
@@ -12940,7 +12950,7 @@ function escreverColaboradorNoPdf(doc, state, dadosColab, secoes, margemEsq) {
     const o = onboarding || calcularOnboardingColaborador(colab);
     campo('Progresso nos Cursos Obrigatórios', o.percentual === null ? '—' : `${o.percentual}% (${o.concluidos}/${o.total})`);
     campo('Status', o.status);
-    campo('Último Acesso ao Treinamento', formatarUltimoAcessoTreinamento(colab.id_colaborador));
+    campo('Último Acesso Login ao Treinamento', formatarUltimoAcessoTreinamento(colab.id_colaborador));
   }
 }
 
@@ -13130,7 +13140,7 @@ function construirBlocosSecoesRelatorio(colaboradores) {
   // Onboarding: mesmo cálculo da tela Treinamentos > Onboarding
   // (calcularOnboardingColaborador) — cursos obrigatórios elegíveis pro
   // cargo do colaborador, % concluído e último acesso ao Treinamento.
-  blocos.onboarding = { titulo: 'Onboarding', linhas: [['Nome', 'Cargo', 'Progresso', 'Status', 'Último Acesso']] };
+  blocos.onboarding = { titulo: 'Onboarding', linhas: [['Nome', 'Cargo', 'Progresso', 'Status', 'Último Acesso Login']] };
   colaboradores.forEach(({ colab, onboarding }) => {
     const o = onboarding || calcularOnboardingColaborador(colab);
     blocos.onboarding.linhas.push([
