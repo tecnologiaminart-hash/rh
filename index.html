@@ -13151,6 +13151,8 @@ function construirHtmlSecoesColaborador(dadosColab, secoes) {
       <div class="form-section-title" style="margin-top:24px">Onboarding</div>
       ${linha('Progresso nos Cursos Obrigatórios', o.percentual === null ? '—' : `${o.percentual}% (${o.concluidos}/${o.total})`)}
       ${linha('Status', o.status)}
+      ${linha('Data Início', formatarDataBR(o.dataInicio) || '—')}
+      ${linha('Data Finalização', formatarDataBR(o.dataFim) || '—')}
       ${linha('Último Acesso Login ao Treinamento', formatarUltimoAcessoTreinamento(colab.id_colaborador))}`;
   }
 
@@ -13396,6 +13398,8 @@ function escreverColaboradorNoPdf(doc, state, dadosColab, secoes, margemEsq) {
     const o = onboarding || calcularOnboardingColaborador(colab);
     campo('Progresso nos Cursos Obrigatórios', o.percentual === null ? '—' : `${o.percentual}% (${o.concluidos}/${o.total})`);
     campo('Status', o.status);
+    campo('Data Início', formatarDataBR(o.dataInicio) || '—');
+    campo('Data Finalização', formatarDataBR(o.dataFim) || '—');
     campo('Último Acesso Login ao Treinamento', formatarUltimoAcessoTreinamento(colab.id_colaborador));
   }
 }
@@ -13586,7 +13590,7 @@ function construirBlocosSecoesRelatorio(colaboradores) {
   // Onboarding: mesmo cálculo da tela Treinamentos > Onboarding
   // (calcularOnboardingColaborador) — cursos obrigatórios elegíveis pro
   // cargo do colaborador, % concluído e último acesso ao Treinamento.
-  blocos.onboarding = { titulo: 'Onboarding', linhas: [['Nome', 'Cargo', 'Progresso', 'Status', 'Último Acesso Login']] };
+  blocos.onboarding = { titulo: 'Onboarding', linhas: [['Nome', 'Cargo', 'Progresso', 'Status', 'Data Início', 'Data Finalização', 'Último Acesso Login']] };
   colaboradores.forEach(({ colab, onboarding }) => {
     const o = onboarding || calcularOnboardingColaborador(colab);
     blocos.onboarding.linhas.push([
@@ -13594,6 +13598,8 @@ function construirBlocosSecoesRelatorio(colaboradores) {
       colab.cargos ? colab.cargos.nome_cargo : '',
       o.percentual === null ? '—' : `${o.percentual}%`,
       o.status,
+      formatarDataBR(o.dataInicio) || '—',
+      formatarDataBR(o.dataFim) || '—',
       formatarUltimoAcessoTreinamento(colab.id_colaborador),
     ]);
   });
