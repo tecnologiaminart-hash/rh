@@ -861,6 +861,175 @@ function entrarNoDestinoCorreto() {
   enterApp();
 }
 
+// ------------------------------------------------------------
+// Lembrar a página atual entre atualizações (F5) — sessionStorage (não
+// localStorage) porque só faz sentido durar enquanto a aba/sessão do
+// navegador continua aberta; fechar a aba ou trocar de usuário (doLogout)
+// começa do zero. Sem isso, atualizar a página sempre jogava de volta pro
+// Dashboard/1ª página liberada, mesmo com a sessão do Supabase ainda válida.
+// ------------------------------------------------------------
+const CHAVE_PAGINA_ATUAL_SESSAO = 'rh_pagina_atual';
+
+function salvarPaginaAtualNaSessao(id, title, parent, param) {
+  try {
+    sessionStorage.setItem(CHAVE_PAGINA_ATUAL_SESSAO, JSON.stringify({ id, title, parent, param }));
+  } catch (e) { /* sessionStorage indisponível (modo privado etc.) — só perde o "lembrar página", sem quebrar nada */ }
+}
+
+function lerPaginaAtualDaSessao() {
+  try {
+    const raw = sessionStorage.getItem(CHAVE_PAGINA_ATUAL_SESSAO);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function limparPaginaAtualDaSessao() {
+  try { sessionStorage.removeItem(CHAVE_PAGINA_ATUAL_SESSAO); } catch (e) { /* noop */ }
+}
+
+// Acha o grupo (item do NAV com subs) que contém esse id de página, pra
+// deixar o submenu certo já aberto na sidebar ao restaurar — mesmo efeito de
+// clicar nele manualmente (ver onclick dos itens de sidebar em buildSidebar()).
+function abrirGrupoNavDoItem(id) {
+  for (const item of NAV) {
+    if (item.subs && item.subs.some(s => s.id === id)) {
+      openMenus[item.id] = true;
+      return;
+    }
+  }
+}
+
+// ------------------------------------------------------------
+// ATUALIZAÇÃO AUTOMÁTICA POR INATIVIDADE + LOGOUT FORÇADO
+// ------------------------------------------------------------
+// A cada 5 min sem interação nenhuma, recarrega a página sozinha — silencioso
+// porque a sessão do Supabase persiste (não pede login de novo) e "lembrar a
+// página atual" (salvarPaginaAtualNaSessao/enterApp) já devolve exatamente
+// pra mesma tela. Só faz isso se não houver edição em andamento (modal
+// aberto ou campo de texto focado — ver existeEdicaoEmAndamento), pra nunca
+// apagar um formulário que a pessoa ainda não salvou.
+//
+// Separado disso, RH/Administrador (todo perfil menos Treinamento) são
+// deslogados de verdade — precisam logar de novo — depois de 1h SEM NENHUMA
+// interação real (clique, tecla, toque). Os recarregamentos automáticos de 5
+// em 5 min NÃO contam pra esse relógio (RH_CHAVE_ULTIMA_INTERACAO só muda em
+// interação real, nunca no boot/reload), senão o logout forçado nunca
+// aconteceria — quem só passa mouse/scroll sem clicar também não conta,
+// de propósito: é uma trava de segurança, não pode ficar sempre adiada só
+// por o mouse estar em cima do trackpad.
+const RH_INTERVALO_REFRESH_MS = 5 * 60 * 1000;
+const RH_INTERVALO_LOGOUT_MS = 60 * 60 * 1000;
+const RH_CHAVE_ULTIMA_INTERACAO = 'rh_ultima_interacao'; // só eventos "reais" (click/keydown/touchstart)
+const RH_CHAVE_ULTIMO_REFRESH = 'rh_ultimo_refresh_ponto'; // qualquer sinal de presença (+ scroll/mousemove)
+const RH_EVENTOS_PRESENCA = ['click', 'keydown', 'touchstart', 'scroll', 'wheel', 'mousemove'];
+const RH_EVENTOS_INTERACAO_REAL = new Set(['click', 'keydown', 'touchstart']);
+
+function _lerTsSessao(chave) {
+  try {
+    const v = sessionStorage.getItem(chave);
+    return v ? parseInt(v, 10) : null;
+  } catch (e) { return null; }
+}
+function _gravarTsSessao(chave, ts) {
+  try { sessionStorage.setItem(chave, String(ts)); } catch (e) { /* sessionStorage indisponível — sem esse controle, sem quebrar o resto */ }
+}
+function _limparTsSessao(chave) {
+  try { sessionStorage.removeItem(chave); } catch (e) { /* noop */ }
+}
+
+// Throttle simples (1x a cada 2s) — mousemove/scroll disparam demais pra
+// gravar no sessionStorage a cada evento.
+let _ultimoRegistroPresencaEm = 0;
+function registrarInteracaoUsuario(evento) {
+  const agora = Date.now();
+  if (agora - _ultimoRegistroPresencaEm < 2000) return;
+  _ultimoRegistroPresencaEm = agora;
+  _gravarTsSessao(RH_CHAVE_ULTIMO_REFRESH, agora);
+  if (RH_EVENTOS_INTERACAO_REAL.has(evento.type)) {
+    _gravarTsSessao(RH_CHAVE_ULTIMA_INTERACAO, agora);
+  }
+}
+
+// Sinal de "edição em andamento": alguma modal (convenção do site — id
+// terminando em "-modal") visível, ou um campo de texto/textarea com foco.
+function existeEdicaoEmAndamento() {
+  const modalAberto = Array.from(document.querySelectorAll('[id$="-modal"]'))
+    .some(el => getComputedStyle(el).display !== 'none');
+  if (modalAberto) return true;
+  const ativo = document.activeElement;
+  return !!(ativo && (ativo.tagName === 'INPUT' || ativo.tagName === 'TEXTAREA' || ativo.isContentEditable));
+}
+
+let _intervaloInatividade = null;
+
+function iniciarMonitorInatividade() {
+  pararMonitorInatividade();
+  const agora = Date.now();
+  // "Última interação real" só é zerada se ainda não existir (1º boot desta
+  // aba) — precisa sobreviver aos recarregamentos automáticos pra contar 1h
+  // de inatividade de verdade, não 1h desde o último refresh silencioso.
+  if (_lerTsSessao(RH_CHAVE_ULTIMA_INTERACAO) === null) _gravarTsSessao(RH_CHAVE_ULTIMA_INTERACAO, agora);
+  // "Último ponto de refresh" sempre reinicia no boot — todo carregamento de
+  // página (login, F5 manual ou o refresh automático) já é, por definição,
+  // um recomeço da janela de 5 minutos.
+  _gravarTsSessao(RH_CHAVE_ULTIMO_REFRESH, agora);
+
+  RH_EVENTOS_PRESENCA.forEach(evento => document.addEventListener(evento, registrarInteracaoUsuario, { passive: true }));
+  _intervaloInatividade = setInterval(verificarInatividade, 15000);
+}
+
+function pararMonitorInatividade() {
+  if (_intervaloInatividade) { clearInterval(_intervaloInatividade); _intervaloInatividade = null; }
+  RH_EVENTOS_PRESENCA.forEach(evento => document.removeEventListener(evento, registrarInteracaoUsuario));
+}
+
+function verificarInatividade() {
+  if (!currentUser) return;
+  const agora = Date.now();
+  const ultimaInteracao = _lerTsSessao(RH_CHAVE_ULTIMA_INTERACAO) || agora;
+  const ultimoRefresh = _lerTsSessao(RH_CHAVE_ULTIMO_REFRESH) || agora;
+
+  if (currentUser.perfil !== 'Treinamento' && (agora - ultimaInteracao) >= RH_INTERVALO_LOGOUT_MS) {
+    pararMonitorInatividade();
+    doLogout();
+    showToast('Sessão encerrada por inatividade. Faça login novamente.', 4000);
+    return;
+  }
+
+  if ((agora - ultimoRefresh) >= RH_INTERVALO_REFRESH_MS && !existeEdicaoEmAndamento()) {
+    location.reload();
+  }
+}
+
+// Clicar em algo que abre uma aba nova (link "target=_blank" ou window.open —
+// WhatsApp, Ver documento/contrato/avaliação etc.) é um bom momento pra
+// recarregar a aba original sozinha: a atenção da pessoa muda pra aba nova
+// bem nesse instante, então o reload fica de fato imperceptível — não
+// precisa esperar os 5 min de inatividade (esses continuam valendo do mesmo
+// jeito pra quem nunca clica em nada que abre aba nova). Ainda respeita a
+// mesma trava de edição (modal aberto/campo de texto focado).
+function agendarRefreshPorNovaAba() {
+  if (!currentUser || existeEdicaoEmAndamento()) return;
+  // Pequeno atraso pra garantir que a aba nova já abriu antes da atual
+  // recarregar — evita qualquer interferência do reload no window.open()/
+  // navegação que ainda está em andamento.
+  setTimeout(() => {
+    if (currentUser && !existeEdicaoEmAndamento()) location.reload();
+  }, 600);
+}
+
+document.addEventListener('click', (evento) => {
+  if (evento.target.closest && evento.target.closest('a[target="_blank"]')) agendarRefreshPorNovaAba();
+}, true);
+
+const _windowOpenOriginal = window.open.bind(window);
+window.open = function(...args) {
+  agendarRefreshPorNovaAba();
+  return _windowOpenOriginal(...args);
+};
+
 function enterApp() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').classList.add('visible');
@@ -868,20 +1037,40 @@ function enterApp() {
   document.getElementById('user-avatar').textContent = (currentUser.name || 'U')[0].toUpperCase();
   const perfilEl = document.getElementById('user-perfil');
   if (perfilEl) perfilEl.textContent = currentUser.perfil || '';
+
+  // Restaura a página salva (ver salvarPaginaAtualNaSessao, chamada em toda
+  // navigate()) se ainda existir e o perfil logado ainda tiver acesso a ela
+  // — senão cai no destino padrão de sempre.
+  const salva = lerPaginaAtualDaSessao();
+  const destino = (salva && salva.id && temPermissao(salva.id)) ? salva : null;
+
+  if (destino) {
+    activeId = destino.id;
+    abrirGrupoNavDoItem(destino.id);
+  } else {
+    activeId = temPermissao('dashboard') ? 'dashboard' : primeiraPaginaPermitida();
+  }
   buildSidebar();
-  const primeiraPagina = temPermissao('dashboard') ? 'dashboard' : primeiraPaginaPermitida();
-  if (primeiraPagina) {
-    activeId = primeiraPagina;
-    navigate(primeiraPagina, labelDaPaginaNav(primeiraPagina) || 'Dashboard');
+
+  if (destino) {
+    navigate(destino.id, destino.title, destino.parent, destino.param);
+  } else if (activeId) {
+    navigate(activeId, labelDaPaginaNav(activeId) || 'Dashboard');
   } else {
     document.getElementById('page-title').textContent = 'Sem acesso';
     document.getElementById('page-breadcrumb').textContent = 'RH Sistema';
     document.getElementById('content-area').innerHTML = `<div class="empty-state"><div class="empty-state-icon">🔒</div><div class="empty-state-title">Nenhuma página liberada</div><div class="empty-state-desc">Seu perfil (${currentUser.perfil}) ainda não tem nenhuma página liberada. Contate o administrador.</div></div>`;
   }
+
+  iniciarMonitorInatividade();
 }
 
 function doLogout() {
   currentUser = null;
+  limparPaginaAtualDaSessao();
+  pararMonitorInatividade();
+  _limparTsSessao(RH_CHAVE_ULTIMA_INTERACAO);
+  _limparTsSessao(RH_CHAVE_ULTIMO_REFRESH);
   if (supaClient) supaClient.auth.signOut().catch(()=>{});
   document.getElementById('login-screen').style.display = '';
   document.getElementById('app').classList.remove('visible');
@@ -1276,6 +1465,7 @@ function navigate(id, title, parent, param = null) {
   document.getElementById('page-breadcrumb').textContent = parent ? `RH Sistema › ${parent} › ${title}` : `RH Sistema › ${title}`;
   document.getElementById('topbar-actions').innerHTML = '';
   renderPage(id, param);
+  salvarPaginaAtualNaSessao(id, title, parent, param);
 }
 
 function showToast(msg, dur=2500) {
