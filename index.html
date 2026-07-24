@@ -8500,6 +8500,23 @@ function nomeCargoPorId(idCargo) {
   return cargo ? (cargo.nome_cargo || cargo.nome || cargo.cargo || idCargo) : null;
 }
 
+// Igual nomeCargoPorId, mas para cursos.id_cargos (array de ids, int8[]) —
+// junta os nomes dos cargos vinculados ao curso, separados por vírgula.
+function nomesCargosPorIds(idsCargos) {
+  if (!idsCargos || !Array.isArray(idsCargos) || idsCargos.length === 0) return null;
+  return idsCargos.map(id => nomeCargoPorId(id)).filter(Boolean).join(', ') || null;
+}
+
+// Um curso sem cargos vinculados (id_cargos nulo/vazio) aplica pra todo
+// mundo; caso contrário, só pros cargos da lista. Aceita tanto o array novo
+// quanto um valor solto (dado legado ainda não migrado pra int8[]).
+function cursoAplicaAoCargo(curso, idCargoColaborador) {
+  const ids = curso.id_cargos;
+  if (!ids || (Array.isArray(ids) && ids.length === 0)) return true;
+  if (Array.isArray(ids)) return ids.some(id => String(id) === String(idCargoColaborador));
+  return String(ids) === String(idCargoColaborador);
+}
+
 // Um curso Interno obrigatório libera automaticamente para colaboradores (não
 // convidados) cujo cargo bate com cursos.id_cargos, ou para todo mundo se
 // id_cargos for nulo — SEM gravar linha em curso_liberacoes (ver
@@ -8513,7 +8530,7 @@ function cursoLiberadoParaAluno(curso, { idColaborador, idUsuario, idCargoColabo
   if (explicita) return explicita.status === 'Liberado';
   if (!idColaborador) return false; // convidado sempre depende de liberação explícita
   if (curso.tipo !== 'Interno' || !curso.obrigatorio || curso.bloqueado_colaborador) return false;
-  if (curso.id_cargos && String(curso.id_cargos) !== String(idCargoColaborador)) return false;
+  if (!cursoAplicaAoCargo(curso, idCargoColaborador)) return false;
   return true;
 }
 
@@ -8528,7 +8545,7 @@ function cursoLiberadoParaAluno(curso, { idColaborador, idUsuario, idCargoColabo
 function calcularOnboardingColaborador(colaborador) {
   const cursosObrigatorios = (window._cursos || []).filter(c =>
     c.tipo === 'Interno' && c.obrigatorio && !c.bloqueado_colaborador &&
-    (!c.id_cargos || String(c.id_cargos) === String(colaborador.id_cargos)));
+    cursoAplicaAoCargo(c, colaborador.id_cargos));
 
   const total = cursosObrigatorios.length;
   if (total === 0) {
@@ -8632,7 +8649,7 @@ function pageCursos() {
           <td><strong>${c.nome}</strong></td>
           <td><span class="badge ${c.tipo === 'Interno' ? 'badge-info' : 'badge-gray'}">${c.tipo}</span></td>
           <td>${c.carga_horaria !== null && c.carga_horaria !== undefined && c.carga_horaria !== '' ? (c.tipo === 'Interno' ? formatarHorasMinutos(Math.round(c.carga_horaria * 3600)) : `${c.carga_horaria}h`) : '—'}</td>
-          <td>${nomeCargoPorId(c.id_cargos) || '—'}${c.obrigatorio ? ' <span class="badge badge-info" style="margin-left:4px">Obrigatório</span>' : ''}${c.bloqueado_colaborador ? ' <span class="badge badge-gray" style="margin-left:4px">Bloq. colaborador</span>' : ''}</td>
+          <td>${nomesCargosPorIds(c.id_cargos) || 'Todos'}${c.obrigatorio ? ' <span class="badge badge-info" style="margin-left:4px">Obrigatório</span>' : ''}${c.bloqueado_colaborador ? ' <span class="badge badge-gray" style="margin-left:4px">Bloq. colaborador</span>' : ''}</td>
           <td style="white-space:normal;max-width:320px">${c.descricao || '—'}</td>
           <td onclick="event.stopPropagation()">
             <span class="badge badge-info">${qtdLiberados}</span>
@@ -9100,8 +9117,8 @@ window.abrirCursoModal = async function(id = null) {
             </div>
             <div class="form-group form-full"><label class="form-label">Descrição</label><textarea class="form-input" id="cur-descricao" rows="4" placeholder="Descrição do curso"></textarea></div>
             <div class="form-group form-full">
-              <label class="form-label">Cargo (opcional)</label>
-              <select class="form-select" id="cur-cargo"><option value="">— Nenhum —</option></select>
+              <label class="form-label">Cargos (opcional — nenhum marcado = todos os cargos)</label>
+              <div id="cur-cargos-lista" style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;padding:10px"></div>
             </div>
             <div class="form-group form-full" style="display:flex;flex-direction:column;gap:10px;background:var(--bg2);padding:12px;border-radius:6px">
               <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;cursor:pointer">
@@ -9123,13 +9140,12 @@ window.abrirCursoModal = async function(id = null) {
     document.body.appendChild(modal);
   }
 
-  const selectCargo = document.getElementById('cur-cargo');
-  selectCargo.innerHTML = '<option value="">— Nenhum —</option>' +
-    (window._cargos || []).map(cargo => {
-      const cid = cargo[window._cargoIdField] || cargo.id_cargo || cargo.id || cargo.id_cargos || '';
-      const nome = cargo.nome_cargo || cargo.nome || cargo.cargo || cid;
-      return `<option value="${cid}">${nome}</option>`;
-    }).join('');
+  const listaCargos = document.getElementById('cur-cargos-lista');
+  listaCargos.innerHTML = (window._cargos || []).map(cargo => {
+    const cid = cargo[window._cargoIdField] || cargo.id_cargo || cargo.id || cargo.id_cargos || '';
+    const nome = cargo.nome_cargo || cargo.nome || cargo.cargo || cid;
+    return `<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" class="cur-cargo-check" value="${cid}"> ${nome}</label>`;
+  }).join('') || '<span style="color:var(--text3);font-size:13px">Nenhum cargo cadastrado.</span>';
 
   if (id) {
     const curso = (window._cursos || []).find(c => c.id === id);
@@ -9138,7 +9154,8 @@ window.abrirCursoModal = async function(id = null) {
     document.getElementById('cur-tipo').value = curso?.tipo || 'Interno';
     document.getElementById('cur-carga-horaria').value = (curso && curso.carga_horaria !== null && curso.carga_horaria !== undefined) ? curso.carga_horaria : '';
     document.getElementById('cur-descricao').value = curso?.descricao || '';
-    selectCargo.value = (curso && curso.id_cargos !== null && curso.id_cargos !== undefined) ? curso.id_cargos : '';
+    const idsSelecionados = (curso && Array.isArray(curso.id_cargos)) ? curso.id_cargos.map(String) : [];
+    listaCargos.querySelectorAll('.cur-cargo-check').forEach(chk => { chk.checked = idsSelecionados.includes(chk.value); });
     document.getElementById('cur-obrigatorio').checked = !!curso?.obrigatorio;
     document.getElementById('cur-bloqueado-colaborador').checked = !!curso?.bloqueado_colaborador;
   } else {
@@ -9147,7 +9164,7 @@ window.abrirCursoModal = async function(id = null) {
     document.getElementById('cur-tipo').value = 'Interno';
     document.getElementById('cur-carga-horaria').value = '';
     document.getElementById('cur-descricao').value = '';
-    selectCargo.value = '';
+    listaCargos.querySelectorAll('.cur-cargo-check').forEach(chk => { chk.checked = false; });
     document.getElementById('cur-obrigatorio').checked = false;
     document.getElementById('cur-bloqueado-colaborador').checked = false;
   }
@@ -9197,12 +9214,12 @@ window.salvarCurso = async function() {
   const nome = document.getElementById('cur-nome').value.trim();
   const tipo = document.getElementById('cur-tipo').value;
   const descricao = document.getElementById('cur-descricao').value.trim();
-  const cargoSelecionado = document.getElementById('cur-cargo').value;
+  const cargosSelecionados = Array.from(document.querySelectorAll('#cur-cargos-lista .cur-cargo-check:checked')).map(chk => Number(chk.value));
   const obrigatorio = document.getElementById('cur-obrigatorio').checked;
   const bloqueadoColaborador = document.getElementById('cur-bloqueado-colaborador').checked;
   if (!nome) return showToast('Informe o nome do curso.');
 
-  const payload = { nome, tipo, descricao: descricao || null, id_cargos: cargoSelecionado || null, obrigatorio, bloqueado_colaborador: bloqueadoColaborador };
+  const payload = { nome, tipo, descricao: descricao || null, id_cargos: cargosSelecionados.length ? cargosSelecionados : null, obrigatorio, bloqueado_colaborador: bloqueadoColaborador };
   if (tipo === 'Externo') {
     // Externo não tem aulas: carga horária continua um número digitado à mão.
     const cargaRaw = document.getElementById('cur-carga-horaria').value;
@@ -11330,7 +11347,7 @@ function liberacoesAutomaticasObrigatorio() {
   usuariosColaboradores.forEach(u => {
     const colaborador = (_colaboradoresSupabase || []).find(c => String(c.id_colaborador) === String(u.colaborador_id));
     cursosObrigatorios.forEach(curso => {
-      if (curso.id_cargos && String(curso.id_cargos) !== String(colaborador?.id_cargos)) return;
+      if (!cursoAplicaAoCargo(curso, colaborador?.id_cargos)) return;
       const jaTemLinhaExplicita = (window._cursoLiberacoes || []).some(l => l.id_curso === curso.id && l.id_colaborador === u.colaborador_id);
       if (jaTemLinhaExplicita) return;
       automaticas.push({ curso, id_colaborador: u.colaborador_id });
