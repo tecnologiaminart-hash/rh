@@ -1899,6 +1899,10 @@ window.openHistoricoModal = async function(idColaborador, idRegistro = null, opc
         <div style="font-size:15px;font-weight:700;margin-bottom:20px" id="historico-modal-title">Adicionar Registro de Carreira</div>
         <div id="historico-modal-aviso" style="display:none;margin-bottom:16px;padding:10px 12px;border-radius:4px;font-size:13px;line-height:1.4"></div>
         <div class="form-grid">
+          <div class="form-group form-full" id="historico-colaborador-wrap" style="display:none">
+            <label class="form-label">Colaborador</label>
+            <select class="form-select" id="historico-colaborador" onchange="window._historicoModalColabId = this.value || null"><option value="">— Selecione —</option></select>
+          </div>
           <div class="form-group">
             <label class="form-label">Período Início</label>
             <input class="form-input" type="date" id="historico-inicio">
@@ -1935,6 +1939,23 @@ window.openHistoricoModal = async function(idColaborador, idRegistro = null, opc
       const nome = cargo.nome_cargo || cargo.nome || cargo.cargo || cid;
       return `<option value="${cid}">${nome}</option>`;
     }).join('');
+
+  // Sem colaborador fixo (botão "+ Adicionar Registros Antigos" da página
+  // principal de Histórico de Carreira, sem entrar na ficha de ninguém):
+  // mostra o seletor de colaborador pra escolher pra quem é o registro. Nos
+  // outros usos (ficha de um colaborador específico, ou o fluxo automático
+  // de troca de cargo) o colaborador já é conhecido, então o campo some.
+  const colabWrap = document.getElementById('historico-colaborador-wrap');
+  const selectColabHist = document.getElementById('historico-colaborador');
+  if (idColaborador) {
+    colabWrap.style.display = 'none';
+  } else {
+    if (!_colaboradoresSupabase || _colaboradoresSupabase.length === 0) await loadColaboradoresFromSupabase();
+    selectColabHist.innerHTML = '<option value="">— Selecione —</option>' +
+      (_colaboradoresSupabase || []).map(c => `<option value="${c.id_colaborador}">${c.nome_colaborador || ''}</option>`).join('');
+    selectColabHist.value = '';
+    colabWrap.style.display = '';
+  }
 
   const inicioEl = document.getElementById('historico-inicio');
   const fimEl = document.getElementById('historico-fim');
@@ -2020,6 +2041,7 @@ window.salvarHistoricoCarreira = async function() {
   const motivo = document.getElementById('historico-motivo').value.trim();
   const salarioNum = salarioRaw ? parseFloat(String(salarioRaw).replace(/\./g,'').replace(/,/g,'.').replace(/[^0-9.\-]/g,'')) : null;
 
+  if (!idColaborador) return showToast('Selecione o colaborador.');
   if (!periodoInicio) return showToast('Informe o Período Início.');
   if (!idCargo) return showToast('Selecione o Cargo.');
   if (modo === 'fechar-cargo-anterior' && !periodoFim) return showToast('Informe o Período Fim do registro anterior para continuar.');
@@ -5826,7 +5848,8 @@ window.filtrarPerguntasCompetencias = function(query) {
 // COLABORADORES — HISTÓRICO (LISTA DE COLABORADORES COM BOTÃO PARA VER HISTÓRICO INDIVIDUAL)
 // ------------------------------------------------------------
 function pageHistoricoCol() {
-  document.getElementById('topbar-actions').innerHTML = '';
+  document.getElementById('topbar-actions').innerHTML =
+    `<button class="btn btn-primary" onclick="openHistoricoModal(null)">+ Adicionar Registros Antigos</button>`;
 
   const renderColaboradoresHistorico = (filtro = '') => {
     const tbody = document.getElementById('colaboradores-historico-tbody');
