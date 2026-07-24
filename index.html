@@ -1556,6 +1556,12 @@ window.showAcoesEnvioBanner = function() {
 // ------------------------------------------------------------
 // DASHBOARD
 // ------------------------------------------------------------
+// Dashboard redesenhado pra caber numa tela só, sem rolar: 2 KPIs pequenos
+// (Admissões Pendentes, Vagas Abertas) + 5 cards (Admissões por Mês,
+// Onboarding, Contratação, Colaboradores em Experiência, Ocorrências
+// Recentes), cada um limitado a poucas linhas — quem quiser o detalhe
+// completo de qualquer um desses temas continua tendo a aba própria
+// (Treinamentos > Onboarding, Colaboradores > Experiência/Ocorrências etc.).
 function pageDashboard() {
   document.getElementById('topbar-actions').innerHTML = '';
 
@@ -1564,25 +1570,10 @@ function pageDashboard() {
     if (!container) return;
 
     const colaboradores = _colaboradoresSupabase || [];
-    const ativos = colaboradores.filter(c => c.status_colaborador === 'Ativo').length;
     const pendentesDoc = colaboradores.filter(c => c.status_colaborador === 'Pendente Documentação');
     const vagas = window._vagas || [];
-    const vagasAbertas = vagas.filter(v => v.status === 'aberta').length;
+    const vagasAbertas = vagas.filter(v => v.status === 'aberta');
     const candidaturas = window._candidaturas || [];
-    const testes = window._testesAvaliacoes || [];
-    const avaliacoesConcluidas = testes.filter(t => t.status_realizacao === 'concluido').length;
-    const avaliacoesPendentes = testes.length - avaliacoesConcluidas;
-
-    // Distribuição por status
-    const statusCores = { 'Ativo': '#1a7a3c', 'Inativo': '#a03030', 'Férias': '#2050a0', 'Afastado': '#9a6800', 'Pendente Documentação': '#9a6800' };
-    const statusCount = {};
-    colaboradores.forEach(c => { const s = c.status_colaborador || 'Não definido'; statusCount[s] = (statusCount[s] || 0) + 1; });
-
-    // Distribuição por cargo (top 6)
-    const cargoCount = {};
-    colaboradores.forEach(c => { const nome = c.cargos ? c.cargos.nome_cargo : 'Sem cargo'; cargoCount[nome] = (cargoCount[nome] || 0) + 1; });
-    const cargoEntries = Object.entries(cargoCount).sort((a, b) => b[1] - a[1]).slice(0, 6);
-    const maxCargo = Math.max(1, ...cargoEntries.map(([, n]) => n));
 
     // Admissões por mês (últimos 6 meses), a partir de colaboradores.desde
     const hoje = new Date();
@@ -1600,21 +1591,38 @@ function pageDashboard() {
     }));
     const maxAdm = Math.max(1, ...admissoesPorMes.map(m => m.count));
 
-    // Vagas com mais candidatos
-    const vagasComCandidatos = vagas.map(v => ({
+    // Onboarding: agregado de status (mesmo cálculo de Treinamentos >
+    // Onboarding — calcularOnboardingColaborador), só pra quem já tem
+    // usuário de Treinamento criado.
+    const colabsComTreinamento = colaboradores.filter(c => temUsuarioTreinamento(c.id_colaborador));
+    const onboardingCores = { 'Concluído': '#1a7a3c', 'Em andamento': '#9a6800', 'Não iniciado': '#888' };
+    const onboardingContagem = { 'Concluído': 0, 'Em andamento': 0, 'Não iniciado': 0 };
+    colabsComTreinamento.forEach(c => {
+      const status = calcularOnboardingColaborador(c).status;
+      if (status in onboardingContagem) onboardingContagem[status]++;
+    });
+
+    // Contratação: vagas abertas, ordenadas por quem tem mais candidatos
+    // primeiro — junta "listar vagas abertas" e "vagas com mais candidatos"
+    // num card só.
+    const vagasAbertasComCandidatos = vagasAbertas.map(v => ({
       vaga: v,
       total: candidaturas.filter(c => c.id_vagas === v.id_vagas).length
-    })).filter(v => v.total > 0).sort((a, b) => b.total - a.total).slice(0, 6);
+    })).sort((a, b) => b.total - a.total).slice(0, 6);
 
-    const avaliacoesEmAndamento = testes.filter(t => t.status_realizacao !== 'concluido').slice(0, 8);
+    // Colaboradores em Experiência (mesmo filtro de pageColaboradoresExperiencia)
+    const colaboradoresExperiencia = colaboradores
+      .filter(c => c.tipo_de_contrato === 'Experiência')
+      .sort((a, b) => (a.desde || '').localeCompare(b.desde || ''))
+      .slice(0, 6);
+
+    // Ocorrências mais recentes
+    const ocorrenciasRecentes = [...(_ocorrenciasSupabase || [])]
+      .sort((a, b) => (b.data_ocorrencia || '').localeCompare(a.data_ocorrencia || ''))
+      .slice(0, 6);
 
     container.innerHTML = `
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <div class="kpi-label">Colaboradores Ativos</div>
-        <div class="kpi-value">${ativos}</div>
-        <div class="kpi-delta" style="color:var(--text3)">${colaboradores.length} no total</div>
-      </div>
+    <div class="kpi-grid" style="grid-template-columns:repeat(2,minmax(180px,240px));margin-bottom:16px">
       <div class="kpi-card">
         <div class="kpi-label">Admissões Pendentes</div>
         <div class="kpi-value">${pendentesDoc.length}</div>
@@ -1622,16 +1630,11 @@ function pageDashboard() {
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Vagas Abertas</div>
-        <div class="kpi-value">${vagasAbertas}</div>
+        <div class="kpi-value">${vagasAbertas.length}</div>
         <div class="kpi-delta" style="color:var(--text3)">${vagas.length} no total</div>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Avaliações Concluídas</div>
-        <div class="kpi-value">${avaliacoesConcluidas}</div>
-        <div class="kpi-delta" style="color:var(--text3)">${avaliacoesPendentes} pendentes</div>
-      </div>
     </div>
-    <div class="charts-grid">
+    <div class="charts-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">
       <div class="chart-card">
         <div class="chart-title">Admissões por Mês (últimos 6 meses)</div>
         <div class="mini-chart">
@@ -1645,11 +1648,11 @@ function pageDashboard() {
         </div>
       </div>
       <div class="chart-card">
-        <div class="chart-title">Colaboradores por Status</div>
-        ${Object.keys(statusCount).length === 0 ? '<div style="font-size:13px;color:var(--text3)">Sem colaboradores cadastrados.</div>' :
-          Object.entries(statusCount).map(([nome, qtd]) => {
-            const pct = colaboradores.length ? Math.round((qtd / colaboradores.length) * 100) : 0;
-            const cor = statusCores[nome] || '#888';
+        <div class="chart-title">Onboarding</div>
+        ${colabsComTreinamento.length === 0 ? '<div style="font-size:13px;color:var(--text3)">Nenhum colaborador com usuário de Treinamento.</div>' :
+          Object.entries(onboardingContagem).map(([nome, qtd]) => {
+            const pct = Math.round((qtd / colabsComTreinamento.length) * 100);
+            const cor = onboardingCores[nome];
             return `<div class="pie-row">
               <div class="pie-dot" style="background:${cor}"></div>
               <div class="pie-name">${nome}</div>
@@ -1658,61 +1661,48 @@ function pageDashboard() {
             </div>`;
           }).join('')}
       </div>
-    </div>
-    <div class="charts-grid">
       <div class="chart-card">
-        <div class="chart-title">Colaboradores por Cargo</div>
-        ${cargoEntries.length === 0 ? '<div style="font-size:13px;color:var(--text3)">Sem colaboradores cadastrados.</div>' :
-          cargoEntries.map(([nome, qtd]) => {
-            const pct = Math.round((qtd / maxCargo) * 100);
-            return `<div class="pie-row">
-              <div class="pie-dot" style="background:#111"></div>
-              <div class="pie-name">${nome}</div>
-              <div class="pie-bar-wrap"><div class="pie-bar-fill" style="width:${pct}%;background:#111"></div></div>
-              <div class="pie-pct">${qtd}</div>
-            </div>`;
-          }).join('')}
-      </div>
-      <div class="chart-card">
-        <div class="chart-title">Vagas com Mais Candidatos</div>
-        ${vagasComCandidatos.length === 0 ? '<div style="font-size:13px;color:var(--text3)">Nenhuma vaga com candidatos ainda.</div>' : `
+        <div class="chart-title">Contratação — Vagas Abertas</div>
+        ${vagasAbertasComCandidatos.length === 0 ? '<div style="font-size:13px;color:var(--text3)">Nenhuma vaga aberta no momento.</div>' : `
         <table style="width:100%">
-          <thead><tr><th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Vaga</th><th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Status</th><th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Candidatos</th></tr></thead>
-          <tbody>${vagasComCandidatos.map(({ vaga, total }) => `
+          <thead><tr><th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Vaga</th><th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Candidatos</th></tr></thead>
+          <tbody>${vagasAbertasComCandidatos.map(({ vaga, total }) => `
             <tr>
-              <td style="padding:8px 0;font-size:13px">${nomeCargoPorId(vaga.id_cargos)}</td>
-              <td style="padding:8px 0;font-size:12px"><span class="badge ${vaga.status === 'aberta' ? 'badge-active' : 'badge-inactive'}">${vaga.status}</span></td>
-              <td style="padding:8px 0"><span class="badge badge-info">${total}</span></td>
+              <td style="padding:6px 0;font-size:13px">${nomeCargoPorId(vaga.id_cargos)}</td>
+              <td style="padding:6px 0"><span class="badge badge-info">${total}</span></td>
             </tr>`).join('')}</tbody>
         </table>`}
       </div>
     </div>
-    <div class="charts-grid">
+    <div class="charts-grid" style="grid-template-columns:2fr 1fr">
       <div class="chart-card">
-        <div class="chart-title">Admissões Pendentes de Documentação</div>
-        ${pendentesDoc.length === 0 ? '<div style="font-size:13px;color:var(--text3)">Nenhuma admissão pendente.</div>' : `
+        <div class="chart-title">Colaboradores em Experiência</div>
+        ${colaboradoresExperiencia.length === 0 ? '<div style="font-size:13px;color:var(--text3)">Nenhum colaborador em experiência.</div>' : `
         <table style="width:100%">
-          <thead><tr><th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Colaborador</th><th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Cargo</th><th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Desde</th></tr></thead>
-          <tbody>${pendentesDoc.slice(0, 8).map(c => `
+          <thead><tr>
+            <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Colaborador</th>
+            <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Cargo</th>
+            <th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Fim da Experiência</th>
+          </tr></thead>
+          <tbody>${colaboradoresExperiencia.map(c => `
             <tr>
-              <td style="padding:8px 0;font-size:13px">${c.nome_colaborador}</td>
-              <td style="padding:8px 0;font-size:12px;color:var(--text3)">${c.cargos ? c.cargos.nome_cargo : '—'}</td>
-              <td style="padding:8px 0;font-size:12px;color:var(--text3)">${formatarDataBR(c.desde) || '—'}</td>
+              <td style="padding:6px 0;font-size:13px">${c.nome_colaborador}</td>
+              <td style="padding:6px 0;font-size:12px;color:var(--text3)">${c.cargos ? c.cargos.nome_cargo : '—'}</td>
+              <td style="padding:6px 0;font-size:12px;color:var(--text3)">${adicionarDiasDataBR(c.desde, 85) || '—'}</td>
             </tr>`).join('')}</tbody>
         </table>`}
       </div>
       <div class="chart-card">
-        <div class="chart-title">Avaliações em Andamento</div>
-        ${avaliacoesEmAndamento.length === 0 ? '<div style="font-size:13px;color:var(--text3)">Nenhuma avaliação em andamento.</div>' : `
-        <table style="width:100%">
-          <thead><tr><th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Candidato</th><th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Cargo</th><th style="text-align:left;font-size:11px;color:var(--text3);padding:6px 0;border-bottom:1px solid var(--border)">Status</th></tr></thead>
-          <tbody>${avaliacoesEmAndamento.map(t => `
-            <tr>
-              <td style="padding:8px 0;font-size:13px">${t.nome_candidato || '—'}</td>
-              <td style="padding:8px 0;font-size:12px;color:var(--text3)">${nomeCargoPorId(t.id_cargo)}</td>
-              <td style="padding:8px 0"><span class="badge badge-pending">${t.status_realizacao || 'pendente'}</span></td>
-            </tr>`).join('')}</tbody>
-        </table>`}
+        <div class="chart-title">Ocorrências Recentes</div>
+        ${ocorrenciasRecentes.length === 0 ? '<div style="font-size:13px;color:var(--text3)">Nenhuma ocorrência registrada.</div>' :
+          ocorrenciasRecentes.map(o => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--bg2);font-size:12px">
+              <div>
+                <div style="font-weight:600;color:var(--text)">${nomeColaboradorPorId(o.id_colaborador)}</div>
+                <div style="color:var(--text3)">${o.tipo_ocorrencia || '—'}</div>
+              </div>
+              <div style="color:var(--text3);white-space:nowrap">${formatarDataBR(o.data_ocorrencia) || '—'}</div>
+            </div>`).join('')}
       </div>
     </div>`;
   };
@@ -1722,7 +1712,11 @@ function pageDashboard() {
     loadColaboradoresFromSupabase(),
     loadVagasForApp(),
     loadCandidaturasForApp(),
-    loadTestesAvaliacoesForApp(),
+    loadUsuariosCadastrados(),
+    (!window._cargos || window._cargos.length === 0) ? loadCargosForApp() : Promise.resolve(),
+    (!window._cursos || window._cursos.length === 0) ? loadCursosForApp() : Promise.resolve(),
+    loadCursoProgressoTodosForApp(),
+    loadOcorrenciasFromSupabase(),
   ]).then(render);
 
   return `<div id="dashboard-container">
