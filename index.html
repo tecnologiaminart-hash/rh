@@ -1064,6 +1064,7 @@ const NAV = [
     subs: [
       { id: 'trein-cursos', label: 'Cursos' },
       { id: 'trein-cadastro-usuario', label: 'Cadastro de Usuário e Liberação' },
+      { id: 'trein-onboarding', label: 'Onboarding' },
       { id: 'trein-acompanhamento', label: 'Acompanhamento e Registros' },
     ]
   },
@@ -4739,6 +4740,7 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
     'ficha-mapeamento': pageMapeamentoPerfil,
     'trein-cursos':    pageCursos,
     'trein-cadastro-usuario': pageCadastroUsuarioTreinamento,
+    'trein-onboarding': pageTreinOnboarding,
     'trein-acompanhamento': pageTreinAcompanhamento,
     'permissoes-acesso': pagePermissoesAcesso,
     'relatorios-impressao': pageRelatorioColaborador,
@@ -8315,6 +8317,39 @@ function cursoLiberadoParaAluno(curso, { idColaborador, idUsuario, idCargoColabo
   return true;
 }
 
+// Progresso de onboarding de um colaborador = só os cursos Interno
+// obrigatórios pros quais ele é elegível (do cargo dele, ou sem cargo
+// vinculado — mesmo universo de cursoLiberadoParaAluno()), independente de
+// terem sido liberados manualmente ou não. Percentual conta só concluídos
+// (aumenta conforme concluído em curso_progresso, não ao só abrir);
+// "Em andamento" já considera quem abriu algum sem terminar todos.
+// total === 0 (nenhum curso obrigatório aplicável) não é "concluído" nem
+// "não iniciado" — é um estado à parte pra não mentir 100%/0% sem sentido.
+function calcularOnboardingColaborador(colaborador) {
+  const cursosObrigatorios = (window._cursos || []).filter(c =>
+    c.tipo === 'Interno' && c.obrigatorio && !c.bloqueado_colaborador &&
+    (!c.id_cargos || String(c.id_cargos) === String(colaborador.id_cargos)));
+
+  const total = cursosObrigatorios.length;
+  if (total === 0) {
+    return { total: 0, concluidos: 0, iniciados: 0, percentual: null, status: 'Sem curso obrigatório' };
+  }
+
+  let concluidos = 0, iniciados = 0;
+  cursosObrigatorios.forEach(curso => {
+    const progresso = (window._cursoProgressoTodos || []).find(p =>
+      p.id_curso === curso.id && String(p.id_colaborador) === String(colaborador.id_colaborador));
+    if (progresso) {
+      iniciados++;
+      if (progresso.status === 'concluido') concluidos++;
+    }
+  });
+
+  const percentual = Math.round((concluidos / total) * 100);
+  const status = concluidos === total ? 'Concluído' : iniciados > 0 ? 'Em andamento' : 'Não iniciado';
+  return { total, concluidos, iniciados, percentual, status };
+}
+
 // Painel explicativo (colapsável) sobre tipos de curso/usuário e as opções
 // "Curso obrigatório"/"Bloquear para colaborador" — reaproveitado em
 // Treinamentos > Cursos e em Treinamentos > Cadastro de Usuário e Liberação,
@@ -8337,6 +8372,28 @@ function explicacaoTiposCursoUsuarioHtml() {
       </div>
       <div><strong>Curso obrigatório</strong> (opção no cadastro do curso)<br>
         <span style="color:var(--text3)">Libera automaticamente para todo colaborador do cargo vinculado ao curso (ou para todos os colaboradores, se nenhum cargo for definido) — sem precisar liberar manualmente. Liberação manual continua existindo normalmente para os cursos que não são obrigatórios.</span>
+      </div>
+    </div>
+  </details>`;
+}
+
+// Painel explicativo (colapsável) sobre a diferença entre Onboarding e
+// Acompanhamento e Registros — reaproveitado nas duas telas, já que à
+// primeira vista parecem a mesma coisa (as duas listam colaborador +
+// progresso de curso).
+function explicacaoOnboardingAcompanhamentoHtml() {
+  return `
+  <details class="table-card" open style="padding:16px 20px;margin-bottom:14px">
+    <summary style="cursor:pointer;font-weight:700;font-size:13px">ℹ️ Onboarding x Acompanhamento e Registros — qual a diferença?</summary>
+    <div style="margin-top:12px;display:flex;flex-direction:column;gap:10px;font-size:13px;color:var(--text2)">
+      <div><strong>Onboarding</strong><br>
+        <span style="color:var(--text3)">Visão rápida e resumida: só olha os cursos <strong>obrigatórios</strong> (do cargo do colaborador, ou sem cargo vinculado) e mostra 1 número — o % concluído dessa trilha obrigatória — pra achar rápido quem ainda não terminou o básico. Só lista quem já tem usuário de Treinamento criado.</span>
+      </div>
+      <div><strong>Acompanhamento e Registros</strong><br>
+        <span style="color:var(--text3)">Visão completa e detalhada: lista <strong>todo mundo</strong> (com ou sem usuário criado) e, ao clicar num colaborador, mostra <strong>todos</strong> os cursos dele — obrigatórios ou não, Interno liberado ou Externo — separados em Cursos em Andamento/Concluídos. É também aqui que se registra manualmente a conclusão de um curso Externo.</span>
+      </div>
+      <div><strong>Em resumo</strong><br>
+        <span style="color:var(--text3)">Onboarding = "quem ainda não terminou o obrigatório, em 1 número". Acompanhamento = "o histórico completo de treinamento de cada colaborador".</span>
       </div>
     </div>
   </details>`;
@@ -11303,6 +11360,129 @@ window.salvarNovaLiberacao = async function() {
 };
 
 // ------------------------------------------------------------
+// TREINAMENTOS > ONBOARDING — colaboradores com usuário de Treinamento já
+// criado e o progresso deles nos cursos obrigatórios (calcularOnboardingColaborador),
+// pra acompanhar quem ainda está "entrando" na trilha obrigatória sem
+// precisar abrir Cursos um por um. Reaproveita o mesmo cálculo usado na
+// seção "Onboarding" de Relatórios e Impressão (construirBlocosSecoesRelatorio).
+// ------------------------------------------------------------
+function pageTreinOnboarding() {
+  document.getElementById('topbar-actions').innerHTML = '';
+
+  if (!window._onbFiltros) window._onbFiltros = { status: 'ativos_pendentes' };
+  if (!window._onbOrdem) window._onbOrdem = 'nome';
+
+  const renderTabela = () => {
+    const tbody = document.getElementById('trein-onboarding-tbody');
+    if (!tbody) return;
+
+    let linhas = (_colaboradoresSupabase || [])
+      .filter(c => temUsuarioTreinamento(c.id_colaborador))
+      .filter(c => {
+        if (window._onbFiltros.status === 'ativos_pendentes') return c.status_colaborador === 'Ativo' || c.status_colaborador === 'Pendente Documentação';
+        if (window._onbFiltros.status) return c.status_colaborador === window._onbFiltros.status;
+        return true;
+      })
+      .map(colab => ({ colab, onboarding: calcularOnboardingColaborador(colab) }));
+
+    linhas.sort((a, b) => {
+      if (window._onbOrdem === 'cargo') return (a.colab.cargos ? a.colab.cargos.nome_cargo : '').localeCompare(b.colab.cargos ? b.colab.cargos.nome_cargo : '');
+      if (window._onbOrdem === 'progresso-desc' || window._onbOrdem === 'progresso-asc') {
+        const pa = a.onboarding.percentual === null ? -1 : a.onboarding.percentual;
+        const pb = b.onboarding.percentual === null ? -1 : b.onboarding.percentual;
+        return window._onbOrdem === 'progresso-desc' ? pb - pa : pa - pb;
+      }
+      return (a.colab.nome_colaborador || '').localeCompare(b.colab.nome_colaborador || '');
+    });
+
+    tbody.innerHTML = linhas.length === 0
+      ? '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum colaborador com usuário de Treinamento encontrado.</td></tr>'
+      : linhas.map(({ colab, onboarding }) => {
+          const cargoNome = colab.cargos ? colab.cargos.nome_cargo : '—';
+          const statusBadgeClass = onboarding.status === 'Concluído' ? 'badge-active'
+            : onboarding.status === 'Em andamento' ? 'badge-pending'
+            : 'badge-gray';
+          const barraHtml = onboarding.percentual === null
+            ? '—'
+            : `<div style="display:flex;align-items:center;gap:8px">
+                <div style="flex:1;max-width:120px;height:6px;background:var(--bg2);border-radius:3px;overflow:hidden">
+                  <div style="width:${onboarding.percentual}%;height:100%;background:${onboarding.percentual === 100 ? '#1a7a3c' : '#2050a0'};border-radius:3px"></div>
+                </div>
+                <span style="font-size:12px;color:var(--text3);white-space:nowrap">${onboarding.percentual}%</span>
+              </div>`;
+          return `
+          <tr style="cursor:pointer" onclick="abrirAcompanhamentoCursosModal(${colab.id_colaborador})" title="Ver acompanhamento de cursos">
+            <td><strong>${colab.nome_colaborador || '—'}</strong></td>
+            <td>${cargoNome}</td>
+            <td>${barraHtml}</td>
+            <td><span class="badge ${statusBadgeClass}">${onboarding.status}</span></td>
+            <td style="color:var(--text3);font-size:12px">${formatarUltimoAcessoTreinamento(colab.id_colaborador)}</td>
+          </tr>`;
+        }).join('');
+  };
+
+  window._renderTreinOnboarding = renderTabela;
+  Promise.all([
+    (!_colaboradoresSupabase || _colaboradoresSupabase.length === 0) ? loadColaboradoresFromSupabase() : Promise.resolve(),
+    (!window._usuariosCadastrados) ? loadUsuariosCadastrados() : Promise.resolve(),
+    (!window._cursos || window._cursos.length === 0) ? loadCursosForApp() : Promise.resolve(),
+    loadCursoProgressoTodosForApp(),
+    loadUltimoAcessoUsuariosForApp(),
+  ]).then(renderTabela);
+
+  return `
+  ${explicacaoOnboardingAcompanhamentoHtml()}
+  <div class="table-card">
+    <div class="table-header">
+      <span class="table-title">Onboarding</span>
+      <input class="search-input" placeholder="Buscar colaborador..." oninput="filtrarTabelaGenerica('trein-onboarding-tbody', this.value)" style="margin-left:12px">
+    </div>
+    <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:var(--bg2)">
+      <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase">Status do Colaborador:</span>
+      <select class="form-select" style="width:auto" onchange="filtrarStatusOnboarding(this.value)">
+        <option value="ativos_pendentes" ${window._onbFiltros.status === 'ativos_pendentes' ? 'selected' : ''}>Ativos e Pendente Documentação</option>
+        <option value="" ${window._onbFiltros.status === '' ? 'selected' : ''}>Todos os status</option>
+        <option value="Ativo" ${window._onbFiltros.status === 'Ativo' ? 'selected' : ''}>Ativo</option>
+        <option value="Inativo" ${window._onbFiltros.status === 'Inativo' ? 'selected' : ''}>Inativo</option>
+        <option value="Pendente Documentação" ${window._onbFiltros.status === 'Pendente Documentação' ? 'selected' : ''}>Pendente Documentação</option>
+      </select>
+      <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-left:12px">Ordenar:</span>
+      <select class="form-select" style="width:auto" onchange="ordenarOnboarding(this.value)">
+        <option value="nome" ${window._onbOrdem === 'nome' ? 'selected' : ''}>Nome (A-Z)</option>
+        <option value="cargo" ${window._onbOrdem === 'cargo' ? 'selected' : ''}>Cargo (A-Z)</option>
+        <option value="progresso-desc" ${window._onbOrdem === 'progresso-desc' ? 'selected' : ''}>Progresso (maior → menor)</option>
+        <option value="progresso-asc" ${window._onbOrdem === 'progresso-asc' ? 'selected' : ''}>Progresso (menor → maior)</option>
+      </select>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Colaborador</th>
+          <th>Cargo</th>
+          <th>Progresso</th>
+          <th>Status</th>
+          <th>Último acesso</th>
+        </tr>
+      </thead>
+      <tbody id="trein-onboarding-tbody">
+        <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
+      </tbody>
+    </table>
+  </div>`;
+}
+
+window.filtrarStatusOnboarding = function(valor) {
+  if (!window._onbFiltros) window._onbFiltros = { status: 'ativos_pendentes' };
+  window._onbFiltros.status = valor;
+  if (window._renderTreinOnboarding) window._renderTreinOnboarding();
+};
+
+window.ordenarOnboarding = function(valor) {
+  window._onbOrdem = valor;
+  if (window._renderTreinOnboarding) window._renderTreinOnboarding();
+};
+
+// ------------------------------------------------------------
 // TREINAMENTOS > ACOMPANHAMENTO E REGISTROS — lista todos os colaboradores
 // com o status de criação de usuário de Treinamento e, ao clicar na linha,
 // mostra o progresso de cursos (liberados + registrados manualmente) desse
@@ -11371,6 +11551,7 @@ function pageTreinAcompanhamento() {
   ]).then(renderTabela);
 
   return `
+  ${explicacaoOnboardingAcompanhamentoHtml()}
   <div class="table-card">
     <div class="table-header">
       <span class="table-title">Acompanhamento e Registros</span>
@@ -11706,7 +11887,7 @@ window.abrirAcompanhamentoCursosModal = async function(idColaborador) {
   }
 
   document.getElementById('acomp-cursos-modal-title').textContent = `Acompanhamento de Cursos — ${nomeColaboradorPorId(idColaborador)}`;
-  document.getElementById('acomp-cursos-modal-ultimo-acesso').textContent = `Último acesso ao Treinamento: ${formatarUltimoAcessoTreinamento(idColaborador)}`;
+  document.getElementById('acomp-cursos-modal-ultimo-acesso').textContent = `Último acesso a Plataforma de Treinamentos: ${formatarUltimoAcessoTreinamento(idColaborador)}`;
   window._renderAcompCursosModal = renderAcompCursosModal;
   renderAcompCursosModal();
   document.getElementById('acomp-cursos-modal').style.display = 'flex';
@@ -12034,6 +12215,7 @@ const SECOES_RELATORIO = [
   { key: 'perfil', label: 'Mapeamento de Perfil' },
   { key: 'ocorrencias', label: 'Ocorrências' },
   { key: 'treinamentos', label: 'Treinamentos' },
+  { key: 'onboarding', label: 'Onboarding' },
 ];
 
 function pageRelatorioColaborador() {
@@ -12048,6 +12230,8 @@ function pageRelatorioColaborador() {
     loadCursosForApp(),
     loadCursoLiberacoesForApp(),
     loadCursoProgressoTodosForApp(),
+    loadUsuariosCadastrados(),
+    loadUltimoAcessoUsuariosForApp(),
   ]);
 
   return `
@@ -12312,7 +12496,8 @@ function montarDadosRelatorioColaborador(idColaborador) {
     .filter(o => String(o.id_colaborador) === String(idColaborador))
     .sort((a, b) => (b.data_ocorrencia || '').localeCompare(a.data_ocorrencia || ''));
   const treinamentos = montarTreinamentosRelatorioColaborador(idColaborador);
-  return { colab, historico, dadosPessoais, perfil, ocorrencias, treinamentos };
+  const onboarding = calcularOnboardingColaborador(colab);
+  return { colab, historico, dadosPessoais, perfil, ocorrencias, treinamentos, onboarding };
 }
 
 // Une curso_liberacoes (só Interno) e curso_progresso (Interno e Externo,
@@ -12341,7 +12526,7 @@ function montarTreinamentosRelatorioColaborador(idColaborador) {
 
 // Monta o miolo HTML (sem o card externo) de um colaborador, respeitando as seções escolhidas.
 function construirHtmlSecoesColaborador(dadosColab, secoes) {
-  const { colab, historico, dadosPessoais, perfil, ocorrencias, treinamentos } = dadosColab;
+  const { colab, historico, dadosPessoais, perfil, ocorrencias, treinamentos, onboarding } = dadosColab;
   const linha = (label, valor) => `<div style="display:flex;padding:6px 0;border-bottom:1px solid var(--bg2);font-size:13px"><div style="width:240px;color:var(--text3);flex-shrink:0">${label}</div><div style="flex:1">${valor || '—'}</div></div>`;
   const salarioNum = salarioBaseDoColaborador(colab);
   const salarioFmt = salarioNum !== null ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(salarioNum) : '—';
@@ -12490,6 +12675,15 @@ function construirHtmlSecoesColaborador(dadosColab, secoes) {
       </table>`}`;
   }
 
+  if (secoes.includes('onboarding')) {
+    const o = onboarding || calcularOnboardingColaborador(colab);
+    html += `
+      <div class="form-section-title" style="margin-top:24px">Onboarding</div>
+      ${linha('Progresso nos Cursos Obrigatórios', o.percentual === null ? '—' : `${o.percentual}% (${o.concluidos}/${o.total})`)}
+      ${linha('Status', o.status)}
+      ${linha('Último Acesso ao Treinamento', formatarUltimoAcessoTreinamento(colab.id_colaborador))}`;
+  }
+
   return html;
 }
 
@@ -12579,7 +12773,7 @@ window.gerarRelatorioTodos = function() {
 // Escreve as seções de um colaborador no documento PDF, usando state.y como cursor
 // vertical compartilhado (objeto mutável, já que números não passam por referência).
 function escreverColaboradorNoPdf(doc, state, dadosColab, secoes, margemEsq) {
-  const { colab, historico, dadosPessoais, perfil, ocorrencias, treinamentos } = dadosColab;
+  const { colab, historico, dadosPessoais, perfil, ocorrencias, treinamentos, onboarding } = dadosColab;
 
   const checarQuebra = (qtdLinhas) => { if (state.y + qtdLinhas * 6 > 280) { doc.addPage(); state.y = 18; } };
   const titulo = (texto) => {
@@ -12725,6 +12919,14 @@ function escreverColaboradorNoPdf(doc, state, dadosColab, secoes, margemEsq) {
         campo(`${item.curso.nome} (Concluído)`, `Período: ${periodo} | Avaliação: ${avaliacao}`);
       });
     }
+  }
+
+  if (secoes.includes('onboarding')) {
+    titulo('Onboarding');
+    const o = onboarding || calcularOnboardingColaborador(colab);
+    campo('Progresso nos Cursos Obrigatórios', o.percentual === null ? '—' : `${o.percentual}% (${o.concluidos}/${o.total})`);
+    campo('Status', o.status);
+    campo('Último Acesso ao Treinamento', formatarUltimoAcessoTreinamento(colab.id_colaborador));
   }
 }
 
@@ -12911,6 +13113,21 @@ function construirBlocosSecoesRelatorio(colaboradores) {
     });
   });
 
+  // Onboarding: mesmo cálculo da tela Treinamentos > Onboarding
+  // (calcularOnboardingColaborador) — cursos obrigatórios elegíveis pro
+  // cargo do colaborador, % concluído e último acesso ao Treinamento.
+  blocos.onboarding = { titulo: 'Onboarding', linhas: [['Nome', 'Cargo', 'Progresso', 'Status', 'Último Acesso']] };
+  colaboradores.forEach(({ colab, onboarding }) => {
+    const o = onboarding || calcularOnboardingColaborador(colab);
+    blocos.onboarding.linhas.push([
+      colab.nome_colaborador || '',
+      colab.cargos ? colab.cargos.nome_cargo : '',
+      o.percentual === null ? '—' : `${o.percentual}%`,
+      o.status,
+      formatarUltimoAcessoTreinamento(colab.id_colaborador),
+    ]);
+  });
+
   return blocos;
 }
 
@@ -12922,6 +13139,7 @@ const NOME_ABA_SECAO_RELATORIO = {
   perfil: 'Mapeamento de Perfil',
   ocorrencias: 'Ocorrências',
   treinamentos: 'Treinamentos',
+  onboarding: 'Onboarding',
 };
 
 // Empilha os blocos das seções escolhidas numa única lista de linhas (aoa),
