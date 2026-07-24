@@ -11567,7 +11567,7 @@ window.salvarNovaLiberacao = async function() {
 function pageTreinOnboarding() {
   document.getElementById('topbar-actions').innerHTML = '';
 
-  if (!window._onbFiltros) window._onbFiltros = { status: 'ativos_pendentes' };
+  if (!window._onbFiltros) window._onbFiltros = { status: 'ativos_pendentes', statusOnboarding: '' };
   if (!window._onbOrdem) window._onbOrdem = 'nome';
 
   const renderTabela = () => {
@@ -11581,7 +11581,8 @@ function pageTreinOnboarding() {
         if (window._onbFiltros.status) return c.status_colaborador === window._onbFiltros.status;
         return true;
       })
-      .map(colab => ({ colab, onboarding: calcularOnboardingColaborador(colab) }));
+      .map(colab => ({ colab, onboarding: calcularOnboardingColaborador(colab) }))
+      .filter(({ onboarding }) => !window._onbFiltros.statusOnboarding || onboarding.status === window._onbFiltros.statusOnboarding);
 
     linhas.sort((a, b) => {
       if (window._onbOrdem === 'cargo') return (a.colab.cargos ? a.colab.cargos.nome_cargo : '').localeCompare(b.colab.cargos ? b.colab.cargos.nome_cargo : '');
@@ -11589,6 +11590,14 @@ function pageTreinOnboarding() {
         const pa = a.onboarding.percentual === null ? -1 : a.onboarding.percentual;
         const pb = b.onboarding.percentual === null ? -1 : b.onboarding.percentual;
         return window._onbOrdem === 'progresso-desc' ? pb - pa : pa - pb;
+      }
+      if (window._onbOrdem === 'acesso-asc' || window._onbOrdem === 'acesso-desc') {
+        const ta = obterUltimoAcessoTimestamp(a.colab.id_colaborador);
+        const tb = obterUltimoAcessoTimestamp(b.colab.id_colaborador);
+        if (ta === null && tb === null) return 0;
+        if (ta === null) return 1;
+        if (tb === null) return -1;
+        return window._onbOrdem === 'acesso-asc' ? ta - tb : tb - ta;
       }
       return (a.colab.nome_colaborador || '').localeCompare(b.colab.nome_colaborador || '');
     });
@@ -11644,12 +11653,22 @@ function pageTreinOnboarding() {
         <option value="Inativo" ${window._onbFiltros.status === 'Inativo' ? 'selected' : ''}>Inativo</option>
         <option value="Pendente Documentação" ${window._onbFiltros.status === 'Pendente Documentação' ? 'selected' : ''}>Pendente Documentação</option>
       </select>
+      <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-left:12px">Status Onboarding:</span>
+      <select class="form-select" style="width:auto" onchange="filtrarStatusOnboardingProgresso(this.value)">
+        <option value="" ${window._onbFiltros.statusOnboarding === '' ? 'selected' : ''}>Todos</option>
+        <option value="Concluído" ${window._onbFiltros.statusOnboarding === 'Concluído' ? 'selected' : ''}>Concluído</option>
+        <option value="Em andamento" ${window._onbFiltros.statusOnboarding === 'Em andamento' ? 'selected' : ''}>Em andamento</option>
+        <option value="Não iniciado" ${window._onbFiltros.statusOnboarding === 'Não iniciado' ? 'selected' : ''}>Não iniciado</option>
+        <option value="Sem curso obrigatório" ${window._onbFiltros.statusOnboarding === 'Sem curso obrigatório' ? 'selected' : ''}>Sem curso obrigatório</option>
+      </select>
       <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-left:12px">Ordenar:</span>
       <select class="form-select" style="width:auto" onchange="ordenarOnboarding(this.value)">
         <option value="nome" ${window._onbOrdem === 'nome' ? 'selected' : ''}>Nome (A-Z)</option>
         <option value="cargo" ${window._onbOrdem === 'cargo' ? 'selected' : ''}>Cargo (A-Z)</option>
         <option value="progresso-desc" ${window._onbOrdem === 'progresso-desc' ? 'selected' : ''}>Progresso (maior → menor)</option>
         <option value="progresso-asc" ${window._onbOrdem === 'progresso-asc' ? 'selected' : ''}>Progresso (menor → maior)</option>
+        <option value="acesso-desc" ${window._onbOrdem === 'acesso-desc' ? 'selected' : ''}>Último acesso login (maior → menor)</option>
+        <option value="acesso-asc" ${window._onbOrdem === 'acesso-asc' ? 'selected' : ''}>Último acesso login (menor → maior)</option>
       </select>
     </div>
     <table>
@@ -11670,8 +11689,14 @@ function pageTreinOnboarding() {
 }
 
 window.filtrarStatusOnboarding = function(valor) {
-  if (!window._onbFiltros) window._onbFiltros = { status: 'ativos_pendentes' };
+  if (!window._onbFiltros) window._onbFiltros = { status: 'ativos_pendentes', statusOnboarding: '' };
   window._onbFiltros.status = valor;
+  if (window._renderTreinOnboarding) window._renderTreinOnboarding();
+};
+
+window.filtrarStatusOnboardingProgresso = function(valor) {
+  if (!window._onbFiltros) window._onbFiltros = { status: 'ativos_pendentes', statusOnboarding: '' };
+  window._onbFiltros.statusOnboarding = valor;
   if (window._renderTreinOnboarding) window._renderTreinOnboarding();
 };
 
@@ -12059,6 +12084,17 @@ function formatarUltimoAcessoTreinamento(idColaborador) {
   const registro = (window._ultimoAcessoUsuarios || []).find(a => String(a.usuario_id) === String(usuario.id));
   if (!registro || !registro.last_sign_in_at) return 'Nunca acessou';
   return new Date(registro.last_sign_in_at).toLocaleString('pt-BR');
+}
+
+// Timestamp (ms) do último login, usado pra ordenação em Treinamentos >
+// Onboarding. null = sem usuário de Treinamento ou nunca acessou — nesses
+// casos a linha vai pro final da lista independente da direção da ordenação.
+function obterUltimoAcessoTimestamp(idColaborador) {
+  const usuario = (window._usuariosCadastrados || []).find(u => u.perfil_id === 3 && String(u.colaborador_id) === String(idColaborador));
+  if (!usuario) return null;
+  const registro = (window._ultimoAcessoUsuarios || []).find(a => String(a.usuario_id) === String(usuario.id));
+  if (!registro || !registro.last_sign_in_at) return null;
+  return new Date(registro.last_sign_in_at).getTime();
 }
 
 window.abrirAcompanhamentoCursosModal = async function(idColaborador) {
