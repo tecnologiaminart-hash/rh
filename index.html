@@ -6898,7 +6898,7 @@ function pageCriarAdmissao() {
     if (selCand) {
       const concluidos = (window._testesAvaliacoes || []).filter(t => t.status_realizacao === 'concluido');
       selCand.innerHTML = '<option value="">— Selecione o candidato —</option>' +
-        concluidos.map(t => `<option value="${t.id}">${t.nome_candidato || 'Candidato'}${t.id_cargo ? ' — ' + nomeCargoPorId(t.id_cargo) : ''}</option>`).join('');
+        concluidos.map(t => `<option value="${t.token}">${t.nome_candidato || 'Candidato'}${t.id_cargo ? ' — ' + nomeCargoPorId(t.id_cargo) : ''}</option>`).join('');
     }
   })();
 
@@ -7038,9 +7038,9 @@ window.toggleTipoContratoAdmissao = function(value) {
   }
 };
 
-window.preencherAdmissaoDoCandidato = function(idTeste) {
-  if (!idTeste) { window._admTesteSelecionado = null; return; }
-  const teste = (window._testesAvaliacoes || []).find(t => String(t.id) === String(idTeste));
+window.preencherAdmissaoDoCandidato = function(token) {
+  if (!token) { window._admTesteSelecionado = null; return; }
+  const teste = (window._testesAvaliacoes || []).find(t => String(t.token) === String(token));
   if (!teste) { window._admTesteSelecionado = null; return; }
   window._admTesteSelecionado = teste;
   const cand = (window._candidaturas || []).find(c => c.id_candidaturas === teste.id_candidato);
