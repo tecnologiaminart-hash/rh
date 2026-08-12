@@ -1468,11 +1468,15 @@ function navigate(id, title, parent, param = null) {
   salvarPaginaAtualNaSessao(id, title, parent, param);
 }
 
-function showToast(msg, dur=2500) {
+function showToast(msg, opt) {
   const t = document.getElementById('toast');
+  const type = typeof opt === 'string' ? opt : null;
+  const dur = typeof opt === 'number' ? opt : ((type === 'danger' || type === 'error') ? 4000 : 2500);
   t.textContent = msg;
+  t.style.background = (type === 'danger' || type === 'error') ? 'var(--danger)' : (type === 'success' ? 'var(--success)' : '#111');
   t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), dur);
+  clearTimeout(t._hideTimer);
+  t._hideTimer = setTimeout(() => t.classList.remove('show'), dur);
 }
 
 // ------------------------------------------------------------
