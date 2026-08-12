@@ -2296,6 +2296,7 @@ function renderStatusTable() {
         <td><span class="badge ${statusBadgeClass}">${colab.status_colaborador}</span></td>
         <td>
           <button class="action-btn" onclick="event.stopPropagation();openStatusModal('${colab.id_colaborador}')">✎</button>
+          <button class="action-btn" title="Excluir" onclick="event.stopPropagation();excluirColaboradorStatus('${colab.id_colaborador}')">🗑</button>
         </td>
       </tr>
     `;
@@ -2518,6 +2519,45 @@ async function openStatusModal(colabId = null) {
 function closeStatusModal() {
   document.getElementById('status-modal').style.display = 'none';
 }
+
+// Exclusão de colaborador em Informações Contratuais: só permitida até 30
+// dias após a Data de Admissão (experiência). Depois desse prazo o
+// colaborador já deve ter documentos/treinamentos/histórico vinculados, então
+// a baixa passa a ser feita via status (Inativo), não exclusão do registro.
+window.excluirColaboradorStatus = async function(colabId) {
+  const colab = (_colaboradoresSupabase || []).find(c => String(c.id_colaborador) === String(colabId));
+  if (!colab) {
+    showToast('Colaborador não encontrado.', 'danger');
+    return;
+  }
+  const m = colab.desde ? String(colab.desde).match(/^(\d{4})-(\d{2})-(\d{2})/) : null;
+  if (!m) {
+    showToast('Não é possível excluir: colaborador sem Data de Admissão válida cadastrada.', 'danger');
+    return;
+  }
+  const [, ano, mes, dia] = m;
+  const dataAdmissao = new Date(parseInt(ano, 10), parseInt(mes, 10) - 1, parseInt(dia, 10));
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const diffDias = Math.floor((hoje - dataAdmissao) / (1000 * 60 * 60 * 24));
+
+  if (diffDias > 30) {
+    showToast(`Não é possível excluir: a Data de Admissão (${formatarDataBR(colab.desde)}) foi há ${diffDias} dias — mais de 30 dias atrás. Use o status "Inativo" em vez de excluir.`, 'danger');
+    return;
+  }
+
+  if (!confirm(`Excluir o colaborador "${colab.nome_colaborador}"? Esta ação não pode ser desfeita.`)) return;
+
+  try {
+    const { error } = await supaClient.from('colaboradores').delete().eq('id_colaborador', colabId);
+    if (error) throw error;
+    showToast('Colaborador excluído.');
+    await loadColaboradoresFromSupabase();
+  } catch (e) {
+    console.error('Erro ao excluir colaborador:', e);
+    showToast('Erro ao excluir colaborador: ' + (e.message || e), 'danger');
+  }
+};
 
 // Dispara o fluxo de 2 passos (fechar registro do cargo anterior → criar
 // registro do novo cargo) reaproveitando o modal de Adicionar/Editar
