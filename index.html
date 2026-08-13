@@ -5071,7 +5071,7 @@ window.salvarDocumento = async function() {
     urlArquivo = await window.enviarArquivoParaDrive(file, { cid, tipo, driveFolderId });
   } catch (error) {
     console.error('Erro ao enviar arquivo para o Drive via n8n:', error);
-    return showToast('Falha ao enviar arquivo para o Drive.', 'danger');
+    return showToast(error.message || 'Falha ao enviar arquivo para o Drive.', 'danger');
   }
 
   if (!urlArquivo) {
@@ -7862,7 +7862,7 @@ window.uploadFotoPerfilDadosPessoais = async function(file) {
     urlArquivo = await window.enviarArquivoParaDrive(file, { cid, tipo: 'Foto de Perfil', driveFolderId });
   } catch (error) {
     console.error('Erro ao enviar foto de perfil para o Drive via n8n:', error);
-    return showToast('Falha ao enviar foto para o Drive.', 'danger');
+    return showToast(error.message || 'Falha ao enviar foto para o Drive.', 'danger');
   }
   if (!urlArquivo) return showToast('A foto foi enviada mas o Drive não retornou a URL.', 'danger');
 
