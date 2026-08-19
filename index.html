@@ -11005,11 +11005,12 @@ function pageCadastroUsuarioTreinamento() {
   const renderTabela = () => {
     const tbody = document.getElementById('cadastro-usuario-tbody');
     if (!tbody) return;
-    // A listagem desta página mostra só as contas de Treinamento (perfil_id=3).
+    // A listagem desta página mostra todas as contas exceto Administrador
+    // (perfil_id=1) — Treinamento, RH e demais perfis aparecem normalmente.
     // A exclusão de colaborador já cadastrado no modal continua olhando TODOS
     // os perfis (window._usuariosCadastrados sem filtro) — ninguém deve ter
     // dois logins, independente do perfil.
-    const lista = (window._usuariosCadastrados || []).filter(u => u.perfil_id === 3);
+    const lista = (window._usuariosCadastrados || []).filter(u => u.perfil_id !== 1);
     tbody.innerHTML = lista.length === 0
       ? '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Nenhum usuário cadastrado ainda.</td></tr>'
       : lista.map(u => {
@@ -11510,15 +11511,16 @@ window.abrirLiberacoesCursosModal = async function() {
   document.getElementById('liberacoes-cursos-modal').style.display = 'flex';
 };
 
-// Monta as linhas "automáticas": todo usuário de Treinamento com colaborador
-// vinculado × todo curso obrigatório pro qual ele é elegível (cargo bate, ou
-// curso sem cargo vinculado) que ainda não tenha uma linha explícita em
-// curso_liberacoes — mesma regra de cursoLiberadoParaAluno(), só que aqui
-// listamos todo mundo em vez de "só o aluno logado". Servem para o admin
-// enxergar quem tem acesso "a partir dessa mudança" (curso obrigatório) sem
-// precisar de liberação manual, com a opção de bloquear pontualmente alguém.
+// Monta as linhas "automáticas": todo usuário com colaborador vinculado
+// (qualquer perfil da tabela usuarios) × todo curso obrigatório pro qual ele
+// é elegível (cargo bate, ou curso sem cargo vinculado) que ainda não tenha
+// uma linha explícita em curso_liberacoes — mesma regra de
+// cursoLiberadoParaAluno(), só que aqui listamos todo mundo em vez de "só o
+// aluno logado". Servem para o admin enxergar quem tem acesso "a partir
+// dessa mudança" (curso obrigatório) sem precisar de liberação manual, com a
+// opção de bloquear pontualmente alguém.
 function liberacoesAutomaticasObrigatorio() {
-  const usuariosColaboradores = (window._usuariosCadastrados || []).filter(u => u.perfil_id === 3 && u.colaborador_id);
+  const usuariosColaboradores = (window._usuariosCadastrados || []).filter(u => u.colaborador_id);
   const cursosObrigatorios = (window._cursos || []).filter(c => c.tipo === 'Interno' && c.obrigatorio && !c.bloqueado_colaborador);
   const automaticas = [];
   usuariosColaboradores.forEach(u => {
@@ -11546,12 +11548,14 @@ function renderLiberacoesCursosModal() {
 
   const linhasManual = lista.map(l => {
     const curso = (window._cursos || []).find(c => c.id === l.id_curso);
+    const usuarioSemColaborador = l.id_colaborador ? null : (window._usuariosCadastrados || []).find(x => x.id === l.id_usuario);
     const nomeExibicao = l.id_colaborador
       ? nomeColaboradorPorId(l.id_colaborador)
-      : (() => { const u = (window._usuariosCadastrados || []).find(x => x.id === l.id_usuario); return u ? (u.usuario_convidado || u.email || '—') : '—'; })();
+      : (usuarioSemColaborador ? (usuarioSemColaborador.usuario_convidado || usuarioSemColaborador.email || '—') : '—');
+    const perfilBadge = usuarioSemColaborador ? (usuarioSemColaborador.perfis ? usuarioSemColaborador.perfis.nome : '—') : 'Convidado';
     return `
     <tr>
-      <td style="padding:8px 0;font-size:13px">${nomeExibicao}${!l.id_colaborador ? ' <span class="badge badge-gray">Convidado</span>' : ''}</td>
+      <td style="padding:8px 0;font-size:13px">${nomeExibicao}${!l.id_colaborador ? ` <span class="badge badge-gray">${perfilBadge}</span>` : ''}</td>
       <td style="padding:8px 0;font-size:13px">${curso ? curso.nome : '—'}</td>
       <td style="padding:8px 0">
         <select class="form-select" style="width:auto;${corSelectLiberacao(l.status)}" onchange="aplicarCorLiberacao(this); alterarStatusLiberacao(${l.id}, this.value)">
@@ -11634,11 +11638,12 @@ window.excluirLiberacaoCurso = async function(id) {
   }
 };
 
-// Todo usuário de Treinamento (perfil_id=3) entra aqui — com colaborador
-// vinculado ou convidado (sem colaborador, ver abrirCadastroConvidadoModal).
-// O valor do select é sempre usuarios.id (único e sempre presente, diferente
-// de colaborador_id que é null pra convidado); salvarNovaLiberacao decide,
-// a partir do usuário escolhido, se grava em id_colaborador ou id_usuario.
+// Todo usuário cadastrado entra aqui, de qualquer perfil da tabela usuarios —
+// com colaborador vinculado ou convidado (sem colaborador, ver
+// abrirCadastroConvidadoModal). O valor do select é sempre usuarios.id
+// (único e sempre presente, diferente de colaborador_id que é null pra
+// convidado); salvarNovaLiberacao decide, a partir do usuário escolhido, se
+// grava em id_colaborador ou id_usuario.
 window.abrirNovaLiberacaoModal = function() {
   if (!document.getElementById('nova-liberacao-modal')) {
     const modal = document.createElement('div');
@@ -11668,11 +11673,14 @@ window.abrirNovaLiberacaoModal = function() {
     document.body.appendChild(modal);
   }
 
-  const usuariosTreinamento = (window._usuariosCadastrados || []).filter(u => u.perfil_id === 3);
+  const usuariosDisponiveis = window._usuariosCadastrados || [];
   const selColab = document.getElementById('nl-colaborador');
   selColab.innerHTML = '<option value="">— Selecione —</option>' +
-    usuariosTreinamento.map(u => {
-      const nome = u.colaborador_id ? nomeColaboradorPorId(u.colaborador_id) : `${u.usuario_convidado || u.email || '—'} (Convidado)`;
+    usuariosDisponiveis.map(u => {
+      const nomePerfil = u.perfis ? u.perfis.nome : '—';
+      const nome = u.colaborador_id
+        ? `${nomeColaboradorPorId(u.colaborador_id)} (${nomePerfil})`
+        : `${u.usuario_convidado || u.email || '—'} (${nomePerfil})`;
       return `<option value="${u.id}">${nome}</option>`;
     }).join('');
 
