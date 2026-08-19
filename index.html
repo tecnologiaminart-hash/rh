@@ -10973,7 +10973,7 @@ async function loadUsuariosCadastrados() {
   }
   const { data, error } = await supaClient
     .from('usuarios')
-    .select('id, auth_user_id, colaborador_id, email, ativo, created_at, perfil_id, usuario_convidado, perfis(nome)')
+    .select('id, auth_user_id, colaborador_id, email, ativo, created_at, perfil_id, usuario_convidado, nomeusuario, perfis(nome)')
     .order('created_at', { ascending: false });
   if (error) {
     console.error('Erro ao carregar usuários cadastrados:', error.message);
@@ -11015,18 +11015,13 @@ function pageCadastroUsuarioTreinamento() {
       ? '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Nenhum usuário cadastrado ainda.</td></tr>'
       : lista.map(u => {
           const criado = u.created_at ? new Date(u.created_at).toLocaleDateString('pt-BR') : '—';
-          const nomeExibicao = u.colaborador_id ? nomeColaboradorPorId(u.colaborador_id) : (u.usuario_convidado || u.email || '—');
+          const nomeExibicao = u.nomeusuario || (u.colaborador_id ? nomeColaboradorPorId(u.colaborador_id) : (u.usuario_convidado || u.email || '—'));
           const dados = u.colaborador_id ? (window._dadosPessoaisEpi || []).find(d => String(d.id_colaborador) === String(u.colaborador_id)) : null;
           const linkWhats = dados ? linkWhatsappAcessoTreinamento(dados.telefone, nomeExibicao, u.email) : null;
           return `
           <tr style="cursor:pointer" onclick="abrirCursosLiberadosColaboradorModal(${u.colaborador_id || 'null'}, ${u.id})" title="Ver cursos liberados para este usuário">
             <td><strong>${nomeExibicao}</strong>${!u.colaborador_id ? ' <span class="badge badge-gray" style="margin-left:6px">Convidado</span>' : ''}</td>
-            <td onclick="event.stopPropagation()">
-              <div style="display:flex;align-items:center;gap:6px">
-                <span>${u.email || '—'}</span>
-                <button class="action-btn" title="Editar e-mail" onclick="abrirEditarEmailUsuarioModal(${u.id}, '${u.auth_user_id}', '${(u.email || '').replace(/'/g, "\\'")}')">✎</button>
-              </div>
-            </td>
+            <td>${u.email || '—'}</td>
             <td>${u.perfis ? u.perfis.nome : '—'}</td>
             <td><span class="badge ${u.ativo ? 'badge-active' : 'badge-gray'}">${u.ativo ? 'Ativo' : 'Inativo'}</span></td>
             <td style="color:var(--text3);font-size:12px">${criado}</td>
@@ -11141,37 +11136,6 @@ window.abrirCursosLiberadosColaboradorModal = async function(idColaborador, idUs
   document.getElementById('cursos-liberados-colab-modal').style.display = 'flex';
 };
 
-window.abrirEditarEmailUsuarioModal = function(usuarioId, authUserId, emailAtual) {
-  if (!document.getElementById('editar-email-usuario-modal')) {
-    const modal = document.createElement('div');
-    modal.id = 'editar-email-usuario-modal';
-    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;';
-    modal.innerHTML = `
-      <div style="background:#fff;border-radius:6px;width:400px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18)">
-        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-          <div style="font-size:15px;font-weight:700">Editar E-mail</div>
-          <button type="button" class="btn btn-sm" onclick="document.getElementById('editar-email-usuario-modal').style.display='none'">✕</button>
-        </div>
-        <div style="padding:24px">
-          <div class="form-group">
-            <label class="form-label">Novo E-mail</label>
-            <input class="form-input" id="eeu-email" type="email" placeholder="colaborador@email.com">
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn" onclick="document.getElementById('editar-email-usuario-modal').style.display='none'">Cancelar</button>
-          <button type="button" class="btn btn-primary" id="eeu-btn-salvar" onclick="salvarEdicaoEmailUsuario()">Salvar</button>
-        </div>
-      </div>`;
-    document.body.appendChild(modal);
-  }
-
-  window._eeuUsuarioId = usuarioId;
-  window._eeuAuthUserId = authUserId;
-  document.getElementById('eeu-email').value = emailAtual || '';
-  document.getElementById('editar-email-usuario-modal').style.display = 'flex';
-};
-
 // Os webhooks n8n de criar/editar usuário, upload de documento de RH e
 // upload de aula de treinamento validam a sessão de quem está chamando
 // (precisa ser Administrador/RH) em vez de um token fixo no código. Sem
@@ -11200,45 +11164,6 @@ async function _headersAutenticacaoN8NFormData() {
     'apikey': SUPA_KEY,
   };
 }
-
-window.salvarEdicaoEmailUsuario = async function() {
-  const novoEmail = document.getElementById('eeu-email').value.trim();
-  if (!novoEmail) return showToast('Informe o novo e-mail.');
-  if (!N8N_CRIAR_USUARIO_WEBHOOK_URL || N8N_CRIAR_USUARIO_WEBHOOK_URL.startsWith('COLE_AQUI')) {
-    return showToast('Webhook de usuários não configurado.', 'danger');
-  }
-
-  const btn = document.getElementById('eeu-btn-salvar');
-  if (btn) { btn.disabled = true; btn.textContent = 'Salvando...'; }
-
-  try {
-    const res = await fetch(N8N_CRIAR_USUARIO_WEBHOOK_URL, {
-      method: 'POST',
-      headers: await _headersAutenticacaoN8N(),
-      body: JSON.stringify({
-        acao: 'editar_email',
-        usuario_id: window._eeuUsuarioId,
-        auth_user_id: window._eeuAuthUserId,
-        novo_email: novoEmail,
-      }),
-    });
-    let result = {};
-    try { result = await res.json(); } catch (e) { /* resposta sem corpo JSON */ }
-    if (!res.ok || result.success === false) {
-      throw new Error(result.error || `Falha ao editar e-mail (status ${res.status}).`);
-    }
-
-    document.getElementById('editar-email-usuario-modal').style.display = 'none';
-    await loadUsuariosCadastrados();
-    if (window._renderCadastroUsuario) window._renderCadastroUsuario();
-    showToast('E-mail atualizado!');
-  } catch (e) {
-    console.error('Erro ao editar e-mail do usuário:', e);
-    showToast('Erro ao editar e-mail: ' + (e.message || e), 'danger');
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Salvar'; }
-  }
-};
 
 window.abrirCadastroUsuarioModal = async function() {
   if (!_colaboradoresSupabase || _colaboradoresSupabase.length === 0) {
