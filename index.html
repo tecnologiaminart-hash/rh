@@ -11905,13 +11905,17 @@ window.ordenarOnboarding = function(valor) {
 
 // ------------------------------------------------------------
 // TREINAMENTOS > ACOMPANHAMENTO E REGISTROS — lista todos os colaboradores
-// com o status de criação de usuário de Treinamento e, ao clicar na linha,
-// mostra o progresso de cursos (liberados + registrados manualmente) desse
+// com o status de criação de usuário e, ao clicar na linha, mostra o
+// progresso de cursos (liberados + registrados manualmente) desse
 // colaborador. Ver sql/criar-curso-progresso-treinamento.sql e
 // sql/criar-curso-liberacoes.sql.
 // ------------------------------------------------------------
+// Critério: cruza colaborador_id direto contra a tabela `usuarios` do
+// Supabase (window._usuariosCadastrados), independente do perfil do
+// usuário — qualquer linha de `usuarios` vinculada a esse colaborador conta
+// como "usuário criado" e libera o acompanhamento de progresso.
 function temUsuarioTreinamento(idColaborador) {
-  return (window._usuariosCadastrados || []).some(u => u.perfil_id === 3 && String(u.colaborador_id) === String(idColaborador));
+  return (window._usuariosCadastrados || []).some(u => String(u.colaborador_id) === String(idColaborador));
 }
 
 function pageTreinAcompanhamento() {
@@ -12272,12 +12276,12 @@ async function loadUltimoAcessoUsuariosForApp() {
   }
 }
 
-// Resolve e formata o último login do usuário de Treinamento vinculado a um
-// colaborador (window._ultimoAcessoUsuarios, carregado em
-// abrirAcompanhamentoCursosModal). '—' = colaborador sem usuário;
-// 'Nunca acessou' = usuário criado mas nunca logou.
+// Resolve e formata o último login do usuário vinculado a um colaborador
+// (window._ultimoAcessoUsuarios, carregado em abrirAcompanhamentoCursosModal).
+// Cruza só por colaborador_id, independente do perfil (ver temUsuarioTreinamento).
+// '—' = colaborador sem usuário; 'Nunca acessou' = usuário criado mas nunca logou.
 function formatarUltimoAcessoTreinamento(idColaborador) {
-  const usuario = (window._usuariosCadastrados || []).find(u => u.perfil_id === 3 && String(u.colaborador_id) === String(idColaborador));
+  const usuario = (window._usuariosCadastrados || []).find(u => String(u.colaborador_id) === String(idColaborador));
   if (!usuario) return '—';
   const registro = (window._ultimoAcessoUsuarios || []).find(a => String(a.usuario_id) === String(usuario.id));
   if (!registro || !registro.last_sign_in_at) return 'Nunca acessou';
@@ -12285,10 +12289,11 @@ function formatarUltimoAcessoTreinamento(idColaborador) {
 }
 
 // Timestamp (ms) do último login, usado pra ordenação em Treinamentos >
-// Onboarding. null = sem usuário de Treinamento ou nunca acessou — nesses
-// casos a linha vai pro final da lista independente da direção da ordenação.
+// Onboarding. Cruza só por colaborador_id, independente do perfil. null = sem
+// usuário vinculado ou nunca acessou — nesses casos a linha vai pro final da
+// lista independente da direção da ordenação.
 function obterUltimoAcessoTimestamp(idColaborador) {
-  const usuario = (window._usuariosCadastrados || []).find(u => u.perfil_id === 3 && String(u.colaborador_id) === String(idColaborador));
+  const usuario = (window._usuariosCadastrados || []).find(u => String(u.colaborador_id) === String(idColaborador));
   if (!usuario) return null;
   const registro = (window._ultimoAcessoUsuarios || []).find(a => String(a.usuario_id) === String(usuario.id));
   if (!registro || !registro.last_sign_in_at) return null;
