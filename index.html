@@ -1595,9 +1595,9 @@ function pageDashboard() {
       total: candidaturas.filter(c => c.id_vagas === v.id_vagas).length
     })).sort((a, b) => b.total - a.total).slice(0, 6);
 
-    // Colaboradores em Experiência (mesmo filtro de pageColaboradoresExperiencia)
+    // Colaboradores em Experiência (mesmo filtro de pageColaboradoresExperiencia: Ativos e Pendente Documentação)
     const colaboradoresExperiencia = colaboradores
-      .filter(c => c.tipo_de_contrato === 'Experiência')
+      .filter(c => c.tipo_de_contrato === 'Experiência' && (c.status_colaborador === 'Ativo' || c.status_colaborador === 'Pendente Documentação'))
       .sort((a, b) => (a.desde || '').localeCompare(b.desde || ''))
       .slice(0, 6);
 
