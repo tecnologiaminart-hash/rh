@@ -7106,10 +7106,10 @@ window.salvarCriarAdmissao = async function() {
   };
 
   try {
-    const { data: insertedDados, error: errorDados } = await supaClient.from('dados_pessoais_epi').insert([dadosPayload]).select();
+    const { data: insertedDados, error: errorDados } = await supaClient.from('dados_pessoais_epi').upsert([dadosPayload], { onConflict: 'id_colaborador' }).select();
     if (errorDados) throw errorDados;
     if (!insertedDados || insertedDados.length === 0) {
-      throw new Error('Nenhuma linha foi inserida em dados_pessoais_epi (verifique a policy de INSERT dessa tabela no Supabase).');
+      throw new Error('Nenhuma linha foi salva em dados_pessoais_epi (verifique a policy de INSERT/UPDATE dessa tabela no Supabase).');
     }
   } catch (e) {
     console.error('Erro ao salvar dados pessoais/EPIs da admissão:', e);
