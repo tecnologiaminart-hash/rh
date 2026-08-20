@@ -1183,7 +1183,6 @@ const NAV = [
     id: 'colaboradores', label: 'Colaboradores', icon: '◉',
     subs: [
       { id: 'col-status', label: 'Informações Contratuais' },
-      { id: 'col-temporarios', label: 'Colaboradores Temporários' },
       { id: 'col-experiencia', label: 'Colaboradores em Experiência' },
       { id: 'col-ocorrencias', label: 'Ocorrências' },
       { id: 'col-documentos', label: 'Documentos' },
@@ -2643,57 +2642,6 @@ async function saveStatusEmployee() {
       loadColaboradoresFromSupabase(); // Recarrega a lista
     }
   }
-}
-
-// ------------------------------------------------------------
-// COLABORADORES TEMPORÁRIOS
-// ------------------------------------------------------------
-function pageColaboradoresTemporarios() {
-  document.getElementById('topbar-actions').innerHTML = '';
-
-  const renderTabela = () => {
-    const tbody = document.getElementById('col-temporarios-tbody');
-    if (!tbody) return;
-    const lista = (_colaboradoresSupabase || []).filter(c => c.tipo_de_contrato === 'Temporária');
-    tbody.innerHTML = lista.length === 0
-      ? '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum colaborador temporário encontrado.</td></tr>'
-      : lista.map(c => {
-          const cargoNome = c.cargos ? c.cargos.nome_cargo : '—';
-          return `
-          <tr>
-            <td><strong>${c.nome_colaborador}</strong></td>
-            <td>${cargoNome}</td>
-            <td>${formatarDataBR(c.desde) || '—'}</td>
-            <td>${c.periodo_contrato || '—'}</td>
-            <td>${c.prorrogacao_contrato || '—'}</td>
-          </tr>`;
-        }).join('');
-  };
-
-  window._renderColTemporarios = renderTabela;
-  loadColaboradoresFromSupabase().then(renderTabela);
-
-  return `
-  <div class="table-card">
-    <div class="table-header">
-      <span class="table-title">Colaboradores Temporários</span>
-      <input class="search-input" placeholder="Buscar colaborador..." oninput="filtrarTabelaGenerica('col-temporarios-tbody', this.value)" style="margin-left:12px">
-    </div>
-    <table>
-      <thead>
-        <tr>
-          <th>Nome</th>
-          <th>Cargo</th>
-          <th>Desde</th>
-          <th>Período do Contrato</th>
-          <th>Prorrogação</th>
-        </tr>
-      </thead>
-      <tbody id="col-temporarios-tbody">
-        <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr>
-      </tbody>
-    </table>
-  </div>`;
 }
 
 // ------------------------------------------------------------
@@ -5125,7 +5073,6 @@ function renderPage(id, param = null) { // <--- ADICIONE 'param = null' AQUI
     'meus-cursos':     pageMeusCursos,
     'col-documentos':  (typeof pageDocumentos === 'function') ? pageDocumentos : (function(){ console.error('pageDocumentos não está definida'); return function(){ return `<div class="empty-state"><div class="empty-state-icon">⚠</div><div class="empty-state-title">Página indisponível</div><div class="empty-state-desc">pageDocumentos não definida.</div></div>`; }; })(),
     'col-status':      pageStatus,
-    'col-temporarios': pageColaboradoresTemporarios,
     'col-experiencia': pageColaboradoresExperiencia,
     'col-ocorrencias': pageOcorrencias,
     'col-historico':   pageHistoricoCol,
