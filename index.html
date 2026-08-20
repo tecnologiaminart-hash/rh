@@ -2702,7 +2702,7 @@ function pageColaboradoresTemporarios() {
 function pageColaboradoresExperiencia() {
   document.getElementById('topbar-actions').innerHTML = '';
 
-  if (!window._expFiltros) window._expFiltros = { cargo: '' };
+  if (!window._expFiltros) window._expFiltros = { cargo: '', status: 'Ativo' };
   if (!window._expOrdem) window._expOrdem = 'nome';
 
   const renderTabela = () => {
@@ -2720,6 +2720,7 @@ function pageColaboradoresExperiencia() {
     }
 
     if (window._expFiltros.cargo) lista = lista.filter(c => (c.cargos ? c.cargos.nome_cargo : '') === window._expFiltros.cargo);
+    if (window._expFiltros.status) lista = lista.filter(c => c.status_colaborador === window._expFiltros.status);
 
     lista = [...lista].sort((a, b) => {
       if (window._expOrdem === 'data-asc') return (a.desde || '').localeCompare(b.desde || '');
@@ -2776,6 +2777,11 @@ function pageColaboradoresExperiencia() {
       <select class="form-select" id="exp-filtro-cargo" style="width:auto" onchange="filtrarExpCargo(this.value)">
         <option value="">Todos os cargos</option>
       </select>
+      <select class="form-select" style="width:auto" onchange="filtrarExpStatus(this.value)">
+        <option value="Ativo" ${window._expFiltros.status === 'Ativo' ? 'selected' : ''}>Ativo</option>
+        <option value="Inativo" ${window._expFiltros.status === 'Inativo' ? 'selected' : ''}>Inativo</option>
+        <option value="" ${window._expFiltros.status === '' ? 'selected' : ''}>Todos os status</option>
+      </select>
       <span style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;margin-left:12px">Ordenar:</span>
       <select class="form-select" style="width:auto" onchange="ordenarExpTabela(this.value)">
         <option value="nome" ${window._expOrdem === 'nome' ? 'selected' : ''}>Nome (A-Z)</option>
@@ -2806,8 +2812,13 @@ function pageColaboradoresExperiencia() {
 }
 
 window.filtrarExpCargo = function(valor) {
-  if (!window._expFiltros) window._expFiltros = {};
+  if (!window._expFiltros) window._expFiltros = { status: 'Ativo' };
   window._expFiltros.cargo = valor;
+  if (window._renderColExperiencia) window._renderColExperiencia();
+};
+window.filtrarExpStatus = function(valor) {
+  if (!window._expFiltros) window._expFiltros = { cargo: '' };
+  window._expFiltros.status = valor;
   if (window._renderColExperiencia) window._renderColExperiencia();
 };
 window.ordenarExpTabela = function(valor) {
